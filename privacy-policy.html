@@ -5,12 +5,12 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>MCLC – Privacy Policy</title>
-    <meta name="description" content="Privacy Policy for MCLC Launcher – Your data security is our priority." />
     <link rel="icon" type="image/png" href="resources/icon.png" />
     <script src="https://cdn.tailwindcss.com"></script>
     <link
         href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700;800&family=Poppins:wght@400;700&display=swap"
         rel="stylesheet" />
+    <link rel="stylesheet" href="style.css?v=2" />
     <script>
         tailwind.config = {
             theme: {
@@ -34,7 +34,8 @@
     </script>
 </head>
 
-<body class="bg-background text-gray-200 selection:bg-primary/30 antialiased overflow-x-hidden">
+<body
+    class="bg-background text-gray-200 selection:bg-primary/30 antialiased overflow-x-hidden flex flex-col min-h-screen">
     <nav class="fixed top-0 left-0 right-0 z-[100] transition-all duration-300 bg-background/80 backdrop-blur-xl border-b border-white/5"
         id="navbar">
         <div class="max-w-7xl mx-auto px-6 lg:px-12">
@@ -55,120 +56,186 @@
                     <a href="https://github.com/Fernsehheft/MCLC-Client" class="hover:text-primary transition-colors"
                         target="_blank">GitHub</a>
                 </div>
-                <div class="flex items-center gap-4">
+                <div class="flex items-center gap-4" id="nav-right-group">
                     <div class="hidden md:block">
-                        <a href="index.html#"
+                        <a id="downloadNavBtn" href="index.html#"
                             class="bg-primary hover:bg-primary-dark text-black px-6 py-2.5 rounded-xl font-bold transition-all shadow-primary-glow transform hover:scale-105 active:scale-95 shrink-0 whitespace-nowrap">
                             Download
                         </a>
                     </div>
+                    <button id="mobile-menu-btn"
+                        class="md:hidden text-gray-300 hover:text-primary focus:outline-none transition-colors p-2">
+                        <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M4 6h16M4 12h16M4 18h16"></path>
+                        </svg>
+                    </button>
                 </div>
+            </div>
+        </div>
+        <div id="mobile-menu" class="md:hidden bg-surface/95 backdrop-blur-xl border-b border-white/5">
+            <div
+                class="px-6 py-6 space-y-4 flex flex-col items-center text-center font-semibold text-gray-300 uppercase tracking-wide">
+                <a href="index.html#features"
+                    class="block w-full py-2 hover:text-primary hover:bg-white/5 rounded-lg transition-all"
+                    onclick="toggleMenu()">Features</a>
+                <a href="https://pluginhub.de/discord.html"
+                    class="block w-full py-2 hover:text-primary hover:bg-white/5 rounded-lg transition-all"
+                    onclick="toggleMenu()">Support</a>
+                <a href="docs/index.html"
+                    class="block w-full py-2 hover:text-primary hover:bg-white/5 rounded-lg transition-all"
+                    onclick="toggleMenu()">Documentation</a>
+                <a href="extensions.html"
+                    class="block w-full py-2 text-gray-300 hover:text-primary hover:bg-white/5 rounded-lg transition-all"
+                    onclick="toggleMenu()">Extensions</a>
+                <a href="https://github.com/Fernsehheft/MCLC-Client" target="_blank"
+                    class="block w-full py-2 hover:text-primary hover:bg-white/5 rounded-lg transition-all"
+                    onclick="toggleMenu()">GitHub</a>
             </div>
         </div>
     </nav>
 
-    <main class="max-w-4xl mx-auto px-6 pt-32 pb-24">
-        <header class="mb-16">
+    <main class="max-w-4xl mx-auto px-6 pt-32 pb-24 flex-grow w-full">
+        <header class="mb-16 text-center">
             <h1 class="text-5xl font-black text-white mb-6 tracking-tight">Privacy Policy</h1>
-            <p class="text-xl text-gray-400 leading-relaxed">
-                Last updated: March 2026
-            </p>
+            <p class="text-gray-400">Last updated: March 02, 2026</p>
         </header>
 
         <article class="prose prose-invert max-w-none space-y-12 text-gray-300 leading-relaxed">
             <section>
-                <h2 class="text-2xl font-bold text-white mb-4 flex items-center gap-3">
-                    <span
-                        class="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center text-primary text-sm font-black">1</span>
-                    Responsible Body
-                </h2>
+                <h2 class="text-2xl font-bold text-white mb-4">1. Introduction</h2>
                 <p>
-                    If you have any questions regarding data protection, please contact the MCLC developer team via our
-                    support
-                    Discord.
+                    The operator of this website and the MCLC Client is the MCLC Team. The protection of your personal
+                    data is an important concern for us. In this privacy policy, we inform you about which data we
+                    collect, how we use it, and what rights you have under the General Data Protection Regulation
+                    (GDPR).
                 </p>
             </section>
 
             <section>
-                <h2 class="text-2xl font-bold text-white mb-4 flex items-center gap-3">
-                    <span
-                        class="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center text-primary text-sm font-black">2</span>
-                    Data Collection in the Launcher
-                </h2>
+                <h2 class="text-2xl font-bold text-white mb-4">2. Controller</h2>
                 <p>
-                    The MCLC Launcher is designed to collect as little data as possible. Local data such as profiles,
-                    settings, and
-                    logs remain on your device.
+                    The controller for data processing on this website within the meaning of the GDPR is:
+                </p>
+                <div class="bg-white/5 rounded-2xl p-6 border border-white/10 mt-4 italic">
+                    <p>
+                        Were<br />
+                        Working<br />
+                        On<br />
+                        An Adress<br /><br />
+                        Email: info@pluginhub.de
+                    </p>
+                </div>
+                <p class="text-xs text-yellow-500 mt-2 italic">(Note: These details are placeholders and were working on
+                    replacing them with an real adress)</p>
+            </section>
+
+            <section>
+                <h2 class="text-2xl font-bold text-white mb-4">3. Data Collection on Our Website</h2>
+                <h3 class="text-xl font-semibold text-white mt-6 mb-2">Server Log Files</h3>
+                <p>
+                    The provider of the pages automatically collects and stores information in so-called server log
+                    files, which your browser automatically transmits to us. These are:
+                </p>
+                <ul class="list-disc pl-6 space-y-1">
+                    <li>Browser type and version</li>
+                    <li>Operating system used</li>
+                    <li>Referrer URL</li>
+                    <li>Hostname of the accessing computer</li>
+                    <li>Time of the server request</li>
+                    <li>IP address</li>
+                </ul>
+                <p class="mt-4">
+                    This data is not merged with other data sources. The collection of this data is based on Art. 6
+                    Para. 1 lit. f GDPR.
                 </p>
             </section>
 
             <section>
-                <h2 class="text-2xl font-bold text-white mb-4 flex items-center gap-3">
-                    <span
-                        class="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center text-primary text-sm font-black">3</span>
-                    Authentication
-                </h2>
+                <h2 class="text-2xl font-bold text-white mb-4">4. Analysis Tools (Tracking)</h2>
                 <p>
-                    When you log in with your Microsoft account, we use OAuth2. MCLC never stores your password. Access
-                    tokens are
-                    stored locally encrypted on your computer.
+                    We use anonymized statistics to understand the use of our website. No personal profiles are created.
+                    You can object to the collection at any time via our <a href="analytics-opt-out.html"
+                        class="text-primary hover:underline">Opt-Out page</a>.
                 </p>
             </section>
 
             <section>
-                <h2 class="text-2xl font-bold text-white mb-4 flex items-center gap-3">
-                    <span
-                        class="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center text-primary text-sm font-black">4</span>
-                    Web Analytics
-                </h2>
+                <h2 class="text-2xl font-bold text-white mb-4">5. MCLC Client (Launcher)</h2>
                 <p>
-                    Our website may use anonymized analytics to understand site usage. Details can be found in our
-                    Opt-Out document.
+                    The MCLC Launcher communicates with external APIs to load versions, mods, and skins:
+                </p>
+                <ul class="list-disc pl-6 space-y-2">
+                    <li><strong>Mojang/Microsoft:</strong> For authentication and downloading Minecraft game files.</li>
+                    <li><strong>Modrinth:</strong> For searching and downloading mods (Modpack Editor).</li>
+                    <li><strong>Crafatar:</strong> For displaying player skins/heads.</li>
+                </ul>
+                <p class="mt-4">
+                    When using these services, the respective privacy policies of the providers apply. The launcher
+                    itself does not store passwords; authentication occurs via secure OAuth procedures from Microsoft.
                 </p>
             </section>
 
             <section>
-                <h2 class="text-2xl font-bold text-white mb-4 flex items-center gap-3">
-                    <span
-                        class="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center text-primary text-sm font-black">5</span>
-                    Your Rights
-                </h2>
+                <h2 class="text-2xl font-bold text-white mb-4">6. Your Rights</h2>
                 <p>
-                    You have the right to information, correction, or deletion of your data, as far as it has been
-                    stored by us.
+                    Under the applicable legal provisions, you have the following rights at any time:
+                </p>
+                <ul class="list-disc pl-6 space-y-2">
+                    <li><strong>Access (Art. 15 GDPR):</strong> You have the right to receive information about your
+                        stored personal data free of charge.</li>
+                    <li><strong>Rectification (Art. 16 GDPR):</strong> You can request the correction of incorrect data.
+                    </li>
+                    <li><strong>Erasure (Art. 17 GDPR):</strong> You have the right to request the deletion of your data
+                        ("right to be forgotten").</li>
+                    <li><strong>Restriction (Art. 18 GDPR):</strong> You can request the restriction of processing.</li>
+                    <li><strong>Data Portability (Art. 20 GDPR):</strong> You have the right to have your data handed
+                        over in a common format.</li>
+                    <li><strong>Objection (Art. 21 GDPR):</strong> You can object to data processing.</li>
+                </ul>
+                <p class="mt-6">
+                    To exercise these rights, please contact the address provided above.
                 </p>
             </section>
 
-            <section class="bg-surface/30 border border-white/5 rounded-3xl p-8 mt-12 text-center md:text-left">
-                <h2 class="text-xl font-bold text-white mb-4">Contact Us</h2>
-                <p class="text-sm text-gray-400">
-                    If you have any questions regarding this privacy policy, you can contact us via our <a
-                        href="https://pluginhub.de/discord.html" class="text-primary hover:underline">Discord Support
-                        Server</a>.
+            <section>
+                <h2 class="text-2xl font-bold text-white mb-4">7. Right to Lodge a Complaint with a Supervisory
+                    Authority</h2>
+                <p>
+                    In the event of data protection violations, you have the right to lodge a complaint with the
+                    competent supervisory authority.
                 </p>
             </section>
         </article>
     </main>
 
-    <footer class="bg-accent-dark/50 border-t border-white/5 py-12 px-6">
-        <div class="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-8">
-            <div class="flex items-center gap-3">
-                <img src="resources/icon.png" alt="MCLC Logo" class="w-8 h-8 opacity-50" />
-                <span class="text-xl font-bold text-gray-500 tracking-tighter">MCLC</span>
+    <footer class="py-12 bg-background border-t border-white/5 mt-auto">
+        <div class="max-w-7xl mx-auto px-6 lg:px-12">
+            <div class="flex flex-col md:flex-row justify-between items-center gap-8">
+                <div class="flex items-center gap-3">
+                    <img src="resources/icon.png" alt="MCLC Logo" class="w-8 h-8 opacity-50" />
+                    <span class="text-xl font-bold text-gray-500 tracking-tighter">MCLC</span>
+                </div>
+                <div
+                    class="flex flex-wrap justify-center gap-6 md:gap-8 text-sm font-medium text-gray-500 uppercase tracking-widest">
+                    <a href="index.html" class="hover:text-primary transition-colors">Home</a>
+                    <a href="privacy-policy.html" class="text-primary font-bold transition-colors">Imprint & Privacy</a>
+                    <a href="analytics-opt-out.html" class="hover:text-primary transition-colors">Opt-Out</a>
+                    <a href="https://pluginhub.de/discord.html" class="hover:text-primary transition-colors">Discord</a>
+                </div>
+                <p class="text-gray-600 text-xs text-center md:text-right">
+                    &copy; 2026 MCLC-Client. Not an official Minecraft product.
+                </p>
             </div>
-            <div
-                class="flex flex-wrap justify-center gap-6 md:gap-8 text-sm font-medium text-gray-500 uppercase tracking-widest">
-                <a href="index.html" class="hover:text-primary transition-colors">Home</a>
-                <a href="imprint.html" class="hover:text-primary transition-colors">Imprint</a>
-                <a href="privacy-policy.html" class="text-primary font-bold transition-colors">Privacy</a>
-                <a href="analytics-opt-out.html" class="hover:text-primary transition-colors">Opt-Out</a>
-                <a href="https://pluginhub.de/discord.html" class="hover:text-primary transition-colors">Discord</a>
-            </div>
-            <p class="text-gray-600 text-xs">
-                &copy; 2026 MCLC Team. Not an official Minecraft product.
-            </p>
         </div>
     </footer>
+    <script src="main.js?v=6"></script>
+    <script>
+        function toggleMenu() {
+            const menu = document.getElementById('mobile-menu');
+            if (menu) menu.classList.toggle('open');
+        }
+    </script>
 </body>
 
 </html>

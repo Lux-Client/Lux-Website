@@ -153,16 +153,32 @@ async function checkAuth() {
 }
 function toggleMenu() {
     const menu = document.getElementById('mobile-menu');
-    const btn = document.getElementById('mobile-menu-btn');
     if (menu) {
         menu.classList.toggle('open');
     }
 }
 
+document.addEventListener('click', (e) => {
+    const menu = document.getElementById('mobile-menu');
+    const btn = document.getElementById('mobile-menu-btn');
+    if (!menu || !btn) return;
+
+    if (menu.classList.contains('open')) {
+        if (!menu.contains(e.target) && !btn.contains(e.target)) {
+            menu.classList.remove('open');
+        } else if (e.target.closest('a')) {
+            menu.classList.remove('open');
+        }
+    }
+});
+
 document.addEventListener('DOMContentLoaded', () => {
     const mobileBtn = document.getElementById('mobile-menu-btn');
     if (mobileBtn) {
-        mobileBtn.addEventListener('click', toggleMenu);
+        mobileBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            toggleMenu();
+        });
     }
 });
 

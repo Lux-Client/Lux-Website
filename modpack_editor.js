@@ -66,15 +66,17 @@ document.addEventListener('DOMContentLoaded', async () => {
         loadDrafts();
     }
 
-    // Fetch trending mods for empty state
-    fetchTrendingMods();
+    // Fetch trending mods and versions initially
+    fetchMinecraftVersions().then(() => {
+        fetchTrendingMods();
+    });
 
     // Input listeners for state sync
     if (elPackName) elPackName.addEventListener('input', (e) => {
         MODPACK_STATE.name = e.target.value;
         saveDraft();
     });
-    if (elPackVersion) elPackVersion.addEventListener('input', (e) => {
+    if (elPackVersion) elPackVersion.addEventListener('change', (e) => {
         MODPACK_STATE.version = e.target.value;
         if (elSearchInput && elSearchInput.value.trim()) {
             triggerSearch();
@@ -83,8 +85,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
         saveDraft();
     });
-    if (elPackLoader) elPackLoader.addEventListener('change', (e) => {
+    if (elPackLoader) elPackLoader.addEventListener('change', async (e) => {
         MODPACK_STATE.loader = e.target.value;
+        await fetchMinecraftVersions();
         if (elSearchInput && elSearchInput.value.trim()) {
             triggerSearch();
         } else {
@@ -120,6 +123,72 @@ async function fetchTrendingMods() {
         }
     } catch (e) {
         console.warn('Modpack Editor: Failed to fetch trending mods', e);
+    }
+}
+
+async function fetchMinecraftVersions() {
+    try {
+        const loader = MODPACK_STATE.loader;
+        // Use Modrinth API directly to ensure compatibility and avoid CORS issues on local execution
+        const res = await fetch('https://api.modrinth.com/v2/tag/game_version');
+        if (res.ok) {
+            const data = await res.json();
+            let releases = data.filter(v => v.version_type === 'release');
+
+            // NeoForge generally starts from 1.20.1
+            if (loader === 'neoforge') {
+                releases = releases.filter(v => {
+                    const parts = v.version.split('.').map(Number);
+                    return parts[0] > 1 || (parts[0] === 1 && parts[1] >= 20);
+                });
+            }
+
+            releases = releases.slice(0, 30);
+
+            if (elPackVersion) {
+                const currentVal = elPackVersion.value || MODPACK_STATE.version;
+                elPackVersion.innerHTML = '';
+
+                let foundCurrent = false;
+
+                releases.forEach(v => {
+                    const opt = document.createElement('option');
+                    opt.value = v.version;
+                    opt.textContent = v.version;
+                    if (v.version === currentVal) {
+                        opt.selected = true;
+                        foundCurrent = true;
+                    }
+                    elPackVersion.appendChild(opt);
+                });
+
+                if (!foundCurrent) {
+                    let isValid = true;
+                    if (loader === 'neoforge') {
+                        const parts = currentVal.split('.').map(Number);
+                        isValid = parts[0] > 1 || (parts[0] === 1 && parts[1] >= 20);
+                    }
+
+                    if (isValid) {
+                        const opt = document.createElement('option');
+                        opt.value = currentVal;
+                        opt.textContent = currentVal;
+                        opt.selected = true;
+                        elPackVersion.insertAdjacentElement('afterbegin', opt);
+                        MODPACK_STATE.version = currentVal;
+                    } else {
+                        // Switch to a safe default for NeoForge or the latest version
+                        const safeVer = loader === 'neoforge' ? '1.20.1' : (releases[0] ? releases[0].version : '1.20.1');
+                        MODPACK_STATE.version = safeVer;
+                        elPackVersion.value = safeVer;
+                    }
+                } else {
+                    MODPACK_STATE.version = currentVal;
+                }
+            }
+        }
+    } catch (e) {
+        console.warn('Modpack Editor: Failed to fetch MC versions', e);
     }
 }
 

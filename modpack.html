@@ -203,7 +203,7 @@
               Download
             </button>
           </div>
-          <button id="mobile-menu-btn"
+          <button id="mobile-menu-btn" onclick="toggleMenu()"
             class="md:hidden text-gray-300 hover:text-primary focus:outline-none transition-colors p-2">
             <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
@@ -213,7 +213,7 @@
       </div>
     </div>
     <div id="mobile-menu"
-      class="md:hidden bg-surface/95 backdrop-blur-xl border-b border-white/5 overflow-hidden transition-all duration-300 h-0">
+      class="md:hidden bg-surface/95 backdrop-blur-xl border-b border-white/5 overflow-hidden transition-all duration-300">
       <div
         class="px-6 py-6 space-y-4 flex flex-col items-center text-center font-semibold text-gray-300 uppercase tracking-wide">
         <a href="index.html" class="block w-full py-2 hover:text-primary hover:bg-white/5 rounded-lg transition-all"
@@ -265,8 +265,16 @@
         <div class="flex flex-col w-full md:w-32 lg:w-40">
           <label
             class="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2 px-1 text-center">Version</label>
-          <input type="text" id="packVersion" value="1.20.1" placeholder="e.g. 1.20.1"
-            class="w-full bg-black/40 border border-white/10 rounded-xl h-[52px] px-5 text-white placeholder-gray-600 focus:outline-none focus:border-primary focus:bg-white/5 transition-all font-semibold text-center">
+          <select id="packVersion"
+            class="w-full bg-black/40 border border-white/10 rounded-xl h-[52px] px-5 text-white focus:outline-none focus:border-primary focus:bg-white/5 transition-all font-semibold appearance-none cursor-pointer text-center">
+            <option value="1.21">1.21</option>
+            <option value="1.20.1" selected>1.20.1</option>
+            <option value="1.19.2">1.19.2</option>
+            <option value="1.18.2">1.18.2</option>
+            <option value="1.16.5">1.16.5</option>
+            <option value="1.12.2">1.12.2</option>
+            <option value="1.8.9">1.8.9</option>
+          </select>
         </div>
 
         <div class="flex flex-col w-full md:w-32 lg:w-40">
@@ -406,8 +414,8 @@
         <div
           class="flex flex-wrap justify-center gap-6 md:gap-8 text-sm font-medium text-gray-500 uppercase tracking-widest">
           <a href="index.html" class="hover:text-primary transition-colors">Home</a>
-          <a href="imprint.html" class="hover:text-primary transition-colors">Imprint</a>
-          <a href="privacy.html" class="hover:text-primary transition-colors">Privacy</a>
+          <a href="privacy-policy.html" class="hover:text-primary transition-colors">Imprint & Privacy</a>
+          <a href="analytics-opt-out.html" class="hover:text-primary transition-colors">Opt-Out</a>
         </div>
         <p class="text-gray-600 text-xs text-center md:text-right">
           &copy; 2026 MCLC Team. Not an official Minecraft product.
@@ -460,18 +468,6 @@
         modal.classList.toggle('hidden');
         modal.classList.toggle('flex');
         document.body.classList.toggle('overflow-hidden');
-      }
-    }
-    function toggleMenu() {
-      const menu = document.getElementById('mobile-menu');
-      if (menu) {
-        if (menu.classList.contains('h-0')) {
-          menu.classList.remove('h-0');
-          menu.classList.add('h-auto');
-        } else {
-          menu.classList.add('h-0');
-          menu.classList.remove('h-auto');
-        }
       }
     }
   </script>

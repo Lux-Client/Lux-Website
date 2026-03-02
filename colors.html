@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Gradient Preview Tool</title>
+<style>
+    body {
+        margin: 0;
+        font-family: Arial, sans-serif;
+        background: #0e0e0e;
+        color: white;
+        display: flex;
+        flex-direction: column;
+        height: 100vh;
+    }
+
+    .toolbar {
+        padding: 15px;
+        background: #161616;
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        align-items: center;
+    }
+
+    select, input, button {
+        padding: 8px;
+        border-radius: 6px;
+        border: none;
+        font-size: 14px;
+    }
+
+    button {
+        cursor: pointer;
+        background: #2a2a2a;
+        color: white;
+    }
+
+    button:hover {
+        background: #3a3a3a;
+    }
+
+    #preview {
+        flex: 1;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        transition: background 0.5s ease;
+        font-size: 28px;
+        font-weight: bold;
+        letter-spacing: 1px;
+        text-shadow: 0 0 20px rgba(0,0,0,0.5);
+    }
+
+    textarea {
+        width: 100%;
+        height: 70px;
+        resize: none;
+        padding: 10px;
+        font-family: monospace;
+        border: none;
+    }
+</style>
+</head>
+<body>
+
+<div class="toolbar">
+    <label>Preset:</label>
+    <select id="preset">
+
+        <option value="#0f2027,#203a43,#2c5364">Deep Ocean</option>
+        <option value="#1e3c72,#2a5298,#4facfe">Blue Horizon</option>
+        <option value="#134e5e,#71b280,#c0eaa6">Emerald Flow</option>
+        <option value="#ff512f,#dd2476,#8e2de2">Sunset Glow</option>
+        <option value="#c31432,#240b36,#000000">Dark Crimson</option>
+        <option value="#00c6ff,#0072ff,#001f4d">Sky Tech</option>
+        <option value="#11998e,#38ef7d,#a8ff78">Fresh Mint</option>
+        <option value="#4568dc,#b06ab3,#ff758c">Soft Purple</option>
+        <option value="#ff9966,#ff5e62,#ff0844">Warm Fire</option>
+        <option value="#232526,#414345,#000000">Graphite</option>
+        <option value="#00f5a0,#00d9f5,#0575e6">Neon Wave</option>
+        <option value="#7f00ff,#e100ff,#ff00cc">Vibrant Violet</option>
+        <option value="#4b6cb7,#182848,#000428">Midnight Blue</option>
+        <option value="#2b5876,#4e4376,#000000">Deep Space</option>
+        <option value="#f7971e,#ffd200,#ff512f">Golden Heat</option>
+        <option value="#43cea2,#185a9d,#0f2027">Aqua Depth</option>
+        <option value="#ff7e5f,#feb47b,#ff9966">Peach Blend</option>
+        <option value="#00b09b,#96c93d,#38ef7d">Green Energy</option>
+        <option value="#8e2de2,#4a00e0,#2c003e">Royal Purple</option>
+        <option value="#ff416c,#ff4b2b,#ff9966">Hot Pink Fire</option>
+        <option value="#1d4350,#a43931,#000000">Storm Mix</option>
+        <option value="#16222a,#3a6073,#1c92d2">Arctic Blue</option>
+        <option value="#0f0c29,#302b63,#24243e">Galaxy</option>
+        <option value="#654ea3,#eaafc8,#fcb69f">Lavender Sky</option>
+        <option value="#283c86,#45a247,#1e130c">Forest Night</option>
+
+    </select>
+
+    <label>Angle:</label>
+    <input type="number" id="angle" value="135" min="0" max="360">
+
+    <button onclick="applyPreset()">Apply</button>
+    <button onclick="copyCSS()">Copy CSS</button>
+</div>
+
+<div id="preview">
+    Launcher Preview
+</div>
+
+<textarea id="cssOutput" readonly></textarea>
+
+<script>
+    function applyPreset() {
+        const preset = document.getElementById("preset").value.split(",");
+        const angle = document.getElementById("angle").value;
+        const gradient = `linear-gradient(${angle}deg, ${preset.join(", ")})`;
+
+        document.getElementById("preview").style.background = gradient;
+        document.getElementById("cssOutput").value = `background: ${gradient};`;
+    }
+
+    function copyCSS() {
+        const textarea = document.getElementById("cssOutput");
+        textarea.select();
+        document.execCommand("copy");
+        alert("CSS copied!");
+    }
+
+    applyPreset();
+</script>
+
+</body>
+</html>

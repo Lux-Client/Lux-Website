@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MCLC – Analytics Opt-Out</title>
+    <meta name="description" content="Analytics Opt-Out for MCLC Launcher – Control your data." />
+    <link rel="icon" type="image/png" href="resources/icon.png" />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700;800&family=Poppins:wght@400;700&display=swap"
+        rel="stylesheet" />
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: "#1bd96a",
+                        "primary-dark": "#14a34f",
+                        surface: "#121212",
+                        background: "#080808",
+                        "accent-dark": "#0f0f0f",
+                    },
+                    fontFamily: {
+                        sans: ["Outfit", "Poppins", "sans-serif"],
+                    },
+                    boxShadow: {
+                        "primary-glow": "0 0 30px rgba(27, 217, 106, 0.25)",
+                    },
+                },
+            },
+        };
+    </script>
+</head>
+
+<body class="bg-background text-gray-200 selection:bg-primary/30 antialiased overflow-x-hidden">
+    <nav class="fixed top-0 left-0 right-0 z-[100] transition-all duration-300 bg-background/80 backdrop-blur-xl border-b border-white/5"
+        id="navbar">
+        <div class="max-w-7xl mx-auto px-6 lg:px-12">
+            <div class="flex items-center justify-between h-20 gap-4">
+                <a href="index.html" class="flex items-center gap-3 group shrink-0">
+                    <img src="resources/icon.png" alt="MCLC Logo"
+                        class="w-10 h-10 object-contain group-hover:scale-110 transition-transform duration-300" />
+                    <span class="text-2xl font-extrabold tracking-tighter text-white hidden sm:inline">MCLC</span>
+                </a>
+                <div
+                    class="hidden md:flex items-center gap-6 lg:gap-10 text-sm font-semibold tracking-wide uppercase text-gray-400">
+                    <a href="index.html#features" class="hover:text-primary transition-colors">Features</a>
+                    <a href="https://pluginhub.de/discord.html" class="hover:text-primary transition-colors">Support</a>
+                    <a href="docs/index.html" class="hover:text-primary transition-colors">Documentation</a>
+                    <a href="modpack.html" class="hover:text-primary transition-colors">Modpack Editor</a>
+                    <a href="extensions.html"
+                        class="text-gray-400 hover:text-primary transition-colors font-semibold">Extensions</a>
+                    <a href="https://github.com/Fernsehheft/MCLC-Client" class="hover:text-primary transition-colors"
+                        target="_blank">GitHub</a>
+                </div>
+                <div class="flex items-center gap-4">
+                    <div class="hidden md:block">
+                        <a href="index.html#"
+                            class="bg-primary hover:bg-primary-dark text-black px-6 py-2.5 rounded-xl font-bold transition-all shadow-primary-glow transform hover:scale-105 active:scale-95 shrink-0 whitespace-nowrap">
+                            Download
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <main class="max-w-4xl mx-auto px-6 pt-32 pb-24">
+        <header class="mb-16">
+            <h1 class="text-5xl font-black text-white mb-6 tracking-tight">Analytics Opt-Out</h1>
+            <p class="text-xl text-gray-400 leading-relaxed">
+                Your privacy is in your hands.
+            </p>
+        </header>
+
+        <article class="prose prose-invert max-w-none space-y-12 text-gray-300 leading-relaxed">
+            <section>
+                <p>
+                    MCLC uses anonymized analytics data to improve the stability and performance of the launcher.
+                    No personal data such as passwords or private files are transmitted.
+                </p>
+            </section>
+
+            <section>
+                <h2 class="text-2xl font-bold text-white mb-4 flex items-center gap-3">
+                    <span
+                        class="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center text-primary text-sm font-black">?</span>
+                    How can I opt out?
+                </h2>
+                <p class="mb-6">
+                    You can disable the collection of analytics data at any time in the launcher settings:
+                </p>
+                <ol
+                    class="list-decimal list-inside space-y-4 font-bold text-white bg-white/5 p-8 rounded-3xl border border-white/5">
+                    <li>Open MCLC.</li>
+                    <li>Navigate to the <span class="text-primary">Settings</span> tab.</li>
+                    <li>Find the <span class="text-primary">Integration</span> section.</li>
+                    <li>Disable the <span class="text-primary">Discord Rich Presence</span> option or similar telemetry
+                        features (if available).</li>
+                </ol>
+            </section>
+
+            <section
+                class="bg-surface/30 border border-white/5 rounded-3xl p-8 mt-12 text-center md:text-left shadow-2xl">
+                <h2 class="text-xl font-bold text-white mb-4 italic">Technical Note</h2>
+                <p class="text-sm text-gray-400">
+                    Note: Certain basic technical data (such as operating system version) may still be necessary for the
+                    operation
+                    of the launcher.
+                </p>
+            </section>
+        </article>
+    </main>
+
+    <footer class="bg-accent-dark/50 border-t border-white/5 py-12 px-6">
+        <div class="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-8">
+            <div class="flex items-center gap-3">
+                <img src="resources/icon.png" alt="MCLC Logo" class="w-8 h-8 opacity-50" />
+                <span class="text-xl font-bold text-gray-500 tracking-tighter">MCLC</span>
+            </div>
+            <div
+                class="flex flex-wrap justify-center gap-6 md:gap-8 text-sm font-medium text-gray-500 uppercase tracking-widest">
+                <a href="index.html" class="hover:text-primary transition-colors">Home</a>
+                <a href="imprint.html" class="hover:text-primary transition-colors">Imprint</a>
+                <a href="privacy-policy.html" class="hover:text-primary transition-colors">Privacy</a>
+                <a href="analytics-opt-out.html" class="text-primary font-bold transition-colors">Opt-Out</a>
+                <a href="https://pluginhub.de/discord.html" class="hover:text-primary transition-colors">Discord</a>
+            </div>
+            <p class="text-gray-600 text-xs text-center md:text-right">
+                &copy; 2026 MCLC Team. Not an official Minecraft product.
+            </p>
+        </div>
+    </footer>
+</body>
+
+</html>

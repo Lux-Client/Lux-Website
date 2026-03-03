@@ -1036,6 +1036,40 @@ app.delete('/api/announcement', (req, res) => {
     }
 });
 
+// --- MODRINTH PROXY ROUTES ---
+app.get('/api/modrinth/versions', async (req, res) => {
+    try {
+        const response = await fetch('https://api.modrinth.com/v2/tag/game_version', {
+            headers: {
+                'User-Agent': 'MCLC-Client/1.0.0 (mclc@pluginhub.de)'
+            }
+        });
+        if (!response.ok) throw new Error(`Modrinth returned ${response.status}`);
+        const data = await response.json();
+        res.json(data);
+    } catch (err) {
+        console.error('[Modrinth Proxy] Error fetching versions:', err);
+        res.status(500).json({ error: 'Failed to fetch versions' });
+    }
+});
+
+app.get('/api/modrinth/search', async (req, res) => {
+    try {
+        const params = new URLSearchParams(req.query);
+        const response = await fetch(`https://api.modrinth.com/v2/search?${params.toString()}`, {
+            headers: {
+                'User-Agent': 'MCLC-Client/1.0.0 (mclc@pluginhub.de)'
+            }
+        });
+        if (!response.ok) throw new Error(`Modrinth returned ${response.status}`);
+        const data = await response.json();
+        res.json(data);
+    } catch (err) {
+        console.error('[Modrinth Proxy] Error fetching search:', err);
+        res.status(500).json({ error: 'Failed to fetch search' });
+    }
+});
+
 app.use((err, req, res, next) => {
     console.error(`[Server Error] ${req.method} ${req.url}:`, err);
     res.status(500).json({

@@ -110,7 +110,22 @@ async function fetchTrendingMods() {
     try {
         const ver = MODPACK_STATE.version;
         const loader = MODPACK_STATE.loader;
-        const res = await fetch(`https://api.modrinth.com/v2/search?limit=8&facets=[["categories:${loader}"],["versions:${ver}"],["project_type:mod"]]`);
+        const facetsStr = `[["categories:${loader}"],["versions:${ver}"],["project_type:mod"]]`;
+        const params = new URLSearchParams({
+            limit: 8,
+            index: 'downloads',
+            facets: facetsStr
+        });
+        let res;
+        if (window.location.protocol === 'file:') {
+            res = await fetch(`https://api.modrinth.com/v2/search?${params.toString()}`);
+        } else {
+            res = await fetch(`/api/modrinth/search?${params.toString()}`);
+            if (!res.ok) {
+                console.warn('Modpack Editor: Proxy failed, falling back to direct Modrinth API...');
+                res = await fetch(`https://api.modrinth.com/v2/search?${params.toString()}`);
+            }
+        }
         if (res.ok) {
             const data = await res.json();
             trendingMods = data.hits || [];
@@ -129,8 +144,16 @@ async function fetchTrendingMods() {
 async function fetchMinecraftVersions() {
     try {
         const loader = MODPACK_STATE.loader;
-        // Use Modrinth API directly to ensure compatibility and avoid CORS issues on local execution
-        const res = await fetch('https://api.modrinth.com/v2/tag/game_version');
+        let res;
+        if (window.location.protocol === 'file:') {
+            res = await fetch('https://api.modrinth.com/v2/tag/game_version');
+        } else {
+            res = await fetch('/api/modrinth/versions');
+            if (!res.ok) {
+                console.warn('Modpack Editor: Proxy fallback for versions...');
+                res = await fetch('https://api.modrinth.com/v2/tag/game_version');
+            }
+        }
         if (res.ok) {
             const data = await res.json();
             let releases = data.filter(v => v.version_type === 'release');
@@ -287,7 +310,16 @@ async function searchModrinth(query) {
             facets: `[${facets.join(',')}]`
         });
 
-        const res = await fetch(`https://api.modrinth.com/v2/search?${params.toString()}`);
+        let res;
+        if (window.location.protocol === 'file:') {
+            res = await fetch(`https://api.modrinth.com/v2/search?${params.toString()}`);
+        } else {
+            res = await fetch(`/api/modrinth/search?${params.toString()}`);
+            if (!res.ok) {
+                console.warn('Modpack Editor: Proxy fallback for search...');
+                res = await fetch(`https://api.modrinth.com/v2/search?${params.toString()}`);
+            }
+        }
         if (!res.ok) throw new Error('Modrinth API Error');
         const data = await res.json();
 

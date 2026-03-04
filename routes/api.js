@@ -23,9 +23,10 @@ const ensureAdmin = (req, res, next) => {
 
 // Update Profile
 router.post('/user/update', ensureAuthenticated, async (req, res) => {
-    const { username, bio, avatar } = req.body;
+    const { username, bio, avatar, is_private } = req.body;
+    const isPrivateBool = is_private === 'true';
     try {
-        await pool.query('UPDATE users SET username = ?, bio = ?, avatar = ? WHERE id = ?', [username, bio, avatar, req.user.id]);
+        await pool.query('UPDATE users SET username = ?, bio = ?, avatar = ?, is_private = ? WHERE id = ?', [username, bio, avatar, isPrivateBool, req.user.id]);
         res.json({ success: true });
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -81,14 +82,15 @@ router.post('/extensions/upload', ensureAuthenticated, upload.fields([
 // List Approved Extensions (Public)
 router.get('/extensions', async (req, res) => {
     const search = req.query.search;
+    const type = req.query.type || 'extension';
     try {
         let query = `
             SELECT e.*, u.username as developer 
             FROM extensions e 
             JOIN users u ON e.user_id = u.id 
-            WHERE e.status = 'approved'
+            WHERE e.status = 'approved' AND e.type = ?
         `;
-        const params = [];
+        const params = [type];
 
         if (search) {
             query += ` AND (e.name LIKE ? OR e.description LIKE ? OR u.username LIKE ?)`;

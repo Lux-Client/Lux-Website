@@ -419,8 +419,8 @@ app.post('/api/extensions/upload', ensureAuthenticated, upload.fields([
 
         try {
             const [extResult] = await connection.query(
-                'INSERT INTO extensions (user_id, name, identifier, summary, description, type, visibility, banner_path) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-                [req.user.id, name, identifier, summary, description, type || 'extension', visibility || 'public', bannerFilename]
+                'INSERT INTO extensions (user_id, name, identifier, summary, description, type, visibility, banner_path, file_path) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                [req.user.id, name, identifier, summary, description, type || 'extension', visibility || 'public', bannerFilename, extensionFilename]
             );
             const extensionId = extResult.insertId;
 
@@ -464,33 +464,23 @@ app.post('/api/extensions/update/:id', ensureAuthenticated, upload.fields([
 
         const bannerPath = files && files.bannerImage ? files.bannerImage[0].filename : null;
 
-        if (req.user.role === 'admin') {
-            let updateFields = [];
-            let queryParams = [];
-            if (name) { updateFields.push('name = ?'); queryParams.push(name); }
-            if (description) { updateFields.push('description = ?'); queryParams.push(description); }
-            if (summary) { updateFields.push('summary = ?'); queryParams.push(summary); }
-            if (bannerPath) { updateFields.push('banner_path = ?'); queryParams.push(bannerPath); }
-            if (type) { updateFields.push('type = ?'); queryParams.push(type); }
-            if (visibility) { updateFields.push('visibility = ?'); queryParams.push(visibility); }
+        let updateFields = [];
+        let queryParams = [];
+        if (name) { updateFields.push('name = ?'); queryParams.push(name); }
+        if (description) { updateFields.push('description = ?'); queryParams.push(description); }
+        if (summary) { updateFields.push('summary = ?'); queryParams.push(summary); }
+        if (bannerPath) { updateFields.push('banner_path = ?'); queryParams.push(bannerPath); }
+        if (type) { updateFields.push('type = ?'); queryParams.push(type); }
+        if (visibility) { updateFields.push('visibility = ?'); queryParams.push(visibility); }
 
-            if (updateFields.length > 0) {
-                queryParams.push(id);
-                await pool.query(`UPDATE extensions SET ${updateFields.join(', ')} WHERE id = ?`, queryParams);
-            }
-
-            await pool.query('UPDATE extensions SET status = "pending" WHERE id = ? AND status = "action_required"', [id]);
-
-            res.json({ success: true, message: 'Updated directly (Admin)' });
-        } else {
-            await pool.query(
-                'INSERT INTO extension_metadata_drafts (extension_id, name, summary, description, banner_path, status) VALUES (?, ?, ?, ?, ?, ?)',
-                [id, name, summary, description, bannerPath, 'pending']
-            );
-            await pool.query('UPDATE extensions SET status = "pending" WHERE id = ? AND status = "action_required"', [id]);
-
-            res.json({ success: true, message: 'Metadata draft submitted for review' });
+        if (updateFields.length > 0) {
+            queryParams.push(id);
+            await pool.query(`UPDATE extensions SET ${updateFields.join(', ')} WHERE id = ?`, queryParams);
         }
+
+        await pool.query('UPDATE extensions SET status = "pending" WHERE id = ? AND status = "action_required"', [id]);
+
+        res.json({ success: true, message: 'Extension updated successfully' });
     } catch (err) {
         console.error('Update (Draft) Error:', err);
         res.status(500).json({ error: 'Database error', details: err.message });
@@ -698,8 +688,9 @@ app.post('/api/notifications/read-all', ensureAuthenticated, async (req, res) =>
 });
 
 app.post('/api/user/update', ensureAuthenticated, upload.single('avatarFile'), async (req, res) => {
-    const { username, bio, avatar } = req.body;
+    const { username, bio, avatar, is_private } = req.body;
     let finalAvatar = avatar;
+    const isPrivateBool = is_private === 'true';
 
     if (req.file) {
         finalAvatar = req.file.filename;
@@ -715,8 +706,8 @@ app.post('/api/user/update', ensureAuthenticated, upload.single('avatarFile'), a
         }
 
         await pool.query(
-            'UPDATE users SET username = ?, bio = ?, avatar = ? WHERE id = ?',
-            [username, bio, finalAvatar, req.user.id]
+            'UPDATE users SET username = ?, bio = ?, avatar = ?, is_private = ? WHERE id = ?',
+            [username, bio, finalAvatar, isPrivateBool, req.user.id]
         );
         res.json({ success: true });
     } catch (err) {
@@ -727,12 +718,17 @@ app.post('/api/user/update', ensureAuthenticated, upload.single('avatarFile'), a
 
 app.get('/api/users/p/:username', async (req, res) => {
     try {
-        const [userRows] = await pool.query('SELECT id, username, avatar, bio, role, created_at FROM users WHERE username = ?', [req.params.username]);
+        const [userRows] = await pool.query('SELECT id, username, avatar, bio, role, created_at, is_private FROM users WHERE username = ?', [req.params.username]);
         if (userRows.length === 0) return res.status(404).json({ error: 'User not found' });
 
         const user = userRows[0];
         const [extensions] = await pool.query('SELECT name, identifier, summary, banner_path, type, status FROM extensions WHERE user_id = ? AND status = "approved"', [user.id]);
 
+        if (user.is_private || extensions.length === 0) {
+            return res.status(404).json({ error: 'User not found or profile is private' });
+        }
+
+        delete user.is_private; // Sanitize response
         res.json({ user, extensions });
     } catch (err) {
         res.status(500).json({ error: 'Database error' });
@@ -1113,6 +1109,15 @@ app.post('/api/analytics', (req, res) => {
 });
 
 const { createTables } = require('./db_init');
+
+// --- TEMPORARY MIGRATION SCRIPT ---
+pool.query('ALTER TABLE users ADD COLUMN is_private BOOLEAN DEFAULT FALSE;')
+    .then(() => console.log('[MCLC] Database migration: added is_private column.'))
+    .catch(err => {
+        if (err.code !== 'ER_DUP_FIELDNAME') {
+            console.error('[MCLC] Database migration failed:', err);
+        }
+    });
 
 server.listen(PORT, async () => {
     console.log(`News Admin Server (with Socket.IO, Auth, Extensions) running on port ${PORT}`);

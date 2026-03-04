@@ -230,21 +230,26 @@
                                 class="w-full bg-background border border-white/5 rounded-2xl px-6 py-4 text-white focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all">
                         </div>
                         <div class="space-y-2">
-                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-widest">Avatar
-                                URL / File</label>
-                            <div class="flex gap-4 items-center">
-                                <input type="text" id="input-avatar" placeholder="https://..."
-                                    class="flex-1 bg-background border border-white/5 rounded-2xl px-6 py-4 text-white focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all">
-                                <div class="relative overflow-hidden group">
-                                    <input type="file" id="input-avatar-file" accept="image/*"
-                                        class="absolute inset-0 opacity-0 cursor-pointer z-10">
-                                    <div
-                                        class="bg-white/5 hover:bg-white/10 text-white px-6 py-4 rounded-2xl text-sm font-bold transition-all flex items-center gap-2">
-                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                                d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-                                        </svg>
-                                        Upload
+                            <label
+                                class="block text-xs font-bold text-gray-500 uppercase tracking-widest">Avatar</label>
+                            <div class="flex gap-6 items-center">
+                                <img id="preview-avatar"
+                                    class="w-20 h-20 rounded-2xl bg-black/50 object-cover border border-white/10"
+                                    src="/resources/icon.png">
+                                <div class="flex-1 space-y-3">
+                                    <input type="text" id="input-avatar" placeholder="Avatar URL..."
+                                        class="w-full bg-background border border-white/5 rounded-2xl px-6 py-4 text-white focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all">
+                                    <div class="relative overflow-hidden group w-max">
+                                        <input type="file" id="input-avatar-file" accept="image/*"
+                                            class="absolute inset-0 opacity-0 cursor-pointer z-10">
+                                        <div
+                                            class="bg-white/5 hover:bg-white/10 text-white px-6 py-3 rounded-xl text-sm font-bold transition-all flex items-center gap-2">
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                    d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                                            </svg>
+                                            Upload File
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -254,6 +259,26 @@
                                 class="block text-xs font-bold text-gray-500 uppercase tracking-widest">Biography</label>
                             <textarea id="input-bio" rows="4"
                                 class="w-full bg-background border border-white/5 rounded-2xl px-6 py-4 text-white focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all"></textarea>
+                        </div>
+                        <div class="md:col-span-2 space-y-2 mt-2">
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-3">Profile
+                                Privacy</label>
+                            <label class="flex items-center gap-3 cursor-pointer group w-max">
+                                <div class="relative">
+                                    <input type="checkbox" id="input-privacy" class="sr-only peer">
+                                    <div
+                                        class="w-11 h-6 bg-white/10 rounded-full peer peer-checked:bg-primary transition-colors">
+                                    </div>
+                                    <div
+                                        class="absolute left-1 top-1 w-4 h-4 bg-gray-400 peer-checked:bg-black rounded-full transition-all peer-checked:translate-x-5">
+                                    </div>
+                                </div>
+                                <span
+                                    class="text-white text-sm font-bold group-hover:text-primary transition-colors">Make
+                                    Profile Private</span>
+                            </label>
+                            <p class="text-[10px] text-gray-500 mt-2 leading-relaxed">If enabled, your public profile
+                                page will be hidden from other users, even if you have published extensions.</p>
                         </div>
                         <div class="md:col-span-2 flex gap-4 pt-4">
                             <button type="submit"
@@ -390,13 +415,13 @@
                                         <div class="space-y-4 pt-4" id="initial-file-upload">
                                             <div class="flex justify-between">
                                                 <label
-                                                    class="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-2 block">Extension
-                                                    File (.zip)</label>
+                                                    class="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-2 block">Extension/Theme
+                                                    File</label>
                                                 <input type="text" name="version" placeholder="v1.0.0"
                                                     class="bg-transparent border-b border-white/10 text-right text-xs text-white focus:outline-none w-20"
                                                     value="1.0.0">
                                             </div>
-                                            <input type="file" name="extensionFile" accept=".zip,.mclcextension"
+                                            <input type="file" name="extensionFile" accept=".zip,.mclcextension,.json"
                                                 class="w-full text-xs text-gray-400 file:mr-4 file:py-3 file:px-6 file:rounded-xl file:border-0 file:text-xs file:font-black file:bg-primary/10 file:text-primary hover:file:bg-primary transition-all border border-white/5 p-2 rounded-2xl bg-black/20">
                                         </div>
                                     </div>
@@ -577,7 +602,7 @@
                                     <div class="md:col-span-4">
                                         <label class="text-[10px] uppercase font-black text-gray-500 mb-1 block">File
                                             (.zip)</label>
-                                        <input type="file" name="newFile" required accept=".zip,.mclcextension"
+                                        <input type="file" name="newFile" required accept=".zip,.mclcextension,.json"
                                             class="w-full text-xs text-gray-400 file:mr-2 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-white/10 file:text-white hover:file:bg-primary hover:file:text-black transition-all border border-white/10 p-1.5 rounded-xl bg-background/50">
                                     </div>
                                     <div class="md:col-span-4">
@@ -600,6 +625,7 @@
                                     <thead class="bg-white/5 text-[10px] uppercase font-black text-gray-500">
                                         <tr>
                                             <th class="p-4">Version</th>
+                                            <th class="p-4">Changelog</th>
                                             <th class="p-4">Date</th>
                                             <th class="p-4">Status</th>
                                             <th class="p-4">Downloads</th>
@@ -614,8 +640,13 @@
                         </div>
                     </div>
                 </div>
-                <div id="my-extensions-list">
-
+                <div class="mb-10">
+                    <h3 class="text-2xl font-black text-white mb-6">Extensions</h3>
+                    <div id="my-extensions-list"></div>
+                </div>
+                <div>
+                    <h3 class="text-2xl font-black text-white mb-6">Themes</h3>
+                    <div id="my-themes-list"></div>
                 </div>
             </section>
             <section id="tab-users" class="tab-content hidden animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -643,12 +674,16 @@
                     <table class="w-full text-left border-collapse">
                         <thead>
                             <tr class="border-b border-white/5">
-                                <th class="p-6 text-[10px] font-black uppercase text-gray-500 tracking-widest">User</th>
-                                <th class="p-6 text-[10px] font-black uppercase text-gray-500 tracking-widest">Contact &
-                                    Network</th>
-                                <th class="p-6 text-[10px] font-black uppercase text-gray-500 tracking-widest">Activity
+                                <th class="p-6 text-[10px] font-black uppercase text-gray-500 tracking-widest">User
                                 </th>
-                                <th class="p-6 text-[10px] font-black uppercase text-gray-500 tracking-widest">Status
+                                <th class="p-6 text-[10px] font-black uppercase text-gray-500 tracking-widest">
+                                    Contact &
+                                    Network</th>
+                                <th class="p-6 text-[10px] font-black uppercase text-gray-500 tracking-widest">
+                                    Activity
+                                </th>
+                                <th class="p-6 text-[10px] font-black uppercase text-gray-500 tracking-widest">
+                                    Status
                                 </th>
                                 <th
                                     class="p-6 text-[10px] font-black uppercase text-gray-500 tracking-widest text-right">
@@ -783,6 +818,13 @@
                 if (inputUser) inputUser.value = currentUser.username;
                 if (inputAvatar) inputAvatar.value = currentUser.avatar || '';
                 if (inputBio) inputBio.value = currentUser.bio || '';
+
+                const previewAvatar = document.getElementById('preview-avatar');
+                if (previewAvatar) previewAvatar.src = userAvatar;
+
+                const inputPrivacy = document.getElementById('input-privacy');
+                if (inputPrivacy) inputPrivacy.checked = !!currentUser.is_private;
+
                 if (currentUser.role === 'admin') {
                     document.getElementById('admin-hub-btn-sidebar')?.classList.remove('hidden');
                     document.getElementById('btn-users')?.classList.remove('hidden');
@@ -838,8 +880,10 @@
 
         async function loadMyExtensions() {
             const list = document.getElementById('my-extensions-list');
+            const themeList = document.getElementById('my-themes-list');
             if (!list) return;
             list.className = 'grid grid-cols-1 md:grid-cols-2 gap-8';
+            if (themeList) themeList.className = 'grid grid-cols-1 md:grid-cols-2 gap-8';
             try {
                 const res = await fetch('/api/user/extensions');
                 if (!res.ok) {
@@ -858,10 +902,11 @@
                 if (myExtensions.length === 0) {
                     list.className = '';
                     list.innerHTML = `<div class="bg-surface/30 border border-dashed border-white/5 p-12 rounded-[2.5rem] text-center text-gray-600 font-bold uppercase tracking-widest text-sm">No contributions yet.</div>`;
+                    if (themeList) themeList.innerHTML = `<div class="bg-surface/30 border border-dashed border-white/5 p-12 rounded-[2.5rem] text-center text-gray-600 font-bold uppercase tracking-widest text-sm">No contributions yet.</div>`;
                     return;
                 }
 
-                list.innerHTML = myExtensions.map(ext => {
+                const renderItem = ext => {
                     const bannerUrl = fixPath(ext.banner_path);
                     const typeLabel = ext.type === 'theme' ? 'Theme' : 'Extension';
 
@@ -913,9 +958,19 @@
                         </div>
                     </div>
                 `;
-                }).join('');
+                };
+
+                const exts = myExtensions.filter(e => e.type !== 'theme');
+                const themes = myExtensions.filter(e => e.type === 'theme');
+
+                list.innerHTML = exts.length ? exts.map(renderItem).join('') : `<div class="bg-surface/30 border border-dashed border-white/5 p-12 rounded-[2.5rem] text-center text-gray-600 col-span-1 md:col-span-2 font-bold uppercase tracking-widest text-sm">No extensions found.</div>`;
+
+                if (themeList) {
+                    themeList.innerHTML = themes.length ? themes.map(renderItem).join('') : `<div class="bg-surface/30 border border-dashed border-white/5 p-12 rounded-[2.5rem] text-center text-gray-600 col-span-1 md:col-span-2 font-bold uppercase tracking-widest text-sm">No themes found.</div>`;
+                }
+
             } catch (err) {
-                list.innerHTML = '<div class="text-red-500">Failed to load extensions.</div>';
+                list.innerHTML = '<div class="text-red-500">Failed to load items.</div>';
             }
         }
 
@@ -951,6 +1006,7 @@
             formData.append('username', document.getElementById('input-username').value);
             formData.append('avatar', document.getElementById('input-avatar').value);
             formData.append('bio', document.getElementById('input-bio').value);
+            formData.append('is_private', document.getElementById('input-privacy') ? document.getElementById('input-privacy').checked : false);
 
             const fileInput = document.getElementById('input-avatar-file');
             if (fileInput.files[0]) {
@@ -1079,19 +1135,21 @@
             const list = document.getElementById('users-list-body');
             list.innerHTML = users.map(u => {
                 const avatar = fixPath(u.avatar);
-                return DOMPurify.sanitize(`
+                const safeName = (typeof DOMPurify !== 'undefined') ? DOMPurify.sanitize(u.username || 'Unknown') : (u.username || 'Unknown').replace(/</g, "&lt;").replace(/>/g, "&gt;");
+                const safeEmail = (typeof DOMPurify !== 'undefined') ? DOMPurify.sanitize(u.email || '') : (u.email || '').replace(/</g, "&lt;").replace(/>/g, "&gt;");
+                return `
                 <tr class="border-b border-white/5 hover:bg-white/5 transition-all">
                     <td class="p-6">
                         <div class="flex items-center gap-4">
                             <img src="${avatar}" class="w-10 h-10 rounded-full object-cover">
                             <div>
-                                <div class="font-bold text-white">${u.username}</div>
+                                <div class="font-bold text-white">${safeName}</div>
                                 <div class="text-[10px] text-gray-500 uppercase tracking-widest">${u.role}</div>
                             </div>
                         </div>
                     </td>
                     <td class="p-6">
-                        <div class="text-xs text-gray-400 font-mono blur-sm hover:blur-none transition-all cursor-help" title="Sensitive data">${u.email}</div>
+                        <div class="text-xs text-gray-400 font-mono blur-sm hover:blur-none transition-all cursor-help" title="Sensitive data">${safeEmail}</div>
                     </td>
                     <td class="p-6">
                         <div class="text-xs text-gray-400">${u.last_login ? new Date(u.last_login).toLocaleString() : 'Never'}</div>
@@ -1110,7 +1168,7 @@
                         </div>
                     </td>
                 </tr>
-                `);
+                `;
             }).join('');
         }
 
@@ -1239,21 +1297,25 @@
             const tbody = document.getElementById('versions-table-body');
             if (!tbody) return;
 
-            tbody.innerHTML = '<tr><td colspan="5" class="p-4 text-center text-gray-500">Loading versions...</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="6" class="p-4 text-center text-gray-500">Loading versions...</td></tr>';
             try {
                 const res = await fetch(`/api/extensions/${extId}/versions`);
                 if (!res.ok) {
-                    tbody.innerHTML = `<tr><td colspan="5" class="p-8 text-center text-red-500 bg-red-500/5 rounded-xl font-bold">Failed to load versions (Status: ${res.status})</td></tr>`;
+                    tbody.innerHTML = `<tr><td colspan="6" class="p-8 text-center text-red-500 bg-red-500/5 rounded-xl font-bold">Failed to load versions (Status: ${res.status})</td></tr>`;
                     return;
                 }
                 const versions = await res.json();
                 if (!Array.isArray(versions) || versions.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="5" class="p-8 text-center text-gray-500 bg-white/5 rounded-xl">No previous versions found. Upload one above!</td></tr>';
+                    tbody.innerHTML = '<tr><td colspan="6" class="p-8 text-center text-gray-500 bg-white/5 rounded-xl">No previous versions found. Upload one above!</td></tr>';
                     return;
                 }
-                tbody.innerHTML = versions.map(v => `
+                tbody.innerHTML = versions.map(v => {
+                    const safeVersion = (typeof DOMPurify !== 'undefined') ? DOMPurify.sanitize(v.version) : v.version.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+                    const safeChangelog = (typeof DOMPurify !== 'undefined') ? DOMPurify.sanitize(v.changelog || 'Initial upload') : (v.changelog || 'Initial upload').replace(/</g, "&lt;").replace(/>/g, "&gt;");
+                    return `
                     <tr class="border-b border-white/5 hover:bg-white/5 transition-all group">
-                        <td class="p-4 font-bold text-white">${v.version}</td>
+                        <td class="p-4 font-bold text-white">${safeVersion}</td>
+                        <td class="p-4 text-gray-400 text-xs max-w-[200px] truncate" title="${safeChangelog}">${safeChangelog}</td>
                         <td class="p-4 text-gray-400 text-xs">${new Date(v.created_at).toLocaleDateString()}</td>
                         <td class="p-4"><span class="px-2 py-1 rounded text-[10px] font-black uppercase tracking-wider ${getStatusStyle(v.status)}">${v.status}</span></td>
                         <td class="p-4 text-gray-500 font-mono text-xs">${v.downloads}</td>
@@ -1263,10 +1325,11 @@
                             </button>
                         </td>
                     </tr>
-                `).join('');
+                `;
+                }).join('');
             } catch (err) {
                 console.error('[MCLC] Error loading versions:', err);
-                tbody.innerHTML = '<tr><td colspan="5" class="p-4 text-center text-red-500">Failed to load versions.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="6" class="p-4 text-center text-red-500">Failed to load versions.</td></tr>';
             }
         }
 
@@ -1511,6 +1574,21 @@
                 }
             });
         }
+        document.getElementById('input-avatar').addEventListener('input', (e) => {
+            const preview = document.getElementById('preview-avatar');
+            if (preview && e.target.value) preview.src = fixPath(e.target.value);
+        });
+
+        document.getElementById('input-avatar-file').addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            const preview = document.getElementById('preview-avatar');
+            if (file && preview) {
+                const reader = new FileReader();
+                reader.onload = function (e) { preview.src = e.target.result; }
+                reader.readAsDataURL(file);
+            }
+        });
+
         initDashboard();
         showTab('home');</script>
 

@@ -52,7 +52,7 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 async function checkAuth() {
-    console.log('[MCLC] Checking auth status...');
+    console.log('[Lux] Checking auth status...');
     const currentPath = encodeURIComponent(window.location.pathname + window.location.search);
     const loginUrl = `/auth/google?returnTo=${currentPath}`;
     const logoutUrl = `/auth/logout?returnTo=${currentPath}`;
@@ -69,7 +69,7 @@ async function checkAuth() {
             data = await res.json();
         }
     } catch (err) {
-        console.error('[MCLC] Auth check failed:', err);
+        console.error('[Lux] Auth check failed:', err);
 
     }
 
@@ -153,7 +153,7 @@ async function checkAuth() {
         }
 
     } catch (e) {
-        console.error('[MCLC] Failed to render auth UI:', e);
+        console.error('[Lux] Failed to render auth UI:', e);
     }
 }
 function toggleMenu() {

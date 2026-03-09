@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MCLC - Extensions</title>
+    <title>Lux Client - Extensions</title>
     <link rel="icon" type="image/png" href="resources/icon.png">
 
     <script src="https://cdn.tailwindcss.com"></script>
@@ -19,8 +19,8 @@
             theme: {
                 extend: {
                     colors: {
-                        primary: "#1bd96a",
-                        "primary-dark": "#14a34f",
+                        primary: "#e27602",
+                        "primary-dark": "#b05900",
                         surface: "#121212",
                         background: "#080808",
                         "accent-dark": "#0f0f0f",
@@ -29,7 +29,7 @@
                         sans: ["Outfit", "Poppins", "sans-serif"],
                     },
                     boxShadow: {
-                        "primary-glow": "0 0 30px rgba(27, 217, 106, 0.25)",
+                        "primary-glow": "0 0 30px rgba(226, 118, 2, 0.25)",
                     },
                 },
             },
@@ -44,7 +44,7 @@
         <div
             class="relative bg-surface border border-white/10 w-full max-w-md rounded-[2.5rem] p-8 shadow-2xl transform transition-all">
             <h3 class="text-3xl font-black text-white mb-2 uppercase tracking-tight">Choose Platform</h3>
-            <p class="text-gray-400 mb-8">Select your operating system to start downloading MCLC.</p>
+            <p class="text-gray-400 mb-8">Select your operating system to start downloading Lux Client.</p>
 
             <div class="space-y-4">
                 <a id="modalWin" href="#"
@@ -77,14 +77,14 @@
                                 <span class="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Linux &
                                     macOS</span>
                                 <button
-                                    onclick="copyToClipboard('curl -sSL https://mclc.pluginhub.de/install.sh | bash', this)"
+                                    onclick="copyToClipboard('curl -sSL https://lux.pluginhub.de/install.sh | bash', this)"
                                     class="text-gray-500 hover:text-primary transition-colors p-1"
                                     title="Copy Linux Install Command">
                                     <i class="fas fa-copy text-xs"></i>
                                 </button>
                             </div>
                             <code
-                                class="text-primary text-xs font-mono break-all leading-relaxed">curl -sSL https://mclc.pluginhub.de/install.sh | bash</code>
+                                class="text-primary text-xs font-mono break-all leading-relaxed">curl -sSL https://lux.pluginhub.de/install.sh | bash</code>
                         </div>
 
                         <div
@@ -93,14 +93,14 @@
                                 <span class="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Windows
                                     (PowerShell)</span>
                                 <button
-                                    onclick="copyToClipboard('iwr https://mclc.pluginhub.de/install.ps1 | iex', this)"
+                                    onclick="copyToClipboard('iwr https://lux.pluginhub.de/install.ps1 | iex', this)"
                                     class="text-gray-500 hover:text-primary transition-colors p-1"
                                     title="Copy Windows Install Command">
                                     <i class="fas fa-copy text-xs"></i>
                                 </button>
                             </div>
                             <code
-                                class="text-primary text-xs font-mono break-all leading-relaxed">iwr https://mclc.pluginhub.de/install.ps1 | iex</code>
+                                class="text-primary text-xs font-mono break-all leading-relaxed">iwr https://lux.pluginhub.de/install.ps1 | iex</code>
                         </div>
                     </div>
                 </div>
@@ -117,9 +117,9 @@
             <div class="flex items-center justify-between h-20">
 
                 <a href="index.html" class="flex items-center gap-3 group shrink-0">
-                    <img src="/resources/icon.png" alt="MCLC Logo"
+                    <img src="/resources/icon.png" alt="Lux Client Logo"
                         class="w-10 h-10 object-contain group-hover:scale-110 transition-transform duration-300" />
-                    <span class="text-2xl font-extrabold tracking-tighter text-white">MCLC</span>
+                    <span class="text-2xl font-extrabold tracking-tighter text-white">Lux Client</span>
                 </a>
                 <div
                     class="hidden md:flex items-center gap-6 lg:gap-10 text-sm font-semibold tracking-wide uppercase text-gray-400">
@@ -198,7 +198,7 @@
                 Explore <span class="text-primary">Extensions</span>
             </h1>
             <p class="text-gray-400 text-lg max-w-2xl mx-auto mb-12">
-                Customize your MCLC experience with community-created plugins and themes.
+                Customize your Lux Client experience with community-created plugins and themes.
             </p>
 
             <div class="max-w-xl mx-auto relative group mb-8">
@@ -210,12 +210,12 @@
                     </svg>
                 </div>
                 <input type="text" id="extension-search" placeholder="Search extensions..."
-                    class="w-full bg-white/5 backdrop-blur-md border border-white/10 rounded-2xl py-4 pl-14 pr-6 text-white placeholder-gray-500 focus:outline-none focus:border-primary focus:bg-white/10 focus:shadow-[0_0_20px_rgba(27,217,106,0.2)] transition-all">
+                    class="w-full bg-white/5 backdrop-blur-md border border-white/10 rounded-2xl py-4 pl-14 pr-6 text-white placeholder-gray-500 focus:outline-none focus:border-primary focus:bg-white/10 focus:shadow-[0_0_20px_rgba(226, 118, 2,0.2)] transition-all">
             </div>
 
             <div class="flex items-center justify-center gap-4">
                 <button id="tab-extension" onclick="setExtensionTab('extension')"
-                    class="px-6 py-2 rounded-xl text-sm font-bold transition-all bg-primary text-black shadow-[0_0_15px_rgba(27,217,106,0.2)]">Extensions</button>
+                    class="px-6 py-2 rounded-xl text-sm font-bold transition-all bg-primary text-black shadow-[0_0_15px_rgba(226, 118, 2,0.2)]">Extensions</button>
                 <button id="tab-theme" onclick="setExtensionTab('theme')"
                     class="px-6 py-2 rounded-xl text-sm font-bold transition-all bg-white/5 text-gray-400 hover:text-white hover:bg-white/10">Themes</button>
             </div>
@@ -237,8 +237,8 @@
         <div class="max-w-7xl mx-auto px-6 lg:px-12">
             <div class="flex flex-col md:flex-row justify-between items-center gap-8">
                 <div class="flex items-center gap-3">
-                    <img src="/resources/icon.png" alt="MCLC Logo" class="w-8 h-8 opacity-50" />
-                    <span class="text-xl font-bold text-gray-500 tracking-tighter">MCLC</span>
+                    <img src="/resources/icon.png" alt="Lux Client Logo" class="w-8 h-8 opacity-50" />
+                    <span class="text-xl font-bold text-gray-500 tracking-tighter">Lux Client</span>
                 </div>
                 <div
                     class="flex flex-wrap justify-center gap-6 md:gap-8 text-sm font-medium text-gray-500 uppercase tracking-widest">
@@ -247,7 +247,7 @@
                     <a href="/analytics-opt-out.html" class="hover:text-primary transition-colors">Opt-Out</a>
                 </div>
                 <p class="text-gray-600 text-xs text-center md:text-right">
-                    &copy; 2026 MCLC Team. Not an official Minecraft product.
+                    &copy; 2026 Lux Client Team. Not an official Minecraft product.
                 </p>
             </div>
         </div>
@@ -297,10 +297,10 @@
             const btnTheme = document.getElementById('tab-theme');
 
             if (tab === 'extension') {
-                btnExt.className = 'px-6 py-2 rounded-xl text-sm font-bold transition-all bg-primary text-black shadow-[0_0_15px_rgba(27,217,106,0.2)]';
+                btnExt.className = 'px-6 py-2 rounded-xl text-sm font-bold transition-all bg-primary text-black shadow-[0_0_15px_rgba(226, 118, 2,0.2)]';
                 btnTheme.className = 'px-6 py-2 rounded-xl text-sm font-bold transition-all bg-white/5 text-gray-400 hover:text-white hover:bg-white/10';
             } else {
-                btnTheme.className = 'px-6 py-2 rounded-xl text-sm font-bold transition-all bg-primary text-black shadow-[0_0_15px_rgba(27,217,106,0.2)]';
+                btnTheme.className = 'px-6 py-2 rounded-xl text-sm font-bold transition-all bg-primary text-black shadow-[0_0_15px_rgba(226, 118, 2,0.2)]';
                 btnExt.className = 'px-6 py-2 rounded-xl text-sm font-bold transition-all bg-white/5 text-gray-400 hover:text-white hover:bg-white/10';
             }
 
@@ -308,7 +308,7 @@
         }
 
         async function loadExtensions(search = '') {
-            console.log('[MCLC] Loading extensions...', search ? `Search: ${search}` : '');
+            console.log('[Lux] Loading extensions...', search ? `Search: ${search}` : '');
             const grid = document.getElementById('extensions-grid');
 
             try {

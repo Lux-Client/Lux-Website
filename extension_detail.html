@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MCLC - Extension Details</title>
+    <title>Lux Client - Extension Details</title>
     <link rel="icon" type="image/png" href="/resources/icon.png">
 
     <script src="https://cdn.tailwindcss.com"></script>
@@ -21,8 +21,8 @@
             theme: {
                 extend: {
                     colors: {
-                        primary: "#1bd96a",
-                        "primary-dark": "#14a34f",
+                        primary: "#e27602",
+                        "primary-dark": "#b05900",
                         surface: "#121212",
                         background: "#080808",
                         "accent-dark": "#0f0f0f",
@@ -31,7 +31,7 @@
                         sans: ["Outfit", "Poppins", "sans-serif"],
                     },
                     boxShadow: {
-                        "primary-glow": "0 0 30px rgba(27, 217, 106, 0.25)",
+                        "primary-glow": "0 0 30px rgba(226, 118, 2, 0.25)",
                     },
                 },
             },
@@ -92,8 +92,8 @@
             border-radius: 0.4rem;
             font-family: monospace;
             font-size: 0.9em;
-            color: #1bd96a;
-            border: 1px solid rgba(27, 217, 106, 0.1);
+            color: #e27602;
+            border: 1px solid rgba(226, 118, 2, 0.1);
         }
 
         #extension-description pre {
@@ -106,9 +106,9 @@
         }
 
         #extension-description blockquote {
-            border-left: 4px solid #1bd96a;
+            border-left: 4px solid #e27602;
             padding: 1rem 1.5rem;
-            background: rgba(27, 217, 106, 0.03);
+            background: rgba(226, 118, 2, 0.03);
             border-radius: 0 1rem 1rem 0;
             color: #718096;
             font-style: italic;
@@ -116,7 +116,7 @@
         }
 
         #extension-description a {
-            color: #1bd96a;
+            color: #e27602;
             text-decoration: underline;
             text-underline-offset: 4px;
             font-weight: 600;
@@ -144,9 +144,9 @@
         <div class="max-w-7xl mx-auto px-6 lg:px-12">
             <div class="flex items-center justify-between h-20">
                 <a href="/index.html" class="flex items-center gap-3 group shrink-0">
-                    <img src="/resources/icon.png" alt="MCLC Logo"
+                    <img src="/resources/icon.png" alt="Lux Client Logo"
                         class="w-10 h-10 object-contain group-hover:scale-110 transition-transform duration-300" />
-                    <span class="text-2xl font-extrabold tracking-tighter text-white">MCLC</span>
+                    <span class="text-2xl font-extrabold tracking-tighter text-white">Lux Client</span>
                 </a>
 
                 <div
@@ -163,7 +163,7 @@
                 <div class="flex items-center gap-4" id="nav-right-group">
                     <a id="downloadNavBtn" href="#"
                         class="bg-primary hover:bg-primary-dark text-black px-6 py-2.5 rounded-xl font-bold transition-all shadow-primary-glow transform hover:scale-105 active:scale-95 shrink-0 whitespace-nowrap">
-                        Download MCLC
+                        Download Lux Client
                     </a>
                 </div>
             </div>
@@ -241,7 +241,7 @@
                             <div
                                 class="w-8 h-8 rounded-full bg-primary/20 text-primary flex items-center justify-center font-bold shrink-0">
                                 2</div>
-                            <p class="text-gray-400">Open MCLC Launcher and go to the <b>Extensions</b> tab.</p>
+                            <p class="text-gray-400">Open Lux Client Launcher and go to the <b>Extensions</b> tab.</p>
                         </div>
                         <div class="flex gap-4">
                             <div
@@ -334,8 +334,8 @@
         <div class="max-w-7xl mx-auto px-6 lg:px-12">
             <div class="flex flex-col md:flex-row justify-between items-center gap-8">
                 <div class="flex items-center gap-3">
-                    <img src="/resources/icon.png" alt="MCLC Logo" class="w-8 h-8 opacity-50" />
-                    <span class="text-xl font-bold text-gray-500 tracking-tighter">MCLC</span>
+                    <img src="/resources/icon.png" alt="Lux Client Logo" class="w-8 h-8 opacity-50" />
+                    <span class="text-xl font-bold text-gray-500 tracking-tighter">Lux Client</span>
                 </div>
                 <div
                     class="flex flex-wrap justify-center gap-6 md:gap-8 text-sm font-medium text-gray-500 uppercase tracking-widest">
@@ -345,7 +345,7 @@
                     <a href="https://pluginhub.de/discord.html" class="hover:text-primary transition-colors">Discord</a>
                 </div>
                 <p class="text-gray-600 text-xs text-center md:text-right">
-                    &copy; 2026 MCLC Team. Not an official Minecraft product.
+                    &copy; 2026 Lux Client Team. Not an official Minecraft product.
                 </p>
             </div>
         </div>
@@ -359,7 +359,7 @@
                 const response = await fetch(`/api/extensions/i/${identifier}`);
                 if (!response.ok) throw new Error('Not found');
                 const ext = await response.json();
-                document.title = `MCLC - ${ext.name}`;
+                document.title = `Lux Client - ${ext.name}`;
                 document.getElementById('extension-name').textContent = ext.name;
                 document.getElementById('extension-summary').textContent = ext.summary || ext.name;
                 marked.setOptions({ breaks: true, gfm: true });
@@ -421,7 +421,7 @@
                             countEl.textContent = newCount.toLocaleString();
                         }
                     } catch (err) {
-                        console.error('[MCLC] Download tracking failed:', err);
+                        console.error('[Lux] Download tracking failed:', err);
                     }
                 });
                 const historyList = document.getElementById('version-history-list');

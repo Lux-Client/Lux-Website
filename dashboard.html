@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MCLC - Dashboard</title>
+    <title>Lux Client - Dashboard</title>
     <link rel="icon" type="image/png" href="/resources/icon.png">
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700;800&display=swap" rel="stylesheet">
@@ -16,8 +16,8 @@
             theme: {
                 extend: {
                     colors: {
-                        primary: '#1bd96a',
-                        'primary-dark': '#14a34f',
+                        primary: '#e27602',
+                        'primary-dark': '#b05900',
                         surface: '#121212',
                         background: '#080808',
                         'accent-dark': '#0f0f0f',
@@ -26,7 +26,7 @@
                         sans: ['Outfit', 'sans-serif'],
                     },
                     boxShadow: {
-                        'primary-glow': '0 0 30px rgba(27, 217, 106, 0.25)',
+                        'primary-glow': '0 0 30px rgba(226, 118, 2, 0.25)',
                     }
                 }
             }
@@ -38,8 +38,8 @@
         id="navbar">
         <div class="max-w-7xl mx-auto px-6 lg:px-12 flex items-center justify-between h-20">
             <a href="index.html" class="flex items-center gap-3">
-                <img src="/resources/icon.png" alt="MCLC Logo" class="w-8 h-8 object-contain">
-                <span class="text-xl font-bold tracking-tighter text-white">MCLC <span
+                <img src="/resources/icon.png" alt="Lux Client Logo" class="w-8 h-8 object-contain">
+                <span class="text-xl font-bold tracking-tighter text-white">Lux Client <span
                         class="text-primary/50 text-xs ml-1 uppercase tracking-widest">Dashboard</span></span>
             </a>
             <div class="flex items-center gap-6" id="nav-right-group">
@@ -460,7 +460,7 @@
                                                     class="bg-transparent border-b border-white/10 text-right text-xs text-white focus:outline-none w-20"
                                                     value="1.0.0">
                                             </div>
-                                            <input type="file" name="extensionFile" accept=".zip,.mclcextension,.json"
+                                            <input type="file" name="extensionFile" accept=".zip,.luxextension,.json"
                                                 class="w-full text-xs text-gray-400 file:mr-4 file:py-3 file:px-6 file:rounded-xl file:border-0 file:text-xs file:font-black file:bg-primary/10 file:text-primary hover:file:bg-primary transition-all border border-white/5 p-2 rounded-2xl bg-black/20">
                                         </div>
                                     </div>
@@ -641,7 +641,7 @@
                                     <div class="md:col-span-4">
                                         <label class="text-[10px] uppercase font-black text-gray-500 mb-1 block">File
                                             (.zip)</label>
-                                        <input type="file" name="newFile" required accept=".zip,.mclcextension,.json"
+                                        <input type="file" name="newFile" required accept=".zip,.luxextension,.json"
                                             class="w-full text-xs text-gray-400 file:mr-2 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-white/10 file:text-white hover:file:bg-primary hover:file:text-black transition-all border border-white/10 p-1.5 rounded-xl bg-background/50">
                                     </div>
                                     <div class="md:col-span-4">
@@ -1115,7 +1115,7 @@
                     loadMyExtensions();
                 } else {
                     alert('Error: ' + (result.error || 'Server error occurred.'));
-                    console.error('[MCLC] Upload result error:', result);
+                    console.error('[Lux] Upload result error:', result);
                 }
             } catch (err) {
                 alert('An error occurred during process.');
@@ -1158,14 +1158,14 @@
                     return;
                 }
                 allUsers = await res.json();
-                console.log('[MCLC] Admin users raw data:', allUsers);
+                console.log('[Lux] Admin users raw data:', allUsers);
                 if (!Array.isArray(allUsers) || allUsers.length === 0) {
                     list.innerHTML = `<tr><td colspan="5" class="p-8 text-center text-gray-500 bg-white/5 rounded-xl font-bold">No users in database or access denied.</td></tr>`;
                     return;
                 }
                 renderUsers(allUsers);
             } catch (err) {
-                console.error('[MCLC] Error loading users:', err);
+                console.error('[Lux] Error loading users:', err);
                 list.innerHTML = '<tr><td colspan="5" class="p-8 text-center text-red-500 bg-red-500/5 rounded-xl font-bold">Network error loading users.</td></tr>';
             }
         }
@@ -1277,7 +1277,7 @@
         function startEdit(id, tab = 'details') {
             const ext = myExtensions.find(e => Number(e.id) === Number(id));
             if (!ext) {
-                console.warn('[MCLC] Extension not found for editing:', id);
+                console.warn('[Lux] Extension not found for editing:', id);
                 return;
             }
 
@@ -1367,7 +1367,7 @@
                 `;
                 }).join('');
             } catch (err) {
-                console.error('[MCLC] Error loading versions:', err);
+                console.error('[Lux] Error loading versions:', err);
                 tbody.innerHTML = '<tr><td colspan="6" class="p-4 text-center text-red-500">Failed to load versions.</td></tr>';
             }
         }
@@ -1584,8 +1584,8 @@
                     datasets: [{
                         label: 'Downloads',
                         data: data,
-                        backgroundColor: 'rgba(27, 217, 106, 0.7)',
-                        borderColor: '#1bd96a',
+                        backgroundColor: 'rgba(226, 118, 2, 0.7)',
+                        borderColor: '#e27602',
                         borderWidth: 1,
                         borderRadius: 4
                     }]
@@ -1712,7 +1712,7 @@
             border-radius: 0.25rem;
             font-family: monospace;
             font-size: 0.85em;
-            color: #1bd96a;
+            color: #e27602;
         }
 
         #markdown-preview pre {
@@ -1725,7 +1725,7 @@
         }
 
         #markdown-preview blockquote {
-            border-left: 4px solid #1bd96a;
+            border-left: 4px solid #e27602;
             padding-left: 1rem;
             color: #718096;
             font-style: italic;
@@ -1733,7 +1733,7 @@
         }
 
         #markdown-preview a {
-            color: #1bd96a;
+            color: #e27602;
             text-decoration: underline;
         }
 

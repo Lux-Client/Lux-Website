@@ -19,13 +19,13 @@ const upload = multer({
     storage: storage,
     limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit (V15)
     fileFilter: (req, file, cb) => {
-        const allowedExtensions = ['.zip', '.mclcextension', '.png', '.jpg', '.jpeg', '.webp', '.json'];
+        const allowedExtensions = ['.zip', '.luxextension', '.png', '.jpg', '.jpeg', '.webp', '.json'];
         const ext = path.extname(file.originalname).toLowerCase();
 
         if (allowedExtensions.includes(ext)) {
             cb(null, true);
         } else {
-            cb(new Error('File type not allowed. Only .zip, .mclcextension, and .json (and common images) are permitted.'));
+            cb(new Error('File type not allowed. Only .zip, .luxextension, and .json (and common images) are permitted.'));
         }
     }
 });

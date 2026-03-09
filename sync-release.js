@@ -4,13 +4,13 @@ const path = require('path');
 const REPO = 'Fernsehheft/MCLC-Client';
 const DOWNLOAD_DIR = path.join(__dirname, 'download');
 const VERSION_FILE = path.join(__dirname, 'version.json');
-const EXE_NAME = 'MCLC-Setup.exe';
+const EXE_NAME = 'Lux Client-Setup.exe';
 
 async function syncRelease() {
     try {
         console.log(`[Sync] Checking for latest release in ${REPO}...`);
         const response = await axios.get(`https://api.github.com/repos/${REPO}/releases/latest`, {
-            headers: { 'User-Agent': 'MCLC-Sync-Agent' }
+            headers: { 'User-Agent': 'Lux Client-Sync-Agent' }
         });
 
         const release = response.data;
@@ -43,7 +43,7 @@ async function syncRelease() {
         const versionData = {
             version: version,
             lastSynced: new Date().toISOString(),
-            downloadUrl: `https://mclc.pluginhub.de/download/${EXE_NAME}`
+            downloadUrl: `https://lux.pluginhub.de/download/${EXE_NAME}`
         };
 
         await fs.writeJson(VERSION_FILE, versionData, { spaces: 4 });

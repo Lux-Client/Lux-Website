@@ -3,7 +3,7 @@
     --bg-card: rgba(255, 255, 255, 0.03);
     --primary: #1BE87B;
     --secondary: #3498db;
-    --primary-glow: rgba(27, 232, 123, 0.4);
+    --primary-glow: rgba(226, 118, 2, 0.4);
     --text-main: #ffffff;
     --text-muted: #a0aec0;
     --border-light: rgba(255, 255, 255, 0.1);
@@ -189,7 +189,7 @@ td {
 }
 
 .bg-green {
-    background: rgba(27, 232, 123, 0.1);
+    background: rgba(226, 118, 2, 0.1);
     color: var(--primary);
     border: 1px solid var(--primary);
 }
@@ -328,5 +328,5 @@ button.primary:hover {
 .tab-btn.active {
     background: var(--primary);
     color: black;
-    box-shadow: 0 0 10px rgba(0, 255, 136, 0.3);
+    box-shadow: 0 0 10px rgba(226, 118, 2, 0.3);
 }

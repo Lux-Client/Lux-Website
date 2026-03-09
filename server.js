@@ -637,7 +637,7 @@ app.delete('/api/extensions/:id', ensureAuthenticated, async (req, res) => {
         res.json({ success: true, message: 'Extension deleted successfully' });
     } catch (err) {
         if (connection) await connection.rollback();
-        console.error('[MCLC] Error deleting extension:', err);
+        console.error('[Lux] Error deleting extension:', err);
         res.status(500).json({ error: 'Database error while deleting' });
     } finally {
         if (connection) connection.release();
@@ -761,7 +761,7 @@ app.post('/api/user/update', ensureAuthenticated, upload.single('avatarFile'), a
 app.delete('/api/user/delete', ensureAuthenticated, async (req, res) => {
     try {
         const userId = req.user.id;
-        console.log(`[MCLC] Account deletion requested by user ID: ${userId} (${req.user.username})`);
+        console.log(`[Lux] Account deletion requested by user ID: ${userId} (${req.user.username})`);
 
         // Delete uploaded files for this user's extensions
         const [extensions] = await pool.query('SELECT id, banner_path FROM extensions WHERE user_id = ?', [userId]);
@@ -800,7 +800,7 @@ app.delete('/api/user/delete', ensureAuthenticated, async (req, res) => {
             });
         });
 
-        console.log(`[MCLC] Account deleted successfully: user ID ${userId}`);
+        console.log(`[Lux] Account deleted successfully: user ID ${userId}`);
     } catch (err) {
         console.error('[API Error] /api/user/delete failed:', err);
         res.status(500).json({ error: 'Failed to delete account', details: err.message });
@@ -1027,7 +1027,7 @@ app.post('/api/admin/extensions/:id/:action', ensureAdmin, async (req, res) => {
 
         res.json({ success: true });
     } catch (err) {
-        console.error('[MCLC] Admin extension status update error:', err);
+        console.error('[Lux] Admin extension status update error:', err);
         res.status(500).json({ error: 'Database error', details: err.message });
     }
 });
@@ -1099,7 +1099,7 @@ app.get('/api/modrinth/versions', async (req, res) => {
     try {
         const response = await fetch('https://api.modrinth.com/v2/tag/game_version', {
             headers: {
-                'User-Agent': 'MCLC-Client/1.0.0 (mclc@pluginhub.de)'
+                'User-Agent': 'MCLC/1.0.0 (mclc@pluginhub.de)'
             }
         });
         if (!response.ok) throw new Error(`Modrinth returned ${response.status}`);
@@ -1116,7 +1116,7 @@ app.get('/api/modrinth/search', async (req, res) => {
         const params = new URLSearchParams(req.query);
         const response = await fetch(`https://api.modrinth.com/v2/search?${params.toString()}`, {
             headers: {
-                'User-Agent': 'MCLC-Client/1.0.0 (mclc@pluginhub.de)'
+                'User-Agent': 'MCLC/1.0.0 (mclc@pluginhub.de)'
             }
         });
         if (!response.ok) throw new Error(`Modrinth returned ${response.status}`);
@@ -1157,7 +1157,7 @@ const staticOptions = {
         if (filePath.endsWith('.html')) {
             res.setHeader('Cache-Control', 'no-cache, must-revalidate');
         }
-        if (filePath.endsWith('.mclcextension')) {
+        if (filePath.endsWith('.luxextension')) {
             res.setHeader('Content-Type', 'application/octet-stream');
         }
     }
@@ -1203,10 +1203,10 @@ const { createTables } = require('./db_init');
 
 // --- TEMPORARY MIGRATION SCRIPT ---
 pool.query('ALTER TABLE users ADD COLUMN is_private BOOLEAN DEFAULT FALSE;')
-    .then(() => console.log('[MCLC] Database migration: added is_private column.'))
+    .then(() => console.log('[Lux] Database migration: added is_private column.'))
     .catch(err => {
         if (err.code !== 'ER_DUP_FIELDNAME') {
-            console.error('[MCLC] Database migration failed:', err);
+            console.error('[Lux] Database migration failed:', err);
         }
     });
 

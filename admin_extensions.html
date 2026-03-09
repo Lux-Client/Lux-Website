@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MCLC - Admin Dashboard</title>
+    <title>Lux Client - Admin Dashboard</title>
     <link rel="icon" type="image/png" href="resources/icon.png">
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700;800&display=swap" rel="stylesheet">
@@ -13,8 +13,8 @@
             theme: {
                 extend: {
                     colors: {
-                        primary: '#1bd96a',
-                        'primary-dark': '#14a34f',
+                        primary: '#e27602',
+                        'primary-dark': '#b05900',
                         surface: '#121212',
                         background: '#080808',
                         'accent-dark': '#0f0f0f',
@@ -32,8 +32,8 @@
         id="navbar">
         <div class="max-w-7xl mx-auto px-6 lg:px-12 flex items-center justify-between h-20">
             <a href="index.html" class="flex items-center gap-3">
-                <img src="resources/icon.png" alt="MCLC Logo" class="w-10 h-10 object-contain">
-                <span class="text-2xl font-extrabold tracking-tighter text-white">MCLC Admin</span>
+                <img src="resources/icon.png" alt="Lux Client Logo" class="w-10 h-10 object-contain">
+                <span class="text-2xl font-extrabold tracking-tighter text-white">Lux Client Admin</span>
             </a>
 
             <div class="flex items-center gap-4" id="nav-right-group">
@@ -309,7 +309,7 @@
                 allExtensions = Array.isArray(data) ? data : [];
                 renderAllExtensions(allExtensions);
             } catch (err) {
-                console.error('[MCLC] Error loading all extensions:', err);
+                console.error('[Lux] Error loading all extensions:', err);
                 list.innerHTML = '<div class="bg-red-500/10 border border-red-500/20 p-12 rounded-2xl text-center text-red-500 font-bold">Network error loading extensions.</div>';
             }
         }

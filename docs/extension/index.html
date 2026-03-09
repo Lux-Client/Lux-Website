@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>MCLC - Extension Development Guide</title>
+  <title>Lux Client - Extension Development Guide</title>
   <link rel="icon" type="image/png" href="../../resources/icon.png">
   <script src="https://cdn.tailwindcss.com"></script>
   <link
@@ -15,8 +15,8 @@
       theme: {
         extend: {
           colors: {
-            primary: "#1bd96a",
-            "primary-dark": "#14a34f",
+            primary: "#e27602",
+            "primary-dark": "#b05900",
             surface: "#121212",
             background: "#080808",
             "accent-dark": "#0f0f0f",
@@ -25,7 +25,7 @@
             sans: ["Outfit", "Poppins", "sans-serif"],
           },
           boxShadow: {
-            "primary-glow": "0 0 30px rgba(27, 217, 106, 0.25)",
+            "primary-glow": "0 0 30px rgba(226, 118, 2, 0.25)",
           },
         },
       },
@@ -46,12 +46,12 @@
     }
 
     .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-      background: rgba(27, 217, 106, 0.5);
+      background: rgba(226, 118, 2, 0.5);
     }
 
     .wiki-nav-link.active {
-      color: #1bd96a;
-      border-left: 2px solid #1bd96a;
+      color: #e27602;
+      border-left: 2px solid #e27602;
       padding-left: 14px;
     }
 
@@ -73,9 +73,9 @@
     id="navbar">
     <div class="max-w-[1600px] mx-auto px-6 h-full flex items-center justify-between">
       <a href="../../index.html" class="flex items-center gap-3 group shrink-0">
-        <img src="../../resources/icon.png?v=2" alt="MCLC Logo"
+        <img src="../../resources/icon.png?v=2" alt="Lux Client Logo"
           class="w-10 h-10 object-contain group-hover:scale-110 transition-transform duration-300" />
-        <span class="text-2xl font-extrabold tracking-tighter text-white">MCLC</span>
+        <span class="text-2xl font-extrabold tracking-tighter text-white">Lux Client</span>
       </a>
       <div class="hidden md:flex items-center gap-8 text-sm font-semibold tracking-wide uppercase text-gray-400">
         <a href="../../index.html" class="hover:text-primary transition-colors">Information</a>
@@ -151,7 +151,7 @@
         <header class="mb-16">
           <h1 class="text-5xl font-black text-white mb-6 tracking-tight">Extension Development</h1>
           <p class="text-xl text-gray-400 leading-relaxed">
-            Learn how to create, build, and publish your own extensions for the MCLC Launcher.
+            Learn how to create, build, and publish your own extensions for the Lux Client Launcher.
           </p>
         </header>
 

@@ -1,11 +1,11 @@
 <!DOCTYPE html>
-<!-- MCLC Admin v1.2 - Software, Versions & Path Debugging -->
+<!-- Lux Client Admin v1.2 - Software, Versions & Path Debugging -->
 <html lang="en">
 
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MCLC News Admin</title>
+    <title>Lux Client News Admin</title>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;900&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
     <!-- Chart.js and Socket.IO -->
@@ -72,7 +72,7 @@
     <header style="background: rgba(0,0,0,0.3); border-bottom: 1px solid var(--border-light); padding: 1.5rem 0;">
         <div class="container" style="display:flex; justify-content:space-between; align-items:center;">
             <div style="display:flex; align-items:center; gap:20px;">
-                <h1 style="font-size: 2rem; margin:0;">MCLC <span
+                <h1 style="font-size: 2rem; margin:0;">Lux Client <span
                         style="font-weight:300; opacity:0.6; font-size:0.6em;">ADMIN</span></h1>
                 <div id="connection-status"
                     class="flex items-center gap-2 px-3 py-1 rounded-full bg-red-500/10 text-red-400 text-[10px] font-bold border border-red-500/20"
@@ -292,8 +292,8 @@
         const password = localStorage.getItem('admin_password');
         if (!password) window.location.href = 'index.html';
 
-        console.log('[MCLC Admin] v1.3 Initializing...');
-        console.log('[MCLC Admin] Running from:', window.location.href);
+        console.log('[Lux Client Admin] v1.3 Initializing...');
+        console.log('[Lux Client Admin] Running from:', window.location.href);
 
         function logout() {
             localStorage.removeItem('admin_password');
@@ -575,7 +575,7 @@
                         data: {
                             labels: [],
                             datasets: [
-                                { label: 'Active Launchers', data: [], borderColor: '#00ff88', backgroundColor: 'rgba(0, 255, 136, 0.1)', tension: 0.4, fill: true },
+                                { label: 'Active Launchers', data: [], borderColor: '#00ff88', backgroundColor: 'rgba(226, 118, 2, 0.1)', tension: 0.4, fill: true },
                                 { label: 'In-Game', data: [], borderColor: '#00b8ff', backgroundColor: 'rgba(0, 184, 255, 0.1)', tension: 0.4, fill: true }
                             ]
                         },

@@ -4,20 +4,20 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>MCLC – Premium Minecraft Launcher</title>
+  <title>Lux Client – Premium Minecraft Launcher</title>
   <meta name="description"
-    content="MCLC is a high-performance, modern Minecraft launcher with integrated mod support, skin viewing, and advanced instance management." />
+    content="Lux Client is a high-performance, modern Minecraft launcher with integrated mod support, skin viewing, and advanced instance management." />
   <meta name="author" content="Fernsehheft, Mobilestars & ItzzMateo" />
   <meta name="keywords"
-    content="Minecraft, Launcher, Premium, Mod, Skin Viewer, Instance Management, MCLC, Windows, Linux, Game, Download" />
+    content="Minecraft, Launcher, Premium, Mod, Skin Viewer, Instance Management, Lux Client, Windows, Linux, Game, Download" />
   <meta name="robots" content="index, follow" />
-  <meta name="theme-color" content="#1bd96a" />
+  <meta name="theme-color" content="#e27602" />
 
-  <meta property="og:title" content="MCLC – Premium Minecraft Launcher" />
+  <meta property="og:title" content="Lux Client – Premium Minecraft Launcher" />
   <meta property="og:description"
-    content="MCLC is a high-performance, modern Minecraft launcher with integrated mod support, skin viewing, and advanced instance management." />
+    content="Lux Client is a high-performance, modern Minecraft launcher with integrated mod support, skin viewing, and advanced instance management." />
   <meta property="og:type" content="website" />
-  <meta property="og:url" content="https://mclc.pluginhub.de/" />
+  <meta property="og:url" content="https://lux.pluginhub.de/" />
 
   <link rel="icon" type="image/png" href="/resources/icon.png" />
   <script src="https://cdn.tailwindcss.com"></script>
@@ -32,8 +32,8 @@
       theme: {
         extend: {
           colors: {
-            primary: "#1bd96a",
-            "primary-dark": "#14a34f",
+            primary: "#e27602",
+            "primary-dark": "#b05900",
             surface: "#121212",
             background: "#080808",
             "accent-dark": "#0f0f0f",
@@ -42,7 +42,7 @@
             sans: ["Outfit", "Poppins", "sans-serif"],
           },
           boxShadow: {
-            "primary-glow": "0 0 30px rgba(27, 217, 106, 0.25)",
+            "primary-glow": "0 0 30px rgba(226, 118, 2, 0.25)",
           },
         },
       },
@@ -61,7 +61,7 @@
     <div
       class="relative bg-surface border border-white/10 w-full max-w-md rounded-[2.5rem] p-8 shadow-2xl transform transition-all">
       <h3 class="text-3xl font-black text-white mb-2 uppercase tracking-tight">Choose Platform</h3>
-      <p class="text-gray-400 mb-8">Select your operating system to start downloading MCLC.</p>
+      <p class="text-gray-400 mb-8">Select your operating system to start downloading Lux Client.</p>
 
       <div class="space-y-4">
         <a id="modalWin" href="#"
@@ -96,25 +96,25 @@
             <div class="bg-black/40 border border-white/5 rounded-2xl p-4 group/cmd transition-all hover:bg-black/60">
               <div class="flex items-center justify-between mb-2">
                 <span class="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Linux & macOS</span>
-                <button onclick="copyToClipboard('curl -sSL https://mclc.pluginhub.de/install.sh | bash', this)"
+                <button onclick="copyToClipboard('curl -sSL https://lux.pluginhub.de/install.sh | bash', this)"
                   class="text-gray-500 hover:text-primary transition-colors p-1" title="Copy Linux Install Command">
                   <i class="fas fa-copy text-xs"></i>
                 </button>
               </div>
               <code
-                class="text-primary text-xs font-mono break-all leading-relaxed">curl -sSL https://mclc.pluginhub.de/install.sh | bash</code>
+                class="text-primary text-xs font-mono break-all leading-relaxed">curl -sSL https://lux.pluginhub.de/install.sh | bash</code>
             </div>
 
             <div class="bg-black/40 border border-white/5 rounded-2xl p-4 group/cmd transition-all hover:bg-black/60">
               <div class="flex items-center justify-between mb-2">
                 <span class="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Windows (PowerShell)</span>
-                <button onclick="copyToClipboard('iwr https://mclc.pluginhub.de/install.ps1 | iex', this)"
+                <button onclick="copyToClipboard('iwr https://lux.pluginhub.de/install.ps1 | iex', this)"
                   class="text-gray-500 hover:text-primary transition-colors p-1" title="Copy Windows Install Command">
                   <i class="fas fa-copy text-xs"></i>
                 </button>
               </div>
               <code
-                class="text-primary text-xs font-mono break-all leading-relaxed">iwr https://mclc.pluginhub.de/install.ps1 | iex</code>
+                class="text-primary text-xs font-mono break-all leading-relaxed">iwr https://lux.pluginhub.de/install.ps1 | iex</code>
             </div>
           </div>
         </div>
@@ -132,9 +132,9 @@
       <div class="flex items-center justify-between h-20 gap-4">
 
         <a href="index.html" class="flex items-center gap-3 group shrink-0">
-          <img src="/resources/icon.png?v=2" alt="MCLC Logo"
+          <img src="/resources/icon.png?v=2" alt="Lux Client Logo"
             class="w-10 h-10 object-contain group-hover:scale-110 transition-transform duration-300" />
-          <span class="text-2xl font-extrabold tracking-tighter text-white hidden sm:inline">MCLC</span>
+          <span class="text-2xl font-extrabold tracking-tighter text-white hidden sm:inline">Lux Client</span>
         </a>
         <div
           class="hidden md:flex items-center gap-6 lg:gap-10 text-sm font-semibold tracking-wide uppercase text-gray-400">
@@ -197,7 +197,7 @@
   </nav>
 
   <section id="home" class="relative min-h-screen flex items-center justify-center overflow-hidden">
-    <div class="absolute inset-0 bg-[radial-gradient(circle_at_50%_40%,rgba(27,217,106,0.12),transparent_60%)]"></div>
+    <div class="absolute inset-0 bg-[radial-gradient(circle_at_50%_40%,rgba(226, 118, 2,0.12),transparent_60%)]"></div>
     <div class="absolute inset-0 bg-[#080808]"></div>
     <div class="absolute top-[20%] left-[10%] w-[30vw] h-[30vw] bg-primary/5 rounded-full blur-[100px] animate-pulse">
     </div>
@@ -270,7 +270,7 @@
       <div class="text-center mb-24">
         <h2 class="text-4xl md:text-5xl font-black text-white mb-6 tracking-tight">Everything you need.</h2>
         <p class="text-gray-400 max-w-xl mx-auto text-lg">
-          MCLC packs powerful tools into a beautiful, lightweight interface that stays out of your way.
+          Lux Client packs powerful tools into a beautiful, lightweight interface that stays out of your way.
         </p>
       </div>
 
@@ -329,8 +329,8 @@
       <div class="flex flex-col md:flex-row justify-between items-start gap-12 mb-16">
         <div>
           <div class="flex items-center gap-3 mb-6">
-            <img src="/resources/icon.png" alt="MCLC Logo" class="w-8 h-8 object-contain" />
-            <span class="text-xl font-black text-white">MCLC</span>
+            <img src="/resources/icon.png" alt="Lux Client Logo" class="w-8 h-8 object-contain" />
+            <span class="text-xl font-black text-white">Lux Client</span>
           </div>
           <p class="text-gray-500 text-sm max-w-xs leading-relaxed">
             Designed for the community. Windows and Linux versions available. Not an official Minecraft product.
@@ -344,7 +344,7 @@
           <a href="https://github.com/Fernsehheft/MCLC-Client" class="hover:text-primary transition-colors">GitHub</a>
         </div>
         <div class="text-gray-600 text-sm text-center md:text-right font-medium">
-          © 2026 MCLC-Client. Built by <br />
+          © 2026 Lux-Client. Built by <br />
           <span class="text-gray-400">Fernsehheft, Mobilestars</span>
         </div>
       </div>

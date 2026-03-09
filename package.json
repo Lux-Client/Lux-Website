@@ -1,7 +1,7 @@
 {
     "name": "mclc-news-admin",
     "version": "1.0.0",
-    "description": "Simple News Admin Panel for MCLC",
+    "description": "Simple News Admin Panel for Lux Client",
     "main": "server.js",
     "scripts": {
         "start": "node server.js"

@@ -1,5 +1,5 @@
 /**
- * MCLC Web Modpack Editor
+ * Lux Client Web Modpack Editor
  * Logic for Modrinth Integration, State Management, and Export/Import.
  */
 
@@ -626,7 +626,7 @@ function nextPage() {
 
 
 function loadDrafts() {
-    const drafts = JSON.parse(localStorage.getItem('mclc_modpack_drafts') || '[]');
+    const drafts = JSON.parse(localStorage.getItem('lux-client_modpack_drafts') || '[]');
 
     if (!elDraftsContent) return;
     elDraftsContent.innerHTML = '';
@@ -639,8 +639,8 @@ function loadDrafts() {
                 </div>
                 <h4 class="text-xl font-bold text-white mb-2">Login Required</h4>
                 <p class="text-gray-400 mb-6">To see your recent modpacks and sync them across devices, please sign in.</p>
-                <a href="/auth/google?returnTo=/modpack.html&v=3" class="inline-flex items-center gap-2 bg-primary text-black px-8 py-3 rounded-xl font-bold hover:shadow-[0_0_20px_rgba(27,217,106,0.3)] transition-all">
-                    Sign In to MCLC [v3]
+                <a href="/auth/google?returnTo=/modpack.html&v=3" class="inline-flex items-center gap-2 bg-primary text-black px-8 py-3 rounded-xl font-bold hover:shadow-[0_0_20px_rgba(226, 118, 2,0.3)] transition-all">
+                    Sign In to Lux Client [v3]
                 </a>
             </div>
         `;
@@ -971,7 +971,7 @@ async function deleteCode(code) {
 function saveDraft() {
     if (!currentUser) return; // Only for logged-in users
 
-    const drafts = JSON.parse(localStorage.getItem('mclc_modpack_drafts') || '[]');
+    const drafts = JSON.parse(localStorage.getItem('lux-client_modpack_drafts') || '[]');
 
     // Create new draft object
     const currentDraft = {
@@ -996,14 +996,14 @@ function saveDraft() {
     // Keep only last 5
     if (drafts.length > 5) drafts.pop();
 
-    localStorage.setItem('mclc_modpack_drafts', JSON.stringify(drafts));
+    localStorage.setItem('lux-client_modpack_drafts', JSON.stringify(drafts));
     loadDrafts();
 }
 
 
 
 function restoreDraft(index) {
-    const drafts = JSON.parse(localStorage.getItem('mclc_modpack_drafts') || '[]');
+    const drafts = JSON.parse(localStorage.getItem('lux-client_modpack_drafts') || '[]');
     const draft = drafts[index];
     if (!draft) return;
 

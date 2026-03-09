@@ -69,7 +69,7 @@ passport.use(new GoogleStrategy({
                     username: username,
                     email: profile.emails && profile.emails.length > 0 ? profile.emails[0].value : null,
                     avatar: profile.photos && profile.photos.length > 0 ? profile.photos[0].value : null,
-                    bio: 'Project MCLC Member',
+                    bio: 'Project Lux Client Member',
                     role: 'user',
                     last_login: now,
                     ip_address: ip

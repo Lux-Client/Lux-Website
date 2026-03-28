@@ -373,8 +373,20 @@
                 document.getElementById('update-date').textContent = new Date(ext.updated_at || ext.created_at).toLocaleDateString('de-DE');
                 const fixPath = (p) => p ? (p.startsWith('http') ? p : `/uploads/${p.replace(/^\/?uploads\//, '')}`) : '/resources/lux_icon.png?v=3';
 
-                document.getElementById('dev-name').textContent = ext.developer || 'Anonym';
-                document.getElementById('dev-link').href = `/user.html?u=${ext.developer}`;
+                const developerName = typeof ext.developer === 'string' ? ext.developer.trim() : '';
+                const devNameEl = document.getElementById('dev-name');
+                const devLinkEl = document.getElementById('dev-link');
+                devNameEl.textContent = developerName || 'Anonym';
+
+                if (developerName) {
+                    devLinkEl.href = `/html/public/user.html?u=${encodeURIComponent(developerName)}`;
+                    devLinkEl.classList.remove('pointer-events-none', 'opacity-60');
+                    devLinkEl.removeAttribute('title');
+                } else {
+                    devLinkEl.removeAttribute('href');
+                    devLinkEl.classList.add('pointer-events-none', 'opacity-60');
+                    devLinkEl.title = 'No public developer profile available';
+                }
                 document.getElementById('ext-identifier').textContent = ext.identifier;
 
                 if (ext.developer_avatar) {

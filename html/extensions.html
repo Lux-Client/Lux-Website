@@ -352,6 +352,10 @@
                     const bannerUrl = fixPath(ext.banner_path);
                     const typeLabel = ext.type === 'theme' ? 'Theme' : 'Extension';
                     const devInitial = ext.developer ? ext.developer.charAt(0).toUpperCase() : '?';
+                    const developerNameRaw = typeof ext.developer === 'string' ? ext.developer.trim() : '';
+                    const developerMarkup = developerNameRaw
+                        ? `<a href="/html/public/user.html?u=${encodeURIComponent(developerNameRaw)}" class="text-xs text-gray-400 font-semibold hover:text-white transition-colors">${developerNameRaw}</a>`
+                        : '<span class="text-xs text-gray-500 font-semibold">Unknown</span>';
 
                     card.innerHTML = `
 
@@ -370,7 +374,7 @@
                                     <div class="w-8 h-8 rounded-full bg-gradient-to-br from-primary/30 to-transparent flex items-center justify-center border border-primary/20">
                                         <span class="text-xs font-bold text-primary">${devInitial}</span>
                                     </div>
-                                    <span class="text-xs text-gray-400 font-semibold group-hover:text-white transition-colors">${ext.developer || 'Unknown'}</span>
+                                    ${developerMarkup}
                                 </div>
                                 <div class="flex items-center gap-1.5 text-gray-500 text-[10px] font-bold uppercase tracking-widest">
                                     <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>

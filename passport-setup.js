@@ -13,7 +13,7 @@ passport.deserializeUser(async (id, done) => {
         if (rows.length > 0) {
             done(null, rows[0]);
         } else {
-            done(new Error('User not found'), null);
+            done(null, false);
         }
     } catch (err) {
         done(err, null);

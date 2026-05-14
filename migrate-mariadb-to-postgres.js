@@ -289,6 +289,20 @@ async function resetSequences(pg) {
     console.log('[Migrator] Sequences reset.');
 }
 
+async function clearTargetTables(pg) {
+    await pg.query(`
+        TRUNCATE TABLE
+            notifications,
+            extension_metadata_drafts,
+            extension_versions,
+            modpack_codes,
+            extensions,
+            users
+        RESTART IDENTITY CASCADE
+    `);
+    console.log('[Migrator] Cleared target PostgreSQL tables before import.');
+}
+
 async function main() {
     if (process.env.MARIADB_URL) {
         const sourceFromUrl = new URL(cleanEnv(process.env.MARIADB_URL));
@@ -321,6 +335,8 @@ async function main() {
 
         console.log('[Migrator] Starting migration transaction...');
         await pgClient.query('BEGIN');
+
+        await clearTargetTables(pgClient);
 
         await migrateUsers(maria, pgClient);
         await migrateExtensions(maria, pgClient);

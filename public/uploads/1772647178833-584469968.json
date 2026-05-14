@@ -1,0 +1,12 @@
+{
+    "handle": "black_theme",
+    "name": "Black Theme",
+    "primary": "#ffffff",
+    "bg": "#000000",
+    "surface": "#000000",
+    "sidebarGlow": 0,
+    "globalGlow": 0,
+    "panelOpacity": 0.85,
+    "bgOverlay": 0.4,
+    "fontFamily": "PT Sans"
+}

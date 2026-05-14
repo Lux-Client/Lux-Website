@@ -1228,6 +1228,7 @@ const cssPath = path.resolve(__dirname, 'css');
 const jsPath = path.resolve(__dirname, 'js');
 
 const uploadPath = UPLOAD_DIR;
+const legacyUploadPath = path.resolve(__dirname, 'public/uploads');
 
 console.log(`[Static] Serving website from: ${path.resolve(websitePath)}`);
 console.log(`[Static] Serving admin from: ${path.resolve(adminPublicPath)}`);
@@ -1235,6 +1236,9 @@ console.log(`[Static] Serving html from: ${htmlPath}`);
 console.log(`[Static] Serving css from: ${cssPath}`);
 console.log(`[Static] Serving js from: ${jsPath}`);
 console.log(`[Static] Serving uploads from: ${uploadPath}`);
+if (legacyUploadPath !== uploadPath) {
+    console.log(`[Static] Legacy uploads fallback from: ${legacyUploadPath}`);
+}
 
 const staticOptions = {
     setHeaders: (res, filePath) => {
@@ -1258,6 +1262,19 @@ app.use('/uploads', express.static(uploadPath, {
         }
     }
 }));
+
+if (legacyUploadPath !== uploadPath) {
+    app.use('/uploads', express.static(legacyUploadPath, {
+        maxAge: '1d',
+        ...staticOptions,
+        setHeaders: (res, filePath) => {
+            staticOptions.setHeaders(res, filePath);
+            if (filePath.endsWith('.png') || filePath.endsWith('.jpg') || filePath.endsWith('.jpeg')) {
+                res.setHeader('Cache-Control', 'public, max-age=86400');
+            }
+        }
+    }));
+}
 
 app.use('/html', express.static(htmlPath, staticOptions));
 app.use('/css', express.static(cssPath, staticOptions));

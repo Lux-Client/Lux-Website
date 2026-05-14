@@ -1,0 +1,15 @@
+{
+    "handle": "minimalistic_snow",
+    "name": "Minimalistic Snow",
+    "primary": "#d5deeb",
+    "bg": "#000000",
+    "surface": "#000000",
+    "textOnBackground": "#d5deeb",
+    "textOnSurface": "#d5deeb",
+    "textOnPrimary": "#081a38",
+    "sidebarGlow": 0,
+    "globalGlow": 0,
+    "panelOpacity": 0.85,
+    "bgOverlay": 0.4,
+    "fontFamily": "Poppins"
+}

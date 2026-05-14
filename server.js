@@ -121,23 +121,26 @@ let isMaintenanceMode = false;
 
 // --- MAINTENANCE MIDDLEWARE ---
 app.use((req, res, next) => {
-    const isMaintenancePath = req.path === '/html/public/maintenance.html'
-        || req.path === '/maintenance.html'
+    const isMaintenancePath = req.path === '/maintenance'
         || req.path === '/api/admin/maintenance/auth'
         || req.path === '/api/admin/maintenance/toggle'
         || req.path === '/api/admin/maintenance/status';
-    const isAdminPagePath = req.path === '/html/public/admin.html' || req.path === '/html/public/index.html';
-    const isAdminApiPath = req.path.startsWith('/api/admin/');
+    const isAdminPagePath = req.path === '/admin';
+    const isAdminApiPath = req.path.startsWith('/api/admin/') || req.path === '/api/user';
     const isAdminBypassRoute = (isAdminPagePath || isAdminApiPath) && !!req.session?.adminBypass;
-    const isResource = req.path.startsWith('/resources/') || req.path.startsWith('/css/') || req.path.startsWith('/js/') || req.path.startsWith('/uploads/');
+    const isResource = req.path.startsWith('/resources/')
+        || req.path.startsWith('/uploads/')
+        || req.path.startsWith('/assets/')
+        || req.path === '/install.sh'
+        || req.path === '/install.ps1';
     const isLocalExempt = req.path.startsWith('/socket.io');
 
     if (isMaintenanceMode && !isAdminBypassRoute && !isMaintenancePath && !isResource && !isLocalExempt) {
         if (req.path.startsWith('/api/')) return res.status(503).json({ error: 'System under maintenance' });
-        return res.redirect('/html/public/maintenance.html');
+        return res.redirect('/maintenance');
     }
 
-    if (!isMaintenanceMode && (req.path === '/maintenance.html' || req.path === '/html/public/maintenance.html')) {
+    if (!isMaintenanceMode && req.path === '/maintenance') {
         return res.redirect('/');
     }
     next();
@@ -1223,18 +1226,12 @@ const websitePath = fs.existsSync(path.join(__dirname, 'website'))
 const adminPublicPath = fs.existsSync(path.join(__dirname, 'public'))
     ? path.join(__dirname, 'public')
     : path.join(__dirname, 'news-admin/public');
-const htmlPath = path.resolve(__dirname, 'html');
-const cssPath = path.resolve(__dirname, 'css');
-const jsPath = path.resolve(__dirname, 'js');
 
 const uploadPath = UPLOAD_DIR;
 const legacyUploadPath = path.resolve(__dirname, 'public/uploads');
 
 console.log(`[Static] Serving website from: ${path.resolve(websitePath)}`);
 console.log(`[Static] Serving admin from: ${path.resolve(adminPublicPath)}`);
-console.log(`[Static] Serving html from: ${htmlPath}`);
-console.log(`[Static] Serving css from: ${cssPath}`);
-console.log(`[Static] Serving js from: ${jsPath}`);
 console.log(`[Static] Serving uploads from: ${uploadPath}`);
 if (legacyUploadPath !== uploadPath) {
     console.log(`[Static] Legacy uploads fallback from: ${legacyUploadPath}`);
@@ -1251,7 +1248,6 @@ const staticOptions = {
     }
 };
 
-// Order matters: more specific first if there are overlaps, but here they seem distinct enough
 app.use('/uploads', express.static(uploadPath, {
     maxAge: '1d',
     ...staticOptions,
@@ -1276,54 +1272,16 @@ if (legacyUploadPath !== uploadPath) {
     }));
 }
 
-app.use('/html', express.static(htmlPath, staticOptions));
-app.use('/css', express.static(cssPath, staticOptions));
-app.use('/js', express.static(jsPath, staticOptions));
-
-// React app – register FIRST so it takes priority over all other static dirs
 const clientDistPath = path.resolve(__dirname, 'client', 'dist');
 app.use(express.static(clientDistPath, staticOptions));
 console.log(`[Static] Serving React app from: ${clientDistPath}`);
 
-// Root always serves the React app (built into client/dist at image build time)
 app.get('/', (req, res) => {
     res.sendFile(path.join(clientDistPath, 'index.html'));
 });
 
 app.use(express.static(websitePath, staticOptions));
 app.use(express.static(adminPublicPath, staticOptions));
-
-app.get('/html', (req, res) => {
-    res.redirect('/html/index.html');
-});
-
-const legacyHtmlRedirects = {
-    '/admin.html': '/html/public/admin.html',
-    '/index.html': '/html/index.html',
-    '/extensions.html': '/html/extensions.html',
-    '/modpack.html': '/html/modpack.html',
-    '/dashboard.html': '/html/dashboard.html',
-    '/profile.html': '/html/profile.html',
-    '/admin_extensions.html': '/html/admin_extensions.html',
-    '/privacy-policy.html': '/html/privacy-policy.html',
-    '/privacy.html': '/html/privacy.html',
-    '/imprint.html': '/html/imprint.html',
-    '/analytics-opt-out.html': '/html/analytics-opt-out.html',
-    '/colors.html': '/html/colors.html',
-    '/docs/index.html': '/html/docs/index.html',
-    '/docs/extension/index.html': '/html/docs/extension/index.html',
-    '/docs/launcher/index.html': '/html/docs/launcher/index.html',
-    '/user.html': '/html/public/user.html',
-    '/maintenance.html': '/html/public/maintenance.html'
-};
-
-Object.entries(legacyHtmlRedirects).forEach(([from, to]) => {
-    app.get(from, (req, res) => res.redirect(to));
-});
-
-app.get('/extensions/:identifier', (req, res) => {
-    res.sendFile(path.join(__dirname, 'html', 'extension_detail.html'), { headers: { 'Cache-Control': 'no-cache, must-revalidate' } });
-});
 
 codesSystem(app, ADMIN_PASSWORD, pool);
 
@@ -1350,6 +1308,11 @@ pool.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS is_private BOOLEAN DEFAUL
     .catch(err => {
         console.error('[Lux] Database migration failed:', err);
     });
+
+// SPA catch-all: serve React app for all non-API GET routes
+app.get('*', (req, res) => {
+    res.sendFile(path.join(clientDistPath, 'index.html'));
+});
 
 server.listen(PORT, async () => {
     console.log(`News Admin Server (with Socket.IO, Auth, Extensions) running on port ${PORT}`);

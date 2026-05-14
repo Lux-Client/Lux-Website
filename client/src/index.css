@@ -6,14 +6,99 @@
   html {
     scroll-behavior: smooth;
   }
+
   body {
     background-color: #080808;
     color: #e5e7eb;
     font-family: 'Outfit', 'Poppins', sans-serif;
     overflow-x: hidden;
   }
+
   ::selection {
     background-color: rgba(226, 118, 2, 0.3);
+  }
+}
+
+@layer components {
+  .input {
+    @apply w-full rounded-2xl border border-white/10 bg-background px-5 py-4 text-white outline-none transition focus:border-primary;
+  }
+
+  .markdown-content {
+    @apply text-base leading-8 text-gray-300;
+  }
+
+  .markdown-content > * + * {
+    @apply mt-5;
+  }
+
+  .markdown-content h1,
+  .markdown-content h2,
+  .markdown-content h3,
+  .markdown-content h4 {
+    @apply font-black text-white;
+  }
+
+  .markdown-content h1 {
+    @apply text-4xl;
+  }
+
+  .markdown-content h2 {
+    @apply text-2xl;
+  }
+
+  .markdown-content h3 {
+    @apply text-xl;
+  }
+
+  .markdown-content ul,
+  .markdown-content ol {
+    @apply space-y-2 pl-6;
+  }
+
+  .markdown-content ul {
+    @apply list-disc;
+  }
+
+  .markdown-content ol {
+    @apply list-decimal;
+  }
+
+  .markdown-content code {
+    @apply rounded-md bg-white/5 px-1.5 py-0.5 text-sm text-primary;
+  }
+
+  .markdown-content pre {
+    @apply overflow-x-auto rounded-2xl border border-white/5 bg-black/30 p-5;
+  }
+
+  .markdown-content pre code {
+    @apply bg-transparent p-0 text-sm text-primary;
+  }
+
+  .markdown-content blockquote {
+    @apply border-l-4 border-primary/60 bg-primary/5 px-5 py-3 italic text-gray-200;
+  }
+
+  .markdown-content a {
+    @apply font-bold text-primary underline decoration-primary/30 underline-offset-4 transition hover:text-white;
+  }
+
+  .markdown-content hr {
+    @apply border-white/10;
+  }
+
+  .markdown-content table {
+    @apply w-full border-collapse overflow-hidden rounded-2xl;
+  }
+
+  .markdown-content th,
+  .markdown-content td {
+    @apply border border-white/5 px-4 py-3 text-left;
+  }
+
+  .markdown-content img {
+    @apply rounded-2xl border border-white/5;
   }
 }
 
@@ -35,7 +120,19 @@
   }
 }
 
-::-webkit-scrollbar { width: 6px; }
-::-webkit-scrollbar-track { background: #080808; }
-::-webkit-scrollbar-thumb { background: #e27602; border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: #ff9500; }
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #080808;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #e27602;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #ff9500;
+}

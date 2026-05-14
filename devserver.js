@@ -239,35 +239,22 @@ if (fs.existsSync(clientDistDir)) {
     app.use(express.static(clientDistDir));
 }
 
-// Serve legacy html/css/js/resources for other pages
-app.use('/html', express.static(path.join(__dirname, 'html')));
-app.use('/css', express.static(path.join(__dirname, 'css')));
-app.use('/js', express.static(path.join(__dirname, 'js')));
 app.use('/resources', express.static(path.join(__dirname, 'resources')));
 
-// --- Simple HTML routes/legacy redirects for dev ---
 app.get('/', (req, res) => {
     const reactIndex = path.join(__dirname, 'client', 'dist', 'index.html');
     if (fs.existsSync(reactIndex)) {
         return res.sendFile(reactIndex);
     }
-    const htmlPath = path.join(__dirname, 'html', 'index.html');
-    if (fs.existsSync(htmlPath)) {
-        res.sendFile(htmlPath);
-    } else {
-        res.send('<h2>Express dev server</h2>');
-    }
+    res.send('<h2>Express dev server</h2>');
 });
-// basic legacy redirect example
-app.get('/index.html', (req, res) => res.redirect('/'));
 
-app.get('/extensions/:identifier', (req, res) => {
-    const detail = path.join(__dirname, 'html', 'extension_detail.html');
-    if (fs.existsSync(detail)) {
-        res.sendFile(detail);
-    } else {
-        res.send('<h3>Extension detail (dev)</h3>');
+app.get('*', (req, res, next) => {
+    const reactIndex = path.join(__dirname, 'client', 'dist', 'index.html');
+    if (req.path.startsWith('/api/') || !fs.existsSync(reactIndex)) {
+        return next();
     }
+    return res.sendFile(reactIndex);
 });
 
 // --- Start server ---

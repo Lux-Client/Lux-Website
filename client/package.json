@@ -11,10 +11,16 @@
   "dependencies": {
     "@react-three/drei": "^9.115.0",
     "@react-three/fiber": "^8.17.0",
+    "chart.js": "^4.5.1",
     "clsx": "^2.1.1",
+    "dompurify": "^3.4.3",
     "gsap": "^3.12.5",
+    "marked": "^18.0.3",
     "react": "^18.3.1",
+    "react-chartjs-2": "^5.3.1",
     "react-dom": "^18.3.1",
+    "react-router-dom": "^7.15.1",
+    "socket.io-client": "^4.8.3",
     "tailwind-merge": "^2.5.2",
     "three": "^0.168.0"
   },

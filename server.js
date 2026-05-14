@@ -99,7 +99,7 @@ const sessionStore = new PgSession({
     createTableIfMissing: true
 });
 
-app.use(session({
+const sessionMiddleware = session({
     secret: SESSION_SECRET || 'mclc-super-secret-session-key-2026',
     store: sessionStore,
     resave: false,
@@ -110,10 +110,16 @@ app.use(session({
         sameSite: 'lax',
         maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
     }
-}));
+});
 
+app.use(sessionMiddleware);
 app.use(passport.initialize());
 app.use(passport.session());
+
+// Share Express session with Socket.IO so socket.request.user is populated
+io.engine.use(sessionMiddleware);
+io.engine.use(passport.initialize());
+io.engine.use(passport.session());
 
 const activeSessions = new Map();
 
@@ -342,7 +348,9 @@ io.on('connection', (socket) => {
     });
 
     socket.on('admin-subscribe', (password) => {
-        if (password === ADMIN_PASSWORD) {
+        const socketUser = socket.request.user;
+        const isSocketAdmin = socketUser && socketUser.role === 'admin';
+        if (password === ADMIN_PASSWORD || isSocketAdmin) {
             socket.join('admin');
             socket.emit('init-stats', {
                 live: getLiveStats(),
@@ -1156,10 +1164,11 @@ app.get('/api/news', (req, res) => {
 
 app.post('/api/news', (req, res) => {
     const { news, password } = req.body;
-    console.log(`[News] POST /api/news received. Items: ${news ? news.length : 'null'}, Password provided: ${!!password}`);
+    const isSessionAdmin = req.isAuthenticated() && req.user?.role === 'admin';
+    console.log(`[News] POST /api/news received. Items: ${news ? news.length : 'null'}, Password provided: ${!!password}, SessionAdmin: ${isSessionAdmin}`);
 
-    if (password !== ADMIN_PASSWORD) {
-        console.warn(`[News] Unauthorized! Password mismatch.`);
+    if (password !== ADMIN_PASSWORD && !isSessionAdmin) {
+        console.warn(`[News] Unauthorized! Password mismatch and no session admin.`);
         return res.status(401).json({ success: false, error: 'Unauthorized' });
     }
 

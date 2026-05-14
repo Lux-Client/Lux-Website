@@ -221,7 +221,8 @@ module.exports = function (app, ADMIN_PASSWORD, pool) {
     app.get('/api/codes/list', (req, res) => {
         try {
             const clientPass = req.query.password;
-            if (clientPass !== ADMIN_PASSWORD) {
+            const isSessionAdmin = req.isAuthenticated && req.isAuthenticated() && req.user?.role === 'admin';
+            if (clientPass !== ADMIN_PASSWORD && !isSessionAdmin) {
                 return res.status(401).json({ success: false, error: 'Unauthorized' });
             }
             if (!fs.existsSync(CODES_DIR)) {
@@ -278,7 +279,8 @@ module.exports = function (app, ADMIN_PASSWORD, pool) {
     app.delete('/api/codes/:code', (req, res) => {
         try {
             const clientPass = req.query.password;
-            if (clientPass !== ADMIN_PASSWORD) {
+            const isSessionAdmin = req.isAuthenticated && req.isAuthenticated() && req.user?.role === 'admin';
+            if (clientPass !== ADMIN_PASSWORD && !isSessionAdmin) {
                 return res.status(401).json({ success: false, error: 'Unauthorized' });
             }
             const { code } = req.params;

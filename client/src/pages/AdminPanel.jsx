@@ -74,7 +74,7 @@ export default function AdminPanel() {
 
     socket.on('connect', () => {
       setSocketStatus('connected')
-      socket.emit('admin-subscribe', window.localStorage.getItem('admin_password') || '')
+      socket.emit('admin-subscribe', passwordVerified ? (window.localStorage.getItem('admin_password') || '') : '')
     })
     socket.on('disconnect', () => setSocketStatus('offline'))
     socket.on('connect_error', () => setSocketStatus('error'))
@@ -166,13 +166,13 @@ export default function AdminPanel() {
   }
 
   const loadNews = async () => {
-    const response = await fetch('/news.json')
+    const response = await fetch('/api/news')
     const data = response.ok ? await response.json() : []
     setNews(Array.isArray(data) ? data : [])
   }
 
   const saveNews = async (nextNews) => {
-    const adminPassword = window.localStorage.getItem('admin_password')
+    const adminPassword = passwordVerified ? window.localStorage.getItem('admin_password') : undefined
     const response = await fetch('/api/news', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -186,8 +186,9 @@ export default function AdminPanel() {
   }
 
   const loadCodes = async () => {
-    const adminPassword = window.localStorage.getItem('admin_password')
-    const response = await fetch(`/api/codes/list?password=${encodeURIComponent(adminPassword)}`)
+    const adminPassword = passwordVerified ? window.localStorage.getItem('admin_password') : undefined
+    const url = adminPassword ? `/api/codes/list?password=${encodeURIComponent(adminPassword)}` : '/api/codes/list'
+    const response = await fetch(url)
     const data = response.ok ? await response.json() : { success: false, codes: [] }
     setCodes(Array.isArray(data.codes) ? data.codes : [])
   }
@@ -275,8 +276,9 @@ export default function AdminPanel() {
 
   const deleteCode = async (code) => {
     if (!window.confirm(`Delete code ${code}?`)) return
-    const adminPassword = window.localStorage.getItem('admin_password')
-    await fetch(`/api/codes/${code}?password=${encodeURIComponent(adminPassword)}`, { method: 'DELETE' })
+    const adminPassword = passwordVerified ? window.localStorage.getItem('admin_password') : undefined
+    const url = adminPassword ? `/api/codes/${code}?password=${encodeURIComponent(adminPassword)}` : `/api/codes/${code}`
+    await fetch(url, { method: 'DELETE' })
     loadCodes()
   }
 

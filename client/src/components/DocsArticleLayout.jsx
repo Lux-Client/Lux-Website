@@ -7,11 +7,13 @@ export default function DocsArticleLayout({ title, description, sections, sideba
   const [activeSection, setActiveSection] = useState(sections[0]?.id)
 
   useEffect(() => {
+    const getDocumentTop = (el) => el.getBoundingClientRect().top + window.scrollY
+
     const onScroll = () => {
       let current = sections[0]?.id
       sections.forEach((section) => {
         const element = document.getElementById(section.id)
-        if (element && window.scrollY >= element.offsetTop - 140) {
+        if (element && window.scrollY >= getDocumentTop(element) - 150) {
           current = section.id
         }
       })
@@ -19,7 +21,7 @@ export default function DocsArticleLayout({ title, description, sections, sideba
     }
 
     onScroll()
-    window.addEventListener('scroll', onScroll)
+    window.addEventListener('scroll', onScroll, { passive: true })
     return () => window.removeEventListener('scroll', onScroll)
   }, [sections])
 

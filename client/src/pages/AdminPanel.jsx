@@ -12,7 +12,6 @@ import {
   Tooltip,
 } from 'chart.js'
 import { io } from 'socket.io-client'
-import PageShell from '../components/PageShell'
 import useAuth, { fixPath } from '../hooks/useAuth'
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, ArcElement, PointElement, LineElement, Tooltip, Legend)
@@ -329,13 +328,13 @@ export default function AdminPanel() {
   }
 
   if (auth.loading) {
-    return <PageShell><div className="mx-auto max-w-7xl px-6 pb-24 pt-32"><div className="h-[30rem] animate-pulse rounded-[2rem] border border-white/5 bg-surface/50" /></div></PageShell>
+    return <div className="min-h-screen bg-background text-gray-200"><div className="mx-auto max-w-7xl px-6 pb-24 pt-16"><div className="h-[30rem] animate-pulse rounded-[2rem] border border-white/5 bg-surface/50" /></div></div>
   }
 
   if (!canView) {
     return (
-      <PageShell>
-        <main className="mx-auto flex min-h-[70vh] max-w-3xl flex-col items-center justify-center px-6 text-center">
+      <div className="min-h-screen bg-background text-gray-200">
+        <main className="mx-auto flex min-h-screen max-w-3xl flex-col items-center justify-center px-6 text-center">
           <p className="text-sm font-black uppercase tracking-[0.3em] text-primary">Admin</p>
           <h1 className="mt-4 text-5xl font-black text-white">Unlock the admin panel</h1>
           <p className="mt-4 text-lg text-gray-400">Use the ADMIN_PASSWORD or sign in with an administrator account to access protected tools.</p>
@@ -349,13 +348,13 @@ export default function AdminPanel() {
             </div>
           </form>
         </main>
-      </PageShell>
+      </div>
     )
   }
 
   return (
-    <PageShell>
-      <main className="mx-auto max-w-7xl px-6 pb-24 pt-32 lg:px-12">
+    <div className="min-h-screen bg-background text-gray-200">
+      <main className="mx-auto max-w-7xl px-6 pb-24 pt-10 lg:px-12">
         <section className="rounded-[2.5rem] border border-white/5 bg-surface/50 p-8 md:p-10">
           <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
             <div>
@@ -551,7 +550,7 @@ export default function AdminPanel() {
           </section>
         )}
       </main>
-    </PageShell>
+    </div>
   )
 }
 

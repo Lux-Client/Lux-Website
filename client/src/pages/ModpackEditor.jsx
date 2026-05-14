@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
 import PageShell from '../components/PageShell'
-import { fixPath } from '../hooks/useAuth'
 
 const STORAGE_KEY = 'lux-modpack-draft'
 const RECENT_DRAFTS_KEY = 'lux-modpack-recent-drafts'
@@ -259,9 +258,17 @@ export default function ModpackEditor() {
                 ) : results.length === 0 ? (
                   <div className="rounded-[1.5rem] border border-dashed border-white/10 bg-black/20 p-8 text-center text-gray-500 md:col-span-2">No results for this query.</div>
                 ) : results.map((result) => (
-                  <div key={result.project_id} className="rounded-[1.5rem] border border-white/5 bg-black/20 p-5">
+                  <div key={result.project_id} className="group rounded-[1.5rem] border border-white/5 bg-black/20 p-5 transition hover:border-primary/20">
                     <div className="flex gap-4">
-                      <img src={fixPath(result.icon_url)} alt={result.title} className="h-16 w-16 rounded-2xl object-cover" />
+                      <div className="h-16 w-16 shrink-0 overflow-hidden rounded-2xl bg-white/5">
+                        {result.icon_url ? (
+                          <img src={result.icon_url} alt={result.title} className="h-full w-full object-cover" onError={(e) => { e.currentTarget.style.display = 'none' }} />
+                        ) : (
+                          <div className="flex h-full items-center justify-center text-gray-600">
+                            <svg className="h-7 w-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10" /></svg>
+                          </div>
+                        )}
+                      </div>
                       <div className="min-w-0 flex-1">
                         <h3 className="truncate text-xl font-black text-white">{result.title}</h3>
                         <p className="mt-2 text-sm leading-7 text-gray-400">{result.description}</p>

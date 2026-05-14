@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import PageShell from '../components/PageShell'
-import BackgroundGradient from '../components/ui/BackgroundGradient'
 import { fixPath } from '../hooks/useAuth'
 
 const tabs = [
@@ -98,41 +97,50 @@ export default function Extensions() {
         ) : (
           <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
             {filteredItems.map((item, index) => (
-              <BackgroundGradient key={item.id || item.identifier || index} accent={tab === 'theme' ? '#7c3aed' : '#e27602'} className="h-full">
-                <div className="flex h-full flex-col overflow-hidden rounded-[calc(1.5rem-1px)]">
-                  <div className="relative aspect-[16/9] overflow-hidden bg-black/30">
-                    <img src={fixPath(item.banner_path)} alt={item.name} className="h-full w-full object-cover opacity-90 transition duration-700 hover:scale-105" />
-                    <div className="absolute inset-0 bg-gradient-to-t from-[#0d0d0e] via-transparent to-transparent" />
-                    <span className="absolute left-4 top-4 rounded-full border border-primary/20 bg-primary/15 px-3 py-1 text-[10px] font-black uppercase tracking-[0.2em] text-primary">
-                      {item.type || 'extension'}
-                    </span>
+              <div key={item.id || item.identifier || index} className="group flex flex-col overflow-hidden rounded-[2rem] border border-white/8 bg-surface/50 transition-all duration-300 hover:-translate-y-1 hover:border-primary/30 hover:shadow-primary-glow">
+                <div className="relative aspect-[16/9] overflow-hidden bg-gradient-to-br from-primary/10 via-surface to-surface">
+                  {item.banner_path ? (
+                    <img
+                      src={fixPath(item.banner_path)}
+                      alt={item.name}
+                      className="h-full w-full object-cover opacity-90 transition duration-700 group-hover:scale-105"
+                      onError={(e) => { e.currentTarget.style.display = 'none' }}
+                    />
+                  ) : (
+                    <div className="flex h-full items-center justify-center">
+                      <img src="/resources/lux_icon.png?v=3" alt="" className="h-16 w-16 opacity-20" />
+                    </div>
+                  )}
+                  <div className="absolute inset-0 bg-gradient-to-t from-surface/90 via-transparent to-transparent" />
+                  <span className="absolute left-4 top-4 rounded-full border border-primary/20 bg-black/60 px-3 py-1 text-[10px] font-black uppercase tracking-[0.2em] text-primary backdrop-blur-sm">
+                    {item.type || 'extension'}
+                  </span>
+                </div>
+
+                <div className="flex flex-1 flex-col p-6">
+                  <div className="mb-4 flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-xs font-bold uppercase tracking-[0.2em] text-gray-500">By {item.developer || 'Unknown'}</p>
+                      <h2 className="mt-1 text-xl font-black text-white">{item.name}</h2>
+                    </div>
+                    <div className="shrink-0 rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-center">
+                      <div className="text-[9px] font-black uppercase tracking-[0.2em] text-gray-500">DL</div>
+                      <div className="mt-0.5 text-base font-black text-primary">{Number(item.downloads || 0).toLocaleString()}</div>
+                    </div>
                   </div>
 
-                  <div className="flex flex-1 flex-col p-6">
-                    <div className="mb-4 flex items-center justify-between gap-3">
-                      <div>
-                        <p className="text-xs font-bold uppercase tracking-[0.2em] text-gray-500">By {item.developer || 'Unknown'}</p>
-                        <h2 className="mt-2 text-2xl font-black text-white">{item.name}</h2>
-                      </div>
-                      <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-center">
-                        <div className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-500">Downloads</div>
-                        <div className="mt-1 text-lg font-black text-primary">{Number(item.downloads || 0).toLocaleString()}</div>
-                      </div>
-                    </div>
+                  <p className="flex-1 text-sm leading-7 text-gray-400">{item.summary || item.description || 'No description available.'}</p>
 
-                    <p className="flex-1 text-sm leading-7 text-gray-400">{item.summary || item.description || 'No description available.'}</p>
-
-                    <div className="mt-6 flex items-center justify-between border-t border-white/5 pt-5">
-                      <span className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-[10px] font-black uppercase tracking-[0.2em] text-gray-400">
-                        {item.identifier}
-                      </span>
-                      <Link to={`/extensions/${item.identifier || item.id}`} className="rounded-xl bg-primary px-5 py-3 text-sm font-black text-black transition hover:bg-primary-dark">
-                        View Details
-                      </Link>
-                    </div>
+                  <div className="mt-5 flex items-center justify-between border-t border-white/5 pt-4">
+                    <span className="rounded-xl border border-white/10 bg-white/5 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.2em] text-gray-500">
+                      {item.identifier}
+                    </span>
+                    <Link to={`/extensions/${item.identifier || item.id}`} className="rounded-xl bg-primary px-5 py-2.5 text-sm font-black text-black transition hover:bg-primary-dark">
+                      View Details
+                    </Link>
                   </div>
                 </div>
-              </BackgroundGradient>
+              </div>
             ))}
           </div>
         )}

@@ -1,6 +1,12 @@
 ﻿const { Pool } = require('pg');
 require('dotenv').config();
 
+function cleanEnv(value) {
+    if (value === undefined || value === null) return value;
+    const trimmed = String(value).trim();
+    return trimmed.replace(/^['\"](.*)['\"]$/, '$1');
+}
+
 function resolveSsl() {
     const fromDbSsl = process.env.DB_SSL;
     if (typeof fromDbSsl !== 'undefined') {
@@ -11,7 +17,7 @@ function resolveSsl() {
 
     if (process.env.DATABASE_URL) {
         try {
-            const sslMode = new URL(process.env.DATABASE_URL).searchParams.get('sslmode');
+            const sslMode = new URL(cleanEnv(process.env.DATABASE_URL)).searchParams.get('sslmode');
             if (sslMode && ['require', 'verify-ca', 'verify-full'].includes(String(sslMode).toLowerCase())) {
                 return { rejectUnauthorized: false };
             }
@@ -25,16 +31,16 @@ function resolveSsl() {
 
 const rawPool = new Pool(process.env.DATABASE_URL
     ? {
-        connectionString: process.env.DATABASE_URL,
+        connectionString: cleanEnv(process.env.DATABASE_URL),
         max: Number(process.env.DB_POOL_MAX || 10),
         ssl: resolveSsl()
     }
     : {
-        host: process.env.DB_HOST || '127.0.0.1',
+        host: cleanEnv(process.env.DB_HOST) || '127.0.0.1',
         port: Number(process.env.DB_PORT || 5432),
-        user: process.env.DB_USER || 'postgres',
-        password: process.env.DB_PASSWORD || '',
-        database: process.env.DB_NAME || 'lux',
+        user: cleanEnv(process.env.DB_USER) || 'postgres',
+        password: cleanEnv(process.env.DB_PASSWORD) || '',
+        database: cleanEnv(process.env.DB_NAME) || 'lux',
         max: Number(process.env.DB_POOL_MAX || 10),
         ssl: resolveSsl()
     });

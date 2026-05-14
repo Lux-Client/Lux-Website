@@ -4,12 +4,18 @@ const mysql = require('mysql2/promise');
 const { Pool } = require('pg');
 const { createTables } = require('./db_init');
 
+function cleanEnv(value) {
+    if (value === undefined || value === null) return value;
+    const trimmed = String(value).trim();
+    return trimmed.replace(/^['\"](.*)['\"]$/, '$1');
+}
+
 const sourceConfig = {
-    host: process.env.MARIADB_HOST,
+    host: cleanEnv(process.env.MARIADB_HOST),
     port: Number(process.env.MARIADB_PORT || 3306),
-    user: process.env.MARIADB_USER,
-    password: process.env.MARIADB_PASSWORD,
-    database: process.env.MARIADB_NAME
+    user: cleanEnv(process.env.MARIADB_USER),
+    password: cleanEnv(process.env.MARIADB_PASSWORD),
+    database: cleanEnv(process.env.MARIADB_NAME)
 };
 
 function resolvePgSsl() {
@@ -36,15 +42,15 @@ function resolvePgSsl() {
 
 const targetConfig = process.env.DATABASE_URL
     ? {
-        connectionString: process.env.DATABASE_URL,
+        connectionString: cleanEnv(process.env.DATABASE_URL),
         ssl: resolvePgSsl()
     }
     : {
-        host: process.env.DB_HOST || '127.0.0.1',
+        host: cleanEnv(process.env.DB_HOST) || '127.0.0.1',
         port: Number(process.env.DB_PORT || 5432),
-        user: process.env.DB_USER || 'postgres',
-        password: process.env.DB_PASSWORD || '',
-        database: process.env.DB_NAME || 'lux',
+        user: cleanEnv(process.env.DB_USER) || 'postgres',
+        password: cleanEnv(process.env.DB_PASSWORD) || '',
+        database: cleanEnv(process.env.DB_NAME) || 'lux',
         ssl: resolvePgSsl()
     };
 
@@ -285,7 +291,7 @@ async function resetSequences(pg) {
 
 async function main() {
     if (process.env.MARIADB_URL) {
-        const sourceFromUrl = new URL(process.env.MARIADB_URL);
+        const sourceFromUrl = new URL(cleanEnv(process.env.MARIADB_URL));
         sourceConfig.host = sourceFromUrl.hostname;
         sourceConfig.port = Number(sourceFromUrl.port || 3306);
         sourceConfig.user = decodeURIComponent(sourceFromUrl.username || '');

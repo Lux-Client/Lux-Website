@@ -233,8 +233,24 @@ app.use(express.static(staticDir, {
     }
 }));
 
+// Serve React build static assets
+const clientDistDir = path.join(__dirname, 'client', 'dist');
+if (fs.existsSync(clientDistDir)) {
+    app.use(express.static(clientDistDir));
+}
+
+// Serve legacy html/css/js/resources for other pages
+app.use('/html', express.static(path.join(__dirname, 'html')));
+app.use('/css', express.static(path.join(__dirname, 'css')));
+app.use('/js', express.static(path.join(__dirname, 'js')));
+app.use('/resources', express.static(path.join(__dirname, 'resources')));
+
 // --- Simple HTML routes/legacy redirects for dev ---
 app.get('/', (req, res) => {
+    const reactIndex = path.join(__dirname, 'client', 'dist', 'index.html');
+    if (fs.existsSync(reactIndex)) {
+        return res.sendFile(reactIndex);
+    }
     const htmlPath = path.join(__dirname, 'html', 'index.html');
     if (fs.existsSync(htmlPath)) {
         res.sendFile(htmlPath);

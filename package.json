@@ -5,6 +5,9 @@
     "main": "server.js",
     "scripts": {
         "start": "node server.js",
+        "dev": "node devserver.js",
+        "client:dev": "cd client && npm run dev",
+        "client:build": "cd client && npm run build",
         "db:init": "node db_init.js",
         "db:migrate:maria-to-pg": "node migrate-mariadb-to-postgres.js"
     },

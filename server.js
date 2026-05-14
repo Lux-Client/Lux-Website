@@ -1283,7 +1283,17 @@ app.use('/js', express.static(jsPath, staticOptions));
 app.use(express.static(websitePath, staticOptions));
 app.use(express.static(adminPublicPath, staticOptions));
 
+const clientDistPath = path.resolve(__dirname, 'client', 'dist');
+if (fs.existsSync(clientDistPath)) {
+    app.use(express.static(clientDistPath, staticOptions));
+    console.log(`[Static] Serving React app from: ${clientDistPath}`);
+}
+
 app.get('/', (req, res) => {
+    const reactIndex = path.join(clientDistPath, 'index.html');
+    if (fs.existsSync(reactIndex)) {
+        return res.sendFile(reactIndex);
+    }
     res.sendFile(path.join(htmlPath, 'index.html'));
 });
 

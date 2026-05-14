@@ -1,0 +1,41 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+  body {
+    background-color: #080808;
+    color: #e5e7eb;
+    font-family: 'Outfit', 'Poppins', sans-serif;
+    overflow-x: hidden;
+  }
+  ::selection {
+    background-color: rgba(226, 118, 2, 0.3);
+  }
+}
+
+@layer utilities {
+  .text-gradient {
+    background: linear-gradient(135deg, #e27602, #ff9500);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .glow-orange {
+    box-shadow: 0 0 40px rgba(226, 118, 2, 0.4), 0 0 80px rgba(226, 118, 2, 0.1);
+  }
+
+  .border-glow {
+    border: 1px solid rgba(226, 118, 2, 0.3);
+    box-shadow: 0 0 20px rgba(226, 118, 2, 0.1), inset 0 0 20px rgba(226, 118, 2, 0.05);
+  }
+}
+
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: #080808; }
+::-webkit-scrollbar-thumb { background: #e27602; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #ff9500; }

@@ -1,6 +1,9 @@
 ﻿const fs = require('fs');
 const path = require('path');
-const CODES_DIR = path.join(__dirname, 'codes');
+const BASE_DATA_DIR = process.env.DATA_DIR
+    ? path.resolve(process.env.DATA_DIR)
+    : __dirname;
+const CODES_DIR = path.join(BASE_DATA_DIR, 'codes');
 if (!fs.existsSync(CODES_DIR)) {
     console.log(`[CodesSystem] Creating codes directory: ${CODES_DIR}`);
     fs.mkdirSync(CODES_DIR, { recursive: true });

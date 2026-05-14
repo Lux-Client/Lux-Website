@@ -4,19 +4,22 @@
     "description": "Simple News Admin Panel for Lux Client",
     "main": "server.js",
     "scripts": {
-        "start": "node server.js"
+        "start": "node server.js",
+        "db:init": "node db_init.js",
+        "db:migrate:maria-to-pg": "node migrate-mariadb-to-postgres.js"
     },
     "dependencies": {
         "body-parser": "^1.20.2",
+        "connect-pg-simple": "^10.0.0",
         "cors": "^2.8.5",
         "dotenv": "^17.3.1",
         "express": "^4.18.2",
-        "express-mysql-session": "^3.0.3",
         "express-session": "^1.19.0",
         "multer": "^2.0.2",
         "mysql2": "^3.17.1",
         "passport": "^0.7.0",
         "passport-google-oauth20": "^2.0.0",
+        "pg": "^8.16.3",
         "socket.io": "^4.8.3"
     }
 }

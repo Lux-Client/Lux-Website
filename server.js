@@ -5,8 +5,18 @@ const cors = require('cors');
 const fs = require('fs');
 const path = require('path');
 
+const DATA_DIR = process.env.DATA_DIR
+    ? path.resolve(process.env.DATA_DIR)
+    : path.join(__dirname, 'data');
+const UPLOAD_DIR = process.env.UPLOAD_DIR
+    ? path.resolve(process.env.UPLOAD_DIR)
+    : path.join(DATA_DIR, 'uploads');
+
+if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+
 // --- LOGGING TO latest.log ---
-const logFile = path.join(__dirname, 'latest.log');
+const logFile = path.join(DATA_DIR, 'latest.log');
 const logStream = fs.createWriteStream(logFile, { flags: 'a' });
 
 const originalLog = console.log;
@@ -32,7 +42,7 @@ console.log('--- Server Starting / Restarting ---');
 // -----------------------------
 const multer = require('multer');
 const session = require('express-session');
-const MySQLStore = require('express-mysql-session')(session);
+const PgSession = require('connect-pg-simple')(session);
 const passport = require('passport');
 // dotenv already required at top
 
@@ -69,8 +79,8 @@ if (!ADMIN_PASSWORD) {
     process.exit(1);
 }
 
-const NEWS_FILE = path.join(__dirname, 'news.json');
-const ANALYTICS_FILE = path.join(__dirname, 'analytics.json');
+const NEWS_FILE = path.join(DATA_DIR, 'news.json');
+const ANALYTICS_FILE = path.join(DATA_DIR, 'analytics.json');
 const downloadCooldowns = new Map();
 
 app.use(cors());
@@ -83,7 +93,11 @@ if (!SESSION_SECRET && process.env.NODE_ENV === 'production') {
     process.exit(1);
 }
 
-const sessionStore = new MySQLStore({}, pool);
+const sessionStore = new PgSession({
+    pool: pool.raw,
+    tableName: 'user_sessions',
+    createTableIfMissing: true
+});
 
 app.use(session({
     secret: SESSION_SECRET || 'mclc-super-secret-session-key-2026',
@@ -391,7 +405,7 @@ function emitLiveStats() {
 
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
-        const uploadDir = path.join(__dirname, 'public/uploads');
+        const uploadDir = UPLOAD_DIR;
         if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
         cb(null, uploadDir);
     },
@@ -727,7 +741,18 @@ app.post('/api/extensions/:id/download', async (req, res) => {
         downloadCooldowns.set(cooldownKey, now);
 
         await pool.query('UPDATE extensions SET downloads = downloads + 1 WHERE id = ?', [id]);
-        await pool.query('UPDATE extension_versions SET downloads = downloads + 1 WHERE extension_id = ? AND status = "approved" ORDER BY created_at DESC LIMIT 1', [id]);
+        await pool.query(`
+            WITH latest AS (
+                SELECT id
+                FROM extension_versions
+                WHERE extension_id = ? AND status = "approved"
+                ORDER BY created_at DESC
+                LIMIT 1
+            )
+            UPDATE extension_versions
+            SET downloads = downloads + 1
+            WHERE id IN (SELECT id FROM latest)
+        `, [id]);
 
         const type = ext[0].type || 'mod';
         const name = ext[0].name || 'unknown';
@@ -1202,7 +1227,7 @@ const htmlPath = path.resolve(__dirname, 'html');
 const cssPath = path.resolve(__dirname, 'css');
 const jsPath = path.resolve(__dirname, 'js');
 
-const uploadPath = path.resolve(__dirname, 'public/uploads');
+const uploadPath = UPLOAD_DIR;
 
 console.log(`[Static] Serving website from: ${path.resolve(websitePath)}`);
 console.log(`[Static] Serving admin from: ${path.resolve(adminPublicPath)}`);
@@ -1297,12 +1322,10 @@ app.post('/api/analytics', (req, res) => {
 const { createTables } = require('./db_init');
 
 // --- TEMPORARY MIGRATION SCRIPT ---
-pool.query('ALTER TABLE users ADD COLUMN is_private BOOLEAN DEFAULT FALSE;')
+pool.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS is_private BOOLEAN DEFAULT FALSE;')
     .then(() => console.log('[Lux] Database migration: added is_private column.'))
     .catch(err => {
-        if (err.code !== 'ER_DUP_FIELDNAME') {
-            console.error('[Lux] Database migration failed:', err);
-        }
+        console.error('[Lux] Database migration failed:', err);
     });
 
 server.listen(PORT, async () => {

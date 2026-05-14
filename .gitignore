@@ -143,5 +143,4 @@ dist
 codes/
 public/uploads
 /tmp
-analytics.json
-news.json
+/data

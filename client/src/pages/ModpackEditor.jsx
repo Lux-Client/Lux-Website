@@ -270,11 +270,10 @@ export default function ModpackEditor() {
                         )}
                       </div>
                       <div className="min-w-0 flex-1">
-                        <h3 className="truncate text-xl font-black text-white">{result.title}</h3>
-                        <p className="mt-2 text-sm leading-7 text-gray-400">{result.description}</p>
-                        <div className="mt-4 flex items-center justify-between gap-3 text-xs font-bold uppercase tracking-[0.2em] text-gray-500">
-                          <span>{Number(result.downloads || 0).toLocaleString()} downloads</span>
-                          <button onClick={() => addProject(result)} className="rounded-xl bg-primary px-4 py-3 text-black transition hover:bg-primary-dark">Add</button>
+                        <h3 className="truncate text-base font-black text-white">{result.title}</h3>
+                        <p className="mt-1 truncate text-xs uppercase tracking-[0.2em] text-gray-500">{Number(result.downloads || 0).toLocaleString()} downloads</p>
+                        <div className="mt-3">
+                          <button onClick={() => addProject(result)} className="rounded-xl bg-primary px-4 py-2 text-xs font-black text-black transition hover:bg-primary-dark">+ Add</button>
                         </div>
                       </div>
                     </div>
@@ -284,7 +283,7 @@ export default function ModpackEditor() {
             </div>
           </div>
 
-          <div className="space-y-8">
+          <div className="xl:sticky xl:top-6 xl:self-start xl:max-h-[calc(100vh-3rem)] xl:overflow-y-auto space-y-8 xl:pr-1">
             <div className="rounded-[2rem] border border-white/5 bg-surface/50 p-8">
               <div className="flex items-center justify-between gap-3">
                 <div>

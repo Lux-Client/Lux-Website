@@ -40,7 +40,7 @@ export default function DocsArticleLayout({ title, description, sections, sideba
         </div>
 
         <div className="flex gap-10">
-          <aside className="sticky top-28 hidden h-[calc(100vh-8rem)] w-72 overflow-y-auto border-r border-white/5 pr-8 lg:block">
+          <aside className="sticky top-28 z-10 hidden h-[calc(100vh-8rem)] w-72 overflow-y-auto border-r border-white/5 pr-8 lg:block">
             <div className="space-y-10">
               {sidebarGroups.map((group) => (
                 <div key={group.title}>
@@ -75,7 +75,7 @@ export default function DocsArticleLayout({ title, description, sections, sideba
             </div>
           </main>
 
-          <aside className="sticky top-28 hidden h-[calc(100vh-8rem)] w-64 overflow-y-auto pl-2 xl:block">
+          <aside className="sticky top-28 z-10 hidden h-[calc(100vh-8rem)] w-64 overflow-y-auto pl-2 xl:block">
             <h4 className="mb-6 text-[10px] font-black uppercase tracking-[0.3em] text-gray-500">On this page</h4>
             <nav className="space-y-3 text-xs font-bold">
               {sections.map((section) => (

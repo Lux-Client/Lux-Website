@@ -58,6 +58,7 @@ export default function AdminPanel() {
 
   const isSessionAdmin = auth.user?.role === 'admin'
   const canView = isSessionAdmin || passwordVerified
+  const canAccessTools = passwordVerified || isSessionAdmin
 
   useEffect(() => {
     const savedPassword = window.localStorage.getItem('admin_password')
@@ -66,21 +67,23 @@ export default function AdminPanel() {
   }, [])
 
   useEffect(() => {
-    if (!passwordVerified) return undefined
+    if (!canAccessTools) return undefined
 
     const socket = io()
     setSocketStatus('connecting')
 
     socket.on('connect', () => {
       setSocketStatus('connected')
-      socket.emit('admin-subscribe', window.localStorage.getItem('admin_password'))
+      socket.emit('admin-subscribe', window.localStorage.getItem('admin_password') || '')
     })
     socket.on('disconnect', () => setSocketStatus('offline'))
     socket.on('connect_error', () => setSocketStatus('error'))
     socket.on('error', () => {
       setSocketStatus('error')
-      setPasswordVerified(false)
-      window.localStorage.removeItem('admin_password')
+      if (!isSessionAdmin) {
+        setPasswordVerified(false)
+        window.localStorage.removeItem('admin_password')
+      }
     })
 
     const handlePayload = (payload) => {
@@ -101,14 +104,16 @@ export default function AdminPanel() {
     socket.on('live-update', handlePayload)
 
     return () => socket.disconnect()
-  }, [passwordVerified])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [passwordVerified, isSessionAdmin])
 
   useEffect(() => {
-    if (!passwordVerified) return
+    if (!canAccessTools) return
     loadNews()
     loadCodes()
     loadMaintenanceStatus()
-  }, [passwordVerified])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [passwordVerified, isSessionAdmin])
 
   useEffect(() => {
     if (!isSessionAdmin) return
@@ -363,10 +368,8 @@ export default function AdminPanel() {
               <p className="mt-3 max-w-3xl text-gray-400">Manage news, analytics, maintenance mode, codes, and moderation workflows from a single React dashboard.</p>
             </div>
             <div className="flex flex-wrap gap-3">
-              {passwordVerified ? (
+              {passwordVerified && (
                 <button onClick={signOutPassword} className="rounded-xl border border-white/10 bg-white/5 px-5 py-3 font-bold text-white transition hover:border-primary/40 hover:text-primary">Forget password</button>
-              ) : (
-                <button onClick={() => setTab('overview')} className="rounded-xl border border-white/10 bg-white/5 px-5 py-3 font-bold text-white transition hover:border-primary/40 hover:text-primary">Session unlocked</button>
               )}
               {auth.loggedIn && <a href={auth.logoutUrl} className="rounded-xl bg-primary px-5 py-3 font-black text-black transition hover:bg-primary-dark">Logout</a>}
             </div>
@@ -376,9 +379,9 @@ export default function AdminPanel() {
         <div className="mt-6 flex flex-wrap gap-3">
           {[
             { id: 'overview', label: 'Overview', enabled: true },
-            { id: 'news', label: 'News', enabled: passwordVerified },
-            { id: 'analytics', label: 'Analytics', enabled: passwordVerified },
-            { id: 'codes', label: 'Codes', enabled: passwordVerified },
+            { id: 'news', label: 'News', enabled: canAccessTools },
+            { id: 'analytics', label: 'Analytics', enabled: canAccessTools },
+            { id: 'codes', label: 'Codes', enabled: canAccessTools },
             { id: 'moderation', label: 'Moderation', enabled: isSessionAdmin },
           ].filter((item) => item.enabled).map((item) => (
             <button key={item.id} onClick={() => setTab(item.id)} className={`rounded-xl px-5 py-3 text-sm font-black uppercase tracking-[0.2em] transition ${tab === item.id ? 'bg-primary text-black' : 'border border-white/10 bg-white/5 text-gray-300 hover:text-white'}`}>
@@ -398,7 +401,7 @@ export default function AdminPanel() {
           </section>
         )}
 
-        {tab === 'news' && passwordVerified && (
+        {tab === 'news' && canAccessTools && (
           <section className="mt-8 grid gap-8 lg:grid-cols-[0.95fr_1.05fr]">
             <div className="rounded-[2rem] border border-white/5 bg-surface/50 p-8">
               <h2 className="text-3xl font-black text-white">Published news</h2>
@@ -440,7 +443,7 @@ export default function AdminPanel() {
           </section>
         )}
 
-        {tab === 'analytics' && passwordVerified && (
+        {tab === 'analytics' && canAccessTools && (
           <section className="mt-8 space-y-8">
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
               <OverviewCard label="Active Users" value={liveStats.activeUsers || 0} />
@@ -467,7 +470,7 @@ export default function AdminPanel() {
           </section>
         )}
 
-        {tab === 'codes' && passwordVerified && (
+        {tab === 'codes' && canAccessTools && (
           <section className="mt-8 rounded-[2rem] border border-white/5 bg-surface/50 p-8">
             <div className="flex items-center justify-between gap-4">
               <div>

@@ -49,6 +49,8 @@ export default function ExtensionDetail() {
     return `luxclient://install?identifier=${encodeURIComponent(extension.identifier)}&type=${encodeURIComponent(extension.type || 'extension')}&url=${encodeURIComponent(absoluteUrl)}&name=${encodeURIComponent(extension.name || '')}`
   }, [extension, downloadHref])
 
+  const [luxHint, setLuxHint] = useState(false)
+
   const trackDownload = async () => {
     if (!extension?.id) return
     try {
@@ -120,7 +122,7 @@ export default function ExtensionDetail() {
                   <>
                     <a
                       href={luxclientUrl || downloadHref}
-                      onClick={trackDownload}
+                      onClick={() => { trackDownload(); setLuxHint(true); }}
                       className="rounded-2xl bg-primary px-7 py-4 font-black text-black transition hover:bg-primary-dark"
                     >
                       Open in Lux
@@ -133,6 +135,15 @@ export default function ExtensionDetail() {
                     >
                       Standalone Download
                     </a>
+                    {luxHint && (
+                      <p className="w-full text-sm text-gray-400 mt-1">
+                        Nothing happened?{' '}
+                        <a href="https://lux.pluginhub.de" className="text-primary underline underline-offset-2 hover:text-primary-dark">
+                          Make sure Lux Client is installed
+                        </a>{' '}
+                        and running, then try again.
+                      </p>
+                    )}
                   </>
                 ) : (
                   <span className="rounded-2xl bg-white/5 px-7 py-4 font-black text-gray-500 opacity-50">

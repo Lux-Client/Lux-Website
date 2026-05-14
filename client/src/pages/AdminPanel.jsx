@@ -220,7 +220,7 @@ export default function AdminPanel() {
       if (newsFile) {
         const uploadData = new FormData()
         uploadData.append('image', newsFile)
-        uploadData.append('password', window.localStorage.getItem('admin_password'))
+        if (passwordVerified) uploadData.append('password', window.localStorage.getItem('admin_password'))
         const uploadResponse = await fetch('/api/upload', { method: 'POST', body: uploadData })
         const uploadResult = await uploadResponse.json()
         if (uploadResult.success) {
@@ -255,11 +255,12 @@ export default function AdminPanel() {
   }
 
   const toggleMaintenance = async () => {
+    const adminPassword = passwordVerified ? window.localStorage.getItem('admin_password') : undefined
     const response = await fetch('/api/admin/maintenance/toggle', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'same-origin',
-      body: JSON.stringify({ password: window.localStorage.getItem('admin_password') }),
+      body: JSON.stringify({ password: adminPassword }),
     })
     const data = await response.json().catch(() => ({}))
     if (response.ok && data.success) setMaintenanceMode(!!data.isMaintenanceMode)
@@ -267,10 +268,11 @@ export default function AdminPanel() {
 
   const resetStats = async () => {
     if (!window.confirm('Reset all analytics data?')) return
+    const adminPassword = passwordVerified ? window.localStorage.getItem('admin_password') : undefined
     await fetch('/api/admin/reset-stats', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ password: window.localStorage.getItem('admin_password') }),
+      body: JSON.stringify({ password: adminPassword }),
     })
   }
 

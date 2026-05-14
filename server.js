@@ -163,9 +163,10 @@ app.post('/api/admin/maintenance/auth', (req, res) => {
 app.post('/api/admin/maintenance/toggle', (req, res) => {
     const hasAdminPassword = req.body.password === ADMIN_PASSWORD;
     const hasAdminBypass = !!req.session?.adminBypass;
+    const isSessionAdmin = req.isAuthenticated() && req.user?.role === 'admin';
 
-    if (hasAdminPassword || hasAdminBypass) {
-        if (hasAdminPassword) {
+    if (hasAdminPassword || hasAdminBypass || isSessionAdmin) {
+        if (hasAdminPassword || isSessionAdmin) {
             req.session.adminBypass = true;
         }
         isMaintenanceMode = !isMaintenanceMode;
@@ -951,7 +952,8 @@ app.post('/api/admin/users/:id/:action', ensureAdmin, async (req, res) => {
 });
 
 app.post('/api/admin/reset-stats', (req, res) => {
-    if (req.body.password === ADMIN_PASSWORD) {
+    const isSessionAdmin = req.isAuthenticated() && req.user?.role === 'admin';
+    if (req.body.password === ADMIN_PASSWORD || isSessionAdmin) {
         stats = {
             downloads: { mod: {}, resourcepack: {}, shader: {}, modpack: {} },
             launchesPerDay: {},
@@ -1126,7 +1128,8 @@ app.post('/api/upload', (req, res) => {
         if (err) return res.status(500).json({ success: false, error: err.message });
 
         const { password } = req.body;
-        if (password !== ADMIN_PASSWORD) {
+        const isSessionAdmin = req.isAuthenticated() && req.user?.role === 'admin';
+        if (password !== ADMIN_PASSWORD && !isSessionAdmin) {
             if (req.file) {
                 const fs = require('fs');
                 try { fs.unlinkSync(req.file.path); } catch (e) { }

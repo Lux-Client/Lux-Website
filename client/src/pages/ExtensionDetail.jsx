@@ -38,6 +38,26 @@ export default function ExtensionDetail() {
 
   const latestVersion = useMemo(() => extension?.versions?.[0] ?? null, [extension])
   const downloadHref = latestVersion?.file_path ? fixPath(latestVersion.file_path) : extension?.file_path ? fixPath(extension.file_path) : ''
+  const downloadFileName = useMemo(() => {
+    const fp = latestVersion?.file_path || extension?.file_path || ''
+    return fp.split('/').pop() || `${extension?.name || 'download'}`
+  }, [latestVersion, extension])
+
+  const luxclientUrl = useMemo(() => {
+    if (!extension?.identifier || !downloadHref) return ''
+    const absoluteUrl = downloadHref.startsWith('http') ? downloadHref : `https://lux.pluginhub.de${downloadHref}`
+    return `luxclient://install?identifier=${encodeURIComponent(extension.identifier)}&type=${encodeURIComponent(extension.type || 'extension')}&url=${encodeURIComponent(absoluteUrl)}&name=${encodeURIComponent(extension.name || '')}`
+  }, [extension, downloadHref])
+
+  const trackDownload = async () => {
+    if (!extension?.id) return
+    try {
+      await fetch(`/api/extensions/${extension.id}/download`, { method: 'POST' })
+      setDownloadCount((count) => count + 1)
+    } catch {
+      // non-fatal
+    }
+  }
 
   const handleDownload = async () => {
     if (!extension?.id || !downloadHref) return
@@ -96,9 +116,29 @@ export default function ExtensionDetail() {
               </div>
 
               <div className="mt-8 flex flex-wrap gap-4">
-                <button onClick={handleDownload} disabled={!downloadHref} className="rounded-2xl bg-primary px-7 py-4 font-black text-black transition hover:bg-primary-dark disabled:cursor-not-allowed disabled:opacity-50">
-                  {downloadHref ? 'Download Addon' : 'Unavailable'}
-                </button>
+                {downloadHref ? (
+                  <>
+                    <a
+                      href={luxclientUrl || downloadHref}
+                      onClick={trackDownload}
+                      className="rounded-2xl bg-primary px-7 py-4 font-black text-black transition hover:bg-primary-dark"
+                    >
+                      Open in Lux
+                    </a>
+                    <a
+                      href={downloadHref}
+                      download={downloadFileName}
+                      onClick={trackDownload}
+                      className="rounded-2xl border border-white/10 bg-white/5 px-7 py-4 font-bold text-white transition hover:border-primary/40 hover:text-primary"
+                    >
+                      Standalone Download
+                    </a>
+                  </>
+                ) : (
+                  <span className="rounded-2xl bg-white/5 px-7 py-4 font-black text-gray-500 opacity-50">
+                    Unavailable
+                  </span>
+                )}
                 <a href="#description" className="rounded-2xl border border-white/10 bg-white/5 px-7 py-4 font-bold text-white transition hover:border-primary/40 hover:text-primary">
                   Read Details
                 </a>

@@ -1280,20 +1280,14 @@ app.use('/html', express.static(htmlPath, staticOptions));
 app.use('/css', express.static(cssPath, staticOptions));
 app.use('/js', express.static(jsPath, staticOptions));
 
-// React app – register FIRST so it takes priority over legacy static dirs
+// React app – register FIRST so it takes priority over all other static dirs
 const clientDistPath = path.resolve(__dirname, 'client', 'dist');
-const reactIndexPath = path.join(clientDistPath, 'index.html');
-if (fs.existsSync(clientDistPath)) {
-    app.use(express.static(clientDistPath, staticOptions));
-    console.log(`[Static] Serving React app from: ${clientDistPath}`);
-}
+app.use(express.static(clientDistPath, staticOptions));
+console.log(`[Static] Serving React app from: ${clientDistPath}`);
 
-// Root always serves the React app; fallback to legacy index only when dist is absent
+// Root always serves the React app (built into client/dist at image build time)
 app.get('/', (req, res) => {
-    if (fs.existsSync(reactIndexPath)) {
-        return res.sendFile(reactIndexPath);
-    }
-    res.sendFile(path.join(htmlPath, 'index.html'));
+    res.sendFile(path.join(clientDistPath, 'index.html'));
 });
 
 app.use(express.static(websitePath, staticOptions));

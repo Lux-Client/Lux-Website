@@ -66,8 +66,18 @@ const CLI_CMDS = [
   { id: 'win',   label: 'Windows (PowerShell)', cmd: 'iwr https://lux.pluginhub.de/install.ps1 | iex' },
 ]
 
+const REPO = 'Lux-Client/Lux-Client'
+const DEFAULT_LINKS = {
+  version:  null,
+  win:      `https://github.com/${REPO}/releases/latest/download/Lux-setup.exe`,
+  deb:      `https://github.com/${REPO}/releases/latest/download/Lux-setup.deb`,
+  rpm:      `https://github.com/${REPO}/releases/latest/download/Lux-setup.rpm`,
+  appimage: `https://github.com/${REPO}/releases/latest/download/Lux-setup.AppImage`,
+  mac:      `https://github.com/${REPO}/releases/latest/download/Lux-setup.dmg`,
+}
+
 export default function DownloadModal({ isOpen, onClose, releaseData }) {
-  const links = releaseData
+  const links = releaseData ?? DEFAULT_LINKS
   const [copied, setCopied] = useState(null)
   const [macExpanded, setMacExpanded] = useState(false)
 

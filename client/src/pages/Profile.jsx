@@ -241,7 +241,9 @@ export default function Profile() {
 
   // ── display avatar ────────────────────────────────────────────────────────
 
-  const displayAvatar = avatarPreview || fixPath(auth.user?.avatar || auth.user?.avatar_url)
+  const displayAvatar = avatarPreview
+    || (auth.user?.avatar_url?.startsWith('http') ? auth.user.avatar_url : null)
+    || fixPath(auth.user?.avatar || auth.user?.avatar_url)
 
   // ── not logged in / loading ───────────────────────────────────────────────
 
@@ -305,7 +307,14 @@ export default function Profile() {
                       src={displayAvatar}
                       alt={auth.user?.username}
                       className="h-20 w-20 rounded-2xl border border-white/10 object-cover bg-white/4"
-                      onError={e => { e.currentTarget.src = '/resources/lux_icon.png?v=3' }}
+                      onError={e => {
+                        const google = auth.user?.avatar_url || auth.user?.avatar || ''
+                        if (google.startsWith('http') && e.currentTarget.src !== google) {
+                          e.currentTarget.src = google
+                        } else {
+                          e.currentTarget.src = '/resources/lux_icon.png?v=3'
+                        }
+                      }}
                     />
                     <label className="absolute -bottom-1 -right-1 flex h-7 w-7 cursor-pointer items-center justify-center rounded-full border border-white/10 bg-[#0f0f0f] text-white/50 transition-colors hover:bg-white/10 hover:text-white">
                       <Camera className="h-3.5 w-3.5" />

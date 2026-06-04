@@ -1,0 +1,20 @@
+[
+  {
+    "id": 1,
+    "username": "DevAdmin",
+    "email": "admin@localhost",
+    "role": "admin",
+    "avatar": null,
+    "banned": false,
+    "created_at": "2026-06-04T22:08:33.907Z"
+  },
+  {
+    "id": 2,
+    "username": "TestUser",
+    "email": "user@localhost",
+    "role": "user",
+    "avatar": null,
+    "banned": false,
+    "created_at": "2026-06-04T22:08:33.907Z"
+  }
+]

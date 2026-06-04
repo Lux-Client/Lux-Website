@@ -1,0 +1,33 @@
+{
+  "downloads": {
+    "mod": {},
+    "resourcepack": {},
+    "shader": {},
+    "modpack": {}
+  },
+  "launchesPerDay": {},
+  "clientVersions": {
+    "1.3.3": 12,
+    "1.3.2": 5
+  },
+  "uniqueMachineCount": 17,
+  "uniqueMachines": {},
+  "software": {
+    "client": {
+      "Fabric": 8,
+      "Forge": 4,
+      "Vanilla": 3
+    },
+    "server": {
+      "Paper": 2
+    }
+  },
+  "gameVersions": {
+    "client": {
+      "1.21.1": 7,
+      "1.20.4": 4,
+      "1.19.4": 2
+    },
+    "server": {}
+  }
+}

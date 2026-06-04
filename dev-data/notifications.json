@@ -1,0 +1,18 @@
+[
+  {
+    "id": 1,
+    "user_id": 1,
+    "type": "approval",
+    "message": "Your extension \"Example Extension\" has been approved and is now live in the marketplace.",
+    "is_read": true,
+    "created_at": "2026-06-04T22:23:16.879Z"
+  },
+  {
+    "id": 2,
+    "user_id": 1,
+    "type": "info",
+    "message": "Welcome to Lux Client marketplace! Upload your first extension via the Profile page.",
+    "is_read": true,
+    "created_at": "2026-06-04T22:23:16.879Z"
+  }
+]

@@ -1,179 +1,121 @@
 import { useEffect, useMemo, useState } from 'react'
+import { motion } from 'framer-motion'
+import { Search, Plus, Trash2, Copy, Check, RefreshCw, Package, ImageOff } from 'lucide-react'
 import PageShell from '../components/PageShell'
 
-const STORAGE_KEY = 'lux-modpack-draft'
+const STORAGE_KEY      = 'lux-modpack-draft'
 const RECENT_DRAFTS_KEY = 'lux-modpack-recent-drafts'
 
-const emptyPack = {
-  name: 'My Modpack',
-  version: '1.21.1',
-  loader: 'fabric',
-  mods: [],
-  resourcePacks: [],
-  shaders: [],
+const emptyPack = { name: 'My Modpack', version: '1.21.1', loader: 'fabric', mods: [], resourcePacks: [], shaders: [] }
+
+const TYPE_CONFIG = {
+  mod:         { key: 'mods',         label: 'Mods' },
+  resourcepack:{ key: 'resourcePacks', label: 'Resource Packs' },
+  shader:      { key: 'shaders',      label: 'Shaders' },
 }
 
-const projectTypeConfig = {
-  mod: { key: 'mods', label: 'Mods' },
-  resourcepack: { key: 'resourcePacks', label: 'Resource Packs' },
-  shader: { key: 'shaders', label: 'Shaders' },
+function Field({ label, children }) {
+  return (
+    <label className="flex flex-col gap-1.5">
+      <span className="text-xs font-semibold text-white/40">{label}</span>
+      {children}
+    </label>
+  )
+}
+
+function selectClass() {
+  return 'w-full rounded-xl border border-white/8 bg-white/4 px-3.5 py-2.5 text-sm text-white outline-none transition focus:border-primary/50 focus:ring-1 focus:ring-primary/20 appearance-none'
 }
 
 export default function ModpackEditor() {
   const [pack, setPack] = useState(() => {
-    try {
-      const saved = window.localStorage.getItem(STORAGE_KEY)
-      return saved ? { ...emptyPack, ...JSON.parse(saved) } : emptyPack
-    } catch {
-      return emptyPack
-    }
+    try { const s = localStorage.getItem(STORAGE_KEY); return s ? { ...emptyPack, ...JSON.parse(s) } : emptyPack } catch { return emptyPack }
   })
   const [recentDrafts, setRecentDrafts] = useState(() => {
-    try {
-      return JSON.parse(window.localStorage.getItem(RECENT_DRAFTS_KEY) || '[]')
-    } catch {
-      return []
-    }
+    try { return JSON.parse(localStorage.getItem(RECENT_DRAFTS_KEY) || '[]') } catch { return [] }
   })
   const [projectType, setProjectType] = useState('mod')
-  const [search, setSearch] = useState('')
-  const [results, setResults] = useState([])
-  const [loading, setLoading] = useState(false)
-  const [exportedCode, setExportedCode] = useState('')
-  const [importCode, setImportCode] = useState('')
-  const [myCodes, setMyCodes] = useState([])
-  const [versions, setVersions] = useState([])
-  const [message, setMessage] = useState('')
+  const [search,      setSearch]      = useState('')
+  const [results,     setResults]     = useState([])
+  const [loading,     setLoading]     = useState(false)
+  const [exportedCode,setExportedCode]= useState('')
+  const [importCode,  setImportCode]  = useState('')
+  const [myCodes,     setMyCodes]     = useState([])
+  const [versions,    setVersions]    = useState([])
+  const [message,     setMessage]     = useState({ text: '', type: 'info' })
+  const [copied,      setCopied]      = useState(false)
 
-  const currentCollectionKey = projectTypeConfig[projectType].key
-  const currentCollection = pack[currentCollectionKey]
+  const currentKey        = TYPE_CONFIG[projectType].key
+  const currentCollection = pack[currentKey]
+  const counts = useMemo(() => ({ mods: pack.mods.length, resourcePacks: pack.resourcePacks.length, shaders: pack.shaders.length }), [pack])
+  const totalCount = counts.mods + counts.resourcePacks + counts.shaders
 
   useEffect(() => {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(pack))
-    const snapshot = { ...pack, savedAt: Date.now() }
-    const nextDrafts = [snapshot, ...recentDrafts.filter((item) => item.name !== snapshot.name)].slice(0, 4)
-    setRecentDrafts(nextDrafts)
-    window.localStorage.setItem(RECENT_DRAFTS_KEY, JSON.stringify(nextDrafts))
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(pack))
+    const snap = { ...pack, savedAt: Date.now() }
+    const next = [snap, ...recentDrafts.filter(d => d.name !== snap.name)].slice(0, 4)
+    setRecentDrafts(next)
+    localStorage.setItem(RECENT_DRAFTS_KEY, JSON.stringify(next))
   }, [pack])
 
   useEffect(() => {
     fetch('/api/modrinth/versions')
-      .then((response) => response.ok ? response.json() : [])
-      .then((data) => setVersions(Array.isArray(data) ? data.slice(0, 30) : []))
+      .then(r => r.ok ? r.json() : [])
+      .then(data => setVersions(Array.isArray(data) ? data.slice(0, 30) : []))
       .catch(() => {})
-
     loadCodes()
   }, [])
 
   useEffect(() => {
-    const controller = new AbortController()
+    const ctrl  = new AbortController()
     const timer = window.setTimeout(async () => {
       setLoading(true)
-      setMessage('')
       try {
         const facets = [[`project_type:${projectType}`], [`versions:${pack.version}`]]
         if (pack.loader) facets.push([`categories:${pack.loader}`])
-
-        const params = new URLSearchParams({
-          limit: '12',
-          facets: JSON.stringify(facets),
-        })
-
+        const params = new URLSearchParams({ limit: '12', facets: JSON.stringify(facets) })
         if (search.trim()) params.set('query', search.trim())
-
-        const response = await fetch(`/api/modrinth/search?${params.toString()}`, { signal: controller.signal })
-        if (!response.ok) throw new Error('Failed to search Modrinth')
-        const data = await response.json()
+        const res  = await fetch(`/api/modrinth/search?${params}`, { signal: ctrl.signal })
+        if (!res.ok) throw new Error('Search failed')
+        const data = await res.json()
         setResults(Array.isArray(data.hits) ? data.hits : [])
-      } catch (error) {
-        if (error.name !== 'AbortError') {
-          setResults([])
-          setMessage(error.message)
-        }
-      } finally {
-        setLoading(false)
-      }
+      } catch (e) {
+        if (e.name !== 'AbortError') setResults([])
+      } finally { setLoading(false) }
     }, 250)
-
-    return () => {
-      controller.abort()
-      window.clearTimeout(timer)
-    }
+    return () => { ctrl.abort(); window.clearTimeout(timer) }
   }, [search, pack.version, pack.loader, projectType])
 
-  const counts = useMemo(() => ({
-    mods: pack.mods.length,
-    resourcePacks: pack.resourcePacks.length,
-    shaders: pack.shaders.length,
-  }), [pack])
+  const addProject    = p => setPack(c => c[currentKey].some(i => i.project_id === p.project_id) ? c : { ...c, [currentKey]: [...c[currentKey], p] })
+  const removeProject = (key, id) => setPack(c => ({ ...c, [key]: c[key].filter(i => i.project_id !== id) }))
 
-  const addProject = (project) => {
-    setPack((current) => {
-      const list = current[currentCollectionKey]
-      if (list.some((item) => item.project_id === project.project_id)) return current
-      return { ...current, [currentCollectionKey]: [...list, project] }
-    })
-  }
-
-  const removeProject = (key, projectId) => {
-    setPack((current) => ({
-      ...current,
-      [key]: current[key].filter((item) => item.project_id !== projectId),
-    }))
-  }
+  const notify = (text, type = 'info') => { setMessage({ text, type }); setTimeout(() => setMessage({ text: '', type: 'info' }), 4000) }
 
   const exportPack = async () => {
-    setMessage('')
-    const response = await fetch('/api/modpack/save', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        name: pack.name,
-        mods: pack.mods,
-        resourcePacks: pack.resourcePacks,
-        shaders: pack.shaders,
-        instanceVersion: pack.version,
-        instanceLoader: pack.loader,
-      }),
-    })
-    const data = await response.json().catch(() => ({}))
-    if (response.ok && data.success) {
-      setExportedCode(data.code)
-      setMessage('Modpack code created successfully.')
-      loadCodes()
-    } else {
-      setMessage(data.error || 'Failed to export modpack.')
-    }
+    const res  = await fetch('/api/modpack/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: pack.name, mods: pack.mods, resourcePacks: pack.resourcePacks, shaders: pack.shaders, instanceVersion: pack.version, instanceLoader: pack.loader }) })
+    const data = await res.json().catch(() => ({}))
+    if (res.ok && data.success) { setExportedCode(data.code); notify('Code created!', 'success'); loadCodes() }
+    else notify(data.error || 'Export failed', 'error')
   }
 
   const importPack = async () => {
     if (!importCode.trim()) return
-    const response = await fetch(`/api/modpack/${encodeURIComponent(importCode.trim())}`)
-    const data = await response.json().catch(() => ({}))
-    if (response.ok && data.success && data.data) {
-      const incoming = data.data
-      setPack({
-        name: incoming.name || emptyPack.name,
-        version: incoming.version || emptyPack.version,
-        loader: incoming.loader || emptyPack.loader,
-        mods: incoming.mods || [],
-        resourcePacks: incoming.resourcePacks || [],
-        shaders: incoming.shaders || [],
-      })
-      setMessage(`Imported code ${incoming.code}.`)
-      setImportCode('')
-    } else {
-      setMessage(data.error || 'Unable to import this code.')
-    }
+    const res  = await fetch(`/api/modpack/${encodeURIComponent(importCode.trim())}`)
+    const data = await res.json().catch(() => ({}))
+    if (res.ok && data.success && data.data) {
+      const d = data.data
+      setPack({ name: d.name || emptyPack.name, version: d.version || emptyPack.version, loader: d.loader || emptyPack.loader, mods: d.mods || [], resourcePacks: d.resourcePacks || [], shaders: d.shaders || [] })
+      notify(`Imported: ${d.name}`, 'success'); setImportCode('')
+    } else notify(data.error || 'Import failed', 'error')
   }
 
   const loadCodes = async () => {
-    const response = await fetch('/api/modpack/my-codes')
-    const data = await response.json().catch(() => ({}))
+    const res  = await fetch('/api/modpack/my-codes')
+    const data = await res.json().catch(() => ({}))
     setMyCodes(Array.isArray(data.codes) ? data.codes : [])
   }
 
-  const deleteCode = async (code) => {
+  const deleteCode = async code => {
     if (!window.confirm(`Delete code ${code}?`)) return
     await fetch(`/api/modpack/delete/${encodeURIComponent(code)}`, { method: 'DELETE' })
     loadCodes()
@@ -181,215 +123,256 @@ export default function ModpackEditor() {
 
   const copyCode = async () => {
     if (!exportedCode) return
-    try {
-      await navigator.clipboard.writeText(exportedCode)
-      setMessage('Code copied to clipboard.')
-    } catch {
-      setMessage('Failed to copy code.')
-    }
-  }
-
-  const loadDraft = (draft) => {
-    setPack({
-      name: draft.name || emptyPack.name,
-      version: draft.version || emptyPack.version,
-      loader: draft.loader || emptyPack.loader,
-      mods: draft.mods || [],
-      resourcePacks: draft.resourcePacks || [],
-      shaders: draft.shaders || [],
-    })
+    try { await navigator.clipboard.writeText(exportedCode); setCopied(true); setTimeout(() => setCopied(false), 2000) } catch {}
   }
 
   return (
     <PageShell>
-      <main className="mx-auto max-w-7xl px-6 pb-24 pt-32 lg:px-12">
-        <section className="rounded-[2.5rem] border border-white/5 bg-surface/50 p-8 md:p-10">
-          <p className="text-sm font-black uppercase tracking-[0.3em] text-primary">Modpack Editor</p>
-          <h1 className="mt-4 text-5xl font-black tracking-tight text-white">Build and share curated packs</h1>
-          <p className="mt-4 max-w-3xl text-lg text-gray-400">Search Modrinth, collect mods and client-side content, then export everything as a shareable Lux modpack code.</p>
-          {message && <p className="mt-5 text-sm font-bold text-primary">{message}</p>}
-        </section>
+      <main className="mx-auto max-w-7xl px-5 pb-24 pt-28 lg:px-10">
 
-        <section className="mt-8 grid gap-8 xl:grid-cols-[1.15fr_0.85fr]">
-          <div className="space-y-8">
-            <div className="rounded-[2rem] border border-white/5 bg-surface/50 p-8">
-              <h2 className="text-3xl font-black text-white">Pack settings</h2>
-              <div className="mt-6 grid gap-5 md:grid-cols-3">
-                <label>
-                  <span className="mb-2 block text-sm font-bold text-gray-400">Pack name</span>
-                  <input value={pack.name} onChange={(event) => setPack((current) => ({ ...current, name: event.target.value }))} className="input" />
-                </label>
-                <label>
-                  <span className="mb-2 block text-sm font-bold text-gray-400">Minecraft version</span>
-                  <select value={pack.version} onChange={(event) => setPack((current) => ({ ...current, version: event.target.value }))} className="input">
-                    {versions.map((version) => <option key={version.version || version} value={version.version || version}>{version.version || version}</option>)}
+        {/* Header */}
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+          className="relative mb-8 overflow-hidden rounded-2xl border border-white/6 bg-[#0f0f0f] p-7"
+        >
+          <div className="absolute inset-0 bg-gradient-radial from-primary/5 via-transparent to-transparent" style={{ backgroundPosition: '0% 0%', backgroundSize: '50% 50%' }} />
+          <div className="relative z-10">
+            <div className="section-label mb-3">Modpack Editor</div>
+            <h1 className="text-3xl font-black tracking-tight text-white md:text-4xl">Build &amp; Share Modpacks</h1>
+            <p className="mt-2 max-w-2xl text-sm text-white/40">Search Modrinth, curate your content, export as a shareable code — import directly in Lux Client.</p>
+            {message.text && (
+              <div className={`mt-4 inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold ${
+                message.type === 'error' ? 'bg-red-500/10 text-red-400' : message.type === 'success' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-primary/10 text-primary'
+              }`}>
+                {message.text}
+              </div>
+            )}
+          </div>
+        </motion.div>
+
+        <div className="grid gap-6 xl:grid-cols-[1fr_360px]">
+
+          {/* Left — settings + search */}
+          <div className="flex flex-col gap-5">
+
+            {/* Pack settings */}
+            <div className="rounded-2xl border border-white/6 bg-[#0f0f0f] p-6">
+              <h2 className="mb-4 text-sm font-bold text-white/60 uppercase tracking-widest">Pack Settings</h2>
+              <div className="grid gap-4 sm:grid-cols-3">
+                <Field label="Name">
+                  <input
+                    value={pack.name}
+                    onChange={e => setPack(c => ({ ...c, name: e.target.value }))}
+                    className="rounded-xl border border-white/8 bg-white/4 px-3.5 py-2.5 text-sm text-white outline-none transition focus:border-primary/50 focus:ring-1 focus:ring-primary/20"
+                  />
+                </Field>
+                <Field label="Minecraft Version">
+                  <select
+                    value={pack.version}
+                    onChange={e => setPack(c => ({ ...c, version: e.target.value }))}
+                    className={selectClass()}
+                  >
+                    {versions.map(v => <option key={v.version || v} value={v.version || v}>{v.version || v}</option>)}
                   </select>
-                </label>
-                <label>
-                  <span className="mb-2 block text-sm font-bold text-gray-400">Loader</span>
-                  <select value={pack.loader} onChange={(event) => setPack((current) => ({ ...current, loader: event.target.value }))} className="input">
+                </Field>
+                <Field label="Mod Loader">
+                  <select
+                    value={pack.loader}
+                    onChange={e => setPack(c => ({ ...c, loader: e.target.value }))}
+                    className={selectClass()}
+                  >
                     <option value="fabric">Fabric</option>
                     <option value="forge">Forge</option>
                     <option value="neoforge">NeoForge</option>
                     <option value="quilt">Quilt</option>
                   </select>
-                </label>
+                </Field>
               </div>
             </div>
 
-            <div className="rounded-[2rem] border border-white/5 bg-surface/50 p-8">
-              <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                <div>
-                  <h2 className="text-3xl font-black text-white">Search Modrinth</h2>
-                  <p className="mt-2 text-gray-400">Browse trending content or search for something specific.</p>
-                </div>
-                <div className="inline-flex rounded-2xl border border-white/10 bg-white/5 p-1">
-                  {Object.entries(projectTypeConfig).map(([key, config]) => (
-                    <button key={key} onClick={() => setProjectType(key)} className={`rounded-2xl px-4 py-3 text-xs font-black uppercase tracking-[0.2em] transition ${projectType === key ? 'bg-primary text-black' : 'text-gray-400 hover:text-white'}`}>{config.label}</button>
+            {/* Modrinth search */}
+            <div className="flex flex-col gap-4 rounded-2xl border border-white/6 bg-[#0f0f0f] p-6">
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                <h2 className="text-base font-bold text-white">Search Modrinth</h2>
+                <div className="flex rounded-xl border border-white/8 bg-white/4 p-1">
+                  {Object.entries(TYPE_CONFIG).map(([key, cfg]) => (
+                    <button key={key} onClick={() => setProjectType(key)}
+                      className={`rounded-lg px-3.5 py-1.5 text-xs font-semibold transition-all ${projectType === key ? 'bg-primary text-black' : 'text-white/40 hover:text-white'}`}
+                    >{cfg.label}</button>
                   ))}
                 </div>
               </div>
-              <div className="mt-6">
-                <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={`Search ${projectTypeConfig[projectType].label.toLowerCase()}...`} className="input" />
+
+              <div className="relative">
+                <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-white/25" />
+                <input
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                  placeholder={`Search ${TYPE_CONFIG[projectType].label.toLowerCase()}…`}
+                  className="w-full rounded-xl border border-white/8 bg-white/4 py-2.5 pl-10 pr-4 text-sm text-white placeholder:text-white/25 outline-none transition focus:border-primary/50 focus:ring-1 focus:ring-primary/20"
+                />
               </div>
-              <div className="mt-6 grid gap-4 md:grid-cols-2">
+
+              <div className="grid gap-3 sm:grid-cols-2">
                 {loading ? (
-                  Array.from({ length: 4 }).map((_, index) => <div key={index} className="h-40 animate-pulse rounded-[1.5rem] border border-white/5 bg-black/20" />)
+                  Array.from({ length: 4 }).map((_, i) => (
+                    <div key={i} className="h-24 animate-pulse rounded-xl border border-white/5 bg-white/3" />
+                  ))
                 ) : results.length === 0 ? (
-                  <div className="rounded-[1.5rem] border border-dashed border-white/10 bg-black/20 p-8 text-center text-gray-500 md:col-span-2">No results for this query.</div>
-                ) : results.map((result) => (
-                  <div key={result.project_id} className="group rounded-[1.5rem] border border-white/5 bg-black/20 p-5 transition hover:border-primary/20">
-                    <div className="flex gap-4">
-                      <div className="h-16 w-16 shrink-0 overflow-hidden rounded-2xl bg-white/5">
-                        {result.icon_url ? (
-                          <img src={result.icon_url} alt={result.title} className="h-full w-full object-cover" onError={(e) => { e.currentTarget.style.display = 'none' }} />
-                        ) : (
-                          <div className="flex h-full items-center justify-center text-gray-600">
-                            <svg className="h-7 w-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10" /></svg>
-                          </div>
-                        )}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <h3 className="truncate text-base font-black text-white">{result.title}</h3>
-                        <p className="mt-1 truncate text-xs uppercase tracking-[0.2em] text-gray-500">{Number(result.downloads || 0).toLocaleString()} downloads</p>
-                        <div className="mt-3">
-                          <button onClick={() => addProject(result)} className="rounded-xl bg-primary px-4 py-2 text-xs font-black text-black transition hover:bg-primary-dark">+ Add</button>
-                        </div>
-                      </div>
+                  <div className="col-span-2 flex flex-col items-center gap-2 rounded-xl border border-dashed border-white/8 py-12 text-center">
+                    <Package className="h-6 w-6 text-white/15" />
+                    <p className="text-sm text-white/25">No results</p>
+                  </div>
+                ) : results.map(r => (
+                  <div key={r.project_id} className="flex items-center gap-3 rounded-xl border border-white/5 bg-white/[0.02] p-3 transition-colors hover:border-white/10">
+                    <div className="h-11 w-11 shrink-0 overflow-hidden rounded-xl bg-white/6">
+                      {r.icon_url ? (
+                        <img src={r.icon_url} alt={r.title} className="h-full w-full object-cover" onError={e => { e.currentTarget.style.display = 'none' }} />
+                      ) : (
+                        <div className="flex h-full items-center justify-center"><ImageOff className="h-4 w-4 text-white/15" /></div>
+                      )}
                     </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-semibold text-white">{r.title}</p>
+                      <p className="text-[11px] text-white/25">{Number(r.downloads || 0).toLocaleString()} dl</p>
+                    </div>
+                    <button
+                      onClick={() => addProject(r)}
+                      className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary transition-colors hover:bg-primary hover:text-black"
+                    ><Plus className="h-3.5 w-3.5" /></button>
                   </div>
                 ))}
               </div>
             </div>
           </div>
 
-          <div className="xl:sticky xl:top-6 xl:self-start xl:max-h-[calc(100vh-3rem)] xl:overflow-y-auto space-y-8 xl:pr-1">
-            <div className="rounded-[2rem] border border-white/5 bg-surface/50 p-8">
-              <div className="flex items-center justify-between gap-3">
+          {/* Right — pack contents + export */}
+          <div className="flex flex-col gap-5 xl:sticky xl:top-6 xl:self-start xl:max-h-[calc(100vh-3.5rem)] xl:overflow-y-auto xl:pr-0.5">
+
+            {/* Pack contents */}
+            <div className="rounded-2xl border border-white/6 bg-[#0f0f0f] p-5">
+              <div className="mb-4 flex items-center justify-between">
                 <div>
-                  <h2 className="text-3xl font-black text-white">Your modpack</h2>
-                  <p className="mt-2 text-gray-400">{counts.mods} mods · {counts.resourcePacks} resource packs · {counts.shaders} shaders</p>
+                  <h2 className="text-sm font-bold text-white">{pack.name}</h2>
+                  <p className="text-xs text-white/30">{totalCount} item{totalCount !== 1 ? 's' : ''} · {pack.version} · {pack.loader}</p>
                 </div>
-                <div className="rounded-2xl border border-primary/20 bg-primary/10 px-4 py-3 text-center">
-                  <div className="text-xs font-black uppercase tracking-[0.2em] text-gray-500">Current list</div>
-                  <div className="mt-1 text-2xl font-black text-primary">{currentCollection.length}</div>
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-lg font-black text-primary">
+                  {totalCount}
                 </div>
               </div>
 
-              <div className="mt-6 space-y-3 max-h-[34rem] overflow-y-auto pr-1">
-                {[['mods', 'Mods'], ['resourcePacks', 'Resource Packs'], ['shaders', 'Shaders']].map(([key, label]) => (
-                  <div key={key} className="rounded-[1.5rem] border border-white/5 bg-black/20 p-4">
-                    <p className="text-xs font-black uppercase tracking-[0.2em] text-gray-500">{label}</p>
-                    <div className="mt-4 space-y-3">
-                      {pack[key].length === 0 ? (
-                        <div className="text-sm text-gray-500">No items yet.</div>
-                      ) : pack[key].map((item) => (
-                        <div key={item.project_id} className="flex items-center justify-between gap-3 rounded-2xl border border-white/5 bg-background/80 p-3">
-                          <div className="min-w-0">
-                            <p className="truncate font-bold text-white">{item.title}</p>
-                            <p className="truncate text-xs uppercase tracking-[0.2em] text-gray-500">{item.author || item.slug || item.project_id}</p>
-                          </div>
-                          <button onClick={() => removeProject(key, item.project_id)} className="rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs font-black uppercase tracking-[0.2em] text-red-300 transition hover:bg-red-500/20">Remove</button>
+              <div className="flex flex-col gap-3 max-h-80 overflow-y-auto pr-0.5">
+                {Object.entries(TYPE_CONFIG).map(([typeKey, cfg]) => (
+                  <div key={typeKey}>
+                    {pack[cfg.key].length > 0 && (
+                      <div>
+                        <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-white/20">{cfg.label}</p>
+                        <div className="flex flex-col gap-1.5">
+                          {pack[cfg.key].map(item => (
+                            <div key={item.project_id} className="flex items-center gap-2.5 rounded-lg border border-white/5 bg-white/[0.02] px-3 py-2">
+                              <div className="min-w-0 flex-1">
+                                <p className="truncate text-xs font-semibold text-white">{item.title}</p>
+                              </div>
+                              <button
+                                onClick={() => removeProject(cfg.key, item.project_id)}
+                                className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-white/20 transition-colors hover:text-red-400"
+                              ><Trash2 className="h-3 w-3" /></button>
+                            </div>
+                          ))}
                         </div>
-                      ))}
-                    </div>
+                      </div>
+                    )}
                   </div>
                 ))}
-              </div>
-            </div>
-
-            <div className="rounded-[2rem] border border-white/5 bg-surface/50 p-8">
-              <h2 className="text-3xl font-black text-white">Import / export</h2>
-              <div className="mt-6 space-y-5">
-                <div className="flex flex-wrap gap-3">
-                  <button onClick={exportPack} className="rounded-xl bg-primary px-5 py-3 font-black text-black transition hover:bg-primary-dark">Create share code</button>
-                  <button onClick={() => loadDraft(emptyPack)} className="rounded-xl border border-white/10 bg-white/5 px-5 py-3 font-bold text-white transition hover:border-primary/40 hover:text-primary">Reset pack</button>
-                </div>
-                {exportedCode && (
-                  <div className="rounded-[1.5rem] border border-primary/20 bg-primary/10 p-5">
-                    <p className="text-xs font-black uppercase tracking-[0.2em] text-gray-500">Latest code</p>
-                    <div className="mt-3 flex items-center justify-between gap-3">
-                      <code className="text-3xl font-black text-primary">{exportedCode}</code>
-                      <button onClick={copyCode} className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-bold text-white transition hover:border-primary/40 hover:text-primary">Copy</button>
-                    </div>
+                {totalCount === 0 && (
+                  <div className="flex flex-col items-center gap-2 py-8 text-center">
+                    <Package className="h-6 w-6 text-white/10" />
+                    <p className="text-xs text-white/20">Add items from search</p>
                   </div>
                 )}
-                <div className="rounded-[1.5rem] border border-white/5 bg-black/20 p-5">
-                  <p className="text-xs font-black uppercase tracking-[0.2em] text-gray-500">Import by code</p>
-                  <div className="mt-4 flex gap-3">
-                    <input value={importCode} onChange={(event) => setImportCode(event.target.value)} placeholder="Enter 8-character code" className="input flex-1" />
-                    <button onClick={importPack} className="rounded-xl bg-primary px-5 py-3 font-black text-black transition hover:bg-primary-dark">Import</button>
+              </div>
+            </div>
+
+            {/* Export / Import */}
+            <div className="rounded-2xl border border-white/6 bg-[#0f0f0f] p-5">
+              <h2 className="mb-4 text-sm font-bold text-white">Export / Import</h2>
+              <div className="flex flex-col gap-3">
+                <div className="flex gap-2">
+                  <button onClick={exportPack} className="btn-primary flex-1">Create code</button>
+                  <button onClick={() => { setPack(emptyPack); notify('Pack reset') }} className="btn-ghost">Reset</button>
+                </div>
+
+                {exportedCode && (
+                  <div className="flex items-center justify-between gap-2 rounded-xl border border-primary/15 bg-primary/8 px-4 py-3">
+                    <code className="text-xl font-black text-primary tracking-widest">{exportedCode}</code>
+                    <button onClick={copyCode} className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary transition-colors hover:bg-primary hover:text-black">
+                      {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                    </button>
                   </div>
+                )}
+
+                <div className="flex gap-2">
+                  <input
+                    value={importCode}
+                    onChange={e => setImportCode(e.target.value)}
+                    placeholder="Enter 8-char code…"
+                    className="flex-1 rounded-xl border border-white/8 bg-white/4 px-3.5 py-2.5 text-sm text-white placeholder:text-white/25 outline-none transition focus:border-primary/50"
+                  />
+                  <button onClick={importPack} className="btn-primary shrink-0">Import</button>
                 </div>
               </div>
             </div>
 
-            <div className="rounded-[2rem] border border-white/5 bg-surface/50 p-8">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <h2 className="text-3xl font-black text-white">My recent codes</h2>
-                  <p className="mt-2 text-gray-400">Codes are tied to your current IP on the website.</p>
+            {/* My codes */}
+            {myCodes.length > 0 && (
+              <div className="rounded-2xl border border-white/6 bg-[#0f0f0f] p-5">
+                <div className="mb-3 flex items-center justify-between">
+                  <h2 className="text-sm font-bold text-white">My Codes</h2>
+                  <button onClick={loadCodes} className="flex h-7 w-7 items-center justify-center rounded-lg text-white/30 hover:bg-white/6 hover:text-white">
+                    <RefreshCw className="h-3.5 w-3.5" />
+                  </button>
                 </div>
-                <button onClick={loadCodes} className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 font-bold text-white transition hover:border-primary/40 hover:text-primary">Refresh</button>
-              </div>
-              <div className="mt-6 space-y-3">
-                {myCodes.length === 0 ? (
-                  <div className="rounded-[1.5rem] border border-dashed border-white/10 bg-black/20 p-8 text-center text-gray-500">No exported codes yet.</div>
-                ) : myCodes.map((code) => (
-                  <div key={code.code} className="rounded-[1.5rem] border border-white/5 bg-black/20 p-4">
-                    <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                <div className="flex flex-col gap-2">
+                  {myCodes.map(code => (
+                    <div key={code.code} className="flex items-center justify-between gap-2 rounded-xl border border-white/5 bg-white/[0.02] px-3.5 py-3">
                       <div>
-                        <p className="text-2xl font-black text-primary">{code.code}</p>
-                        <p className="mt-2 text-sm text-gray-400">{code.name}</p>
-                        <p className="mt-2 text-xs font-black uppercase tracking-[0.2em] text-gray-500">Uses: {code.uses || 0} · Expires: {code.expires ? new Date(code.expires).toLocaleString() : '—'}</p>
+                        <p className="text-sm font-black text-primary tracking-widest">{code.code}</p>
+                        <p className="text-xs text-white/30">{code.name} · {code.uses || 0} uses</p>
                       </div>
-                      <button onClick={() => deleteCode(code.code)} className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm font-bold text-red-300 transition hover:bg-red-500/20">Delete</button>
+                      <button onClick={() => deleteCode(code.code)} className="flex h-7 w-7 items-center justify-center rounded-lg text-white/20 hover:bg-red-500/10 hover:text-red-400">
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
                     </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
-            </div>
+            )}
 
+            {/* Recent drafts */}
             {recentDrafts.length > 0 && (
-              <div className="rounded-[2rem] border border-white/5 bg-surface/50 p-8">
-                <h2 className="text-3xl font-black text-white">Recent drafts</h2>
-                <div className="mt-6 space-y-3">
-                  {recentDrafts.map((draft, index) => (
-                    <button key={`${draft.name}-${index}`} onClick={() => loadDraft(draft)} className="block w-full rounded-[1.5rem] border border-white/5 bg-black/20 p-4 text-left transition hover:border-primary/20">
-                      <div className="flex items-center justify-between gap-3">
-                        <div>
-                          <p className="font-black text-white">{draft.name}</p>
-                          <p className="mt-1 text-xs uppercase tracking-[0.2em] text-gray-500">{draft.version} · {draft.loader}</p>
-                        </div>
-                        <span className="text-xs font-black uppercase tracking-[0.2em] text-primary">Load</span>
+              <div className="rounded-2xl border border-white/6 bg-[#0f0f0f] p-5">
+                <h2 className="mb-3 text-sm font-bold text-white">Recent Drafts</h2>
+                <div className="flex flex-col gap-1.5">
+                  {recentDrafts.map((draft, i) => (
+                    <button
+                      key={`${draft.name}-${i}`}
+                      onClick={() => setPack({ name: draft.name || emptyPack.name, version: draft.version || emptyPack.version, loader: draft.loader || emptyPack.loader, mods: draft.mods || [], resourcePacks: draft.resourcePacks || [], shaders: draft.shaders || [] })}
+                      className="flex items-center justify-between rounded-xl border border-white/5 bg-white/[0.02] px-3.5 py-2.5 text-left transition-colors hover:border-white/10"
+                    >
+                      <div>
+                        <p className="text-sm font-semibold text-white">{draft.name}</p>
+                        <p className="text-xs text-white/25">{draft.version} · {draft.loader}</p>
                       </div>
+                      <span className="text-xs font-semibold text-primary/60">Load →</span>
                     </button>
                   ))}
                 </div>
               </div>
             )}
           </div>
-        </section>
+        </div>
       </main>
     </PageShell>
   )

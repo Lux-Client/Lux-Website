@@ -6,10 +6,14 @@
     "scripts": {
         "start": "node server.js",
         "dev": "node devserver.js",
+        "dev:full": "concurrently -k -n \"Backend,Frontend\" -c \"cyan,green\" \"node devserver.js\" \"cd client && npm run dev\"",
         "client:dev": "cd client && npm run dev",
         "client:build": "cd client && npm run build",
         "db:init": "node db_init.js",
         "db:migrate:maria-to-pg": "node migrate-mariadb-to-postgres.js"
+    },
+    "devDependencies": {
+        "concurrently": "^9.0.0"
     },
     "dependencies": {
         "body-parser": "^1.20.2",

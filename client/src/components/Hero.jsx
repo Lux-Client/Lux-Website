@@ -1,188 +1,285 @@
-import { useEffect, useRef, useState } from 'react'
-import { Canvas } from '@react-three/fiber'
-import { gsap } from 'gsap'
-import FloatingCrystal from './FloatingCrystal'
-import Spotlight from './ui/Spotlight'
+import { useEffect, useState } from 'react'
+import { motion } from 'framer-motion'
+import { Download, Github, ArrowRight, Zap } from 'lucide-react'
+
+const REPO = 'Lux-Client/Lux-Client'
+
+function LauncherMockup() {
+  const sidebarItems = [
+    { label: 'Home', active: true },
+    { label: 'Library' },
+    { label: 'Search' },
+    { label: 'Skins' },
+    { label: 'Extensions' },
+  ]
+
+  const instances = [
+    { name: 'Survival World', version: '1.21.1', loader: 'Fabric', color: '#22c55e' },
+    { name: 'Modded 1.20', version: '1.20.4', loader: 'Forge', color: '#e27602' },
+    { name: 'Creative Build', version: '1.21.3', loader: 'Vanilla', color: '#3b82f6' },
+    { name: 'Speedrun SMP', version: '1.8.9', loader: 'Vanilla', color: '#a855f7' },
+  ]
+
+  return (
+    <div className="relative w-full select-none overflow-hidden rounded-2xl border border-white/10 bg-[#0e0e0e] shadow-[0_40px_120px_rgba(0,0,0,0.8),0_0_0_1px_rgba(255,255,255,0.05)]">
+      {/* Title bar */}
+      <div className="flex h-10 items-center justify-between border-b border-white/5 bg-[#0a0a0a] px-4">
+        <div className="flex items-center gap-2">
+          <div className="h-2.5 w-2.5 rounded-full bg-[#ff5f57]" />
+          <div className="h-2.5 w-2.5 rounded-full bg-[#febc2e]" />
+          <div className="h-2.5 w-2.5 rounded-full bg-[#28c840]" />
+        </div>
+        <div className="flex items-center gap-1 rounded-md bg-white/4 px-3 py-0.5 text-[10px] font-semibold text-white/30">
+          <span>Launcher</span>
+          <span className="opacity-40">·</span>
+          <span>Server</span>
+          <span className="opacity-40">·</span>
+          <span>Client</span>
+          <span className="opacity-40">·</span>
+          <span>Tools</span>
+        </div>
+        <div className="w-14" />
+      </div>
+
+      <div className="flex">
+        {/* Sidebar */}
+        <div className="flex w-11 flex-col items-center gap-1 border-r border-white/5 bg-[#0a0a0a] py-3">
+          {sidebarItems.map(item => (
+            <div
+              key={item.label}
+              className={`flex h-9 w-9 items-center justify-center rounded-xl transition-colors ${
+                item.active ? 'bg-primary/15 text-primary' : 'text-white/20 hover:text-white/40'
+              }`}
+            >
+              <div className={`h-3.5 w-3.5 rounded-sm ${item.active ? 'bg-primary/60' : 'bg-white/15'}`} />
+            </div>
+          ))}
+          <div className="mt-auto mb-1 flex h-9 w-9 items-center justify-center rounded-xl text-white/20">
+            <div className="h-3.5 w-3.5 rounded-sm bg-white/10" />
+          </div>
+        </div>
+
+        {/* Main content */}
+        <div className="flex-1 p-4">
+          {/* Header bar */}
+          <div className="mb-4 flex items-center justify-between">
+            <div>
+              <div className="h-2.5 w-24 rounded-full bg-white/10" />
+              <div className="mt-1.5 h-2 w-16 rounded-full bg-white/5" />
+            </div>
+            <div className="h-7 w-20 rounded-lg bg-primary/20 border border-primary/20">
+              <div className="flex h-full items-center justify-center gap-1">
+                <div className="h-1.5 w-1.5 rounded-full bg-primary/60" />
+                <div className="h-1.5 w-10 rounded-full bg-primary/30" />
+              </div>
+            </div>
+          </div>
+
+          {/* Instance grid */}
+          <div className="grid grid-cols-2 gap-2.5">
+            {instances.map((inst, i) => (
+              <motion.div
+                key={inst.name}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.7 + i * 0.08, duration: 0.4, ease: 'easeOut' }}
+                className="group relative overflow-hidden rounded-xl border border-white/6 bg-white/[0.03] p-3"
+              >
+                {/* Icon area */}
+                <div
+                  className="mb-2.5 flex h-10 w-10 items-center justify-center rounded-xl"
+                  style={{ backgroundColor: inst.color + '18', borderColor: inst.color + '25', border: '1px solid' }}
+                >
+                  <div className="h-5 w-5 rounded-md" style={{ backgroundColor: inst.color + '50' }} />
+                </div>
+                {/* Text */}
+                <div className="h-2 w-20 rounded-full bg-white/20 mb-1.5" />
+                <div className="flex items-center gap-1.5">
+                  <div className="h-1.5 w-10 rounded-full bg-white/8" />
+                  <span className="text-[9px] font-bold rounded-full px-1.5 py-0.5" style={{ backgroundColor: inst.color + '18', color: inst.color + 'cc' }}>
+                    {inst.loader}
+                  </span>
+                </div>
+                {/* Play button hover */}
+                <div className="absolute bottom-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <div className="flex h-6 w-6 items-center justify-center rounded-full" style={{ backgroundColor: inst.color + '22' }}>
+                    <div className="ml-0.5 h-0 w-0 border-y-[4px] border-l-[7px] border-y-transparent" style={{ borderLeftColor: inst.color }} />
+                  </div>
+                </div>
+              </motion.div>
+            ))}
+          </div>
+
+          {/* Bottom bar */}
+          <div className="mt-3 flex items-center justify-between rounded-xl border border-white/5 bg-white/[0.02] px-3 py-2">
+            <div className="flex items-center gap-2">
+              <div className="h-2 w-2 rounded-full bg-emerald-500/60 shadow-[0_0_6px_rgba(16,185,129,0.5)]" />
+              <div className="h-1.5 w-20 rounded-full bg-white/10" />
+            </div>
+            <div className="h-1.5 w-12 rounded-full bg-white/6" />
+          </div>
+        </div>
+      </div>
+
+      {/* Glow overlay */}
+      <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-primary/3 via-transparent to-transparent" />
+    </div>
+  )
+}
+
+const container = {
+  hidden: {},
+  show: { transition: { staggerChildren: 0.07, delayChildren: 0.2 } },
+}
+const item = {
+  hidden: { opacity: 0, y: 20 },
+  show:   { opacity: 1, y: 0, transition: { duration: 0.55, ease: [0.22, 1, 0.36, 1] } },
+}
 
 export default function Hero({ onDownload }) {
-  const containerRef = useRef()
-  const [version, setVersion] = useState('loading...')
+  const [version, setVersion] = useState(null)
 
   useEffect(() => {
-    fetch('https://api.github.com/repos/Lux-Client/Lux-Client/releases/latest')
+    fetch(`https://api.github.com/repos/${REPO}/releases/latest`)
       .then(r => r.ok ? r.json() : null)
       .then(data => {
         if (data?.tag_name) {
           const v = data.tag_name.startsWith('v') ? data.tag_name : `v${data.tag_name}`
           setVersion(v)
-        } else {
-          setVersion('v1.3.3')
         }
       })
-      .catch(() => setVersion('v1.3.3'))
-  }, [])
-
-  useEffect(() => {
-    const ctx = gsap.context(() => {
-      const tl = gsap.timeline({ delay: 0.6 })
-
-      tl.from('.hero-badge', {
-        opacity: 0, y: -40, scale: 0.8,
-        duration: 0.7, ease: 'back.out(1.7)',
-      })
-      .from('.hero-title-word', {
-        opacity: 0, y: 80, rotateX: 45,
-        stagger: 0.08, duration: 0.8,
-        ease: 'power3.out',
-      }, '-=0.2')
-      .from('.hero-desc', {
-        opacity: 0, y: 40,
-        duration: 0.7, ease: 'power3.out',
-      }, '-=0.3')
-      .from('.hero-btn', {
-        opacity: 0, y: 30, scale: 0.9,
-        stagger: 0.12, duration: 0.6,
-        ease: 'back.out(1.7)',
-      }, '-=0.3')
-      .from('.hero-platform', {
-        opacity: 0, x: -20,
-        stagger: 0.1, duration: 0.5,
-        ease: 'power2.out',
-      }, '-=0.3')
-    }, containerRef)
-
-    return () => ctx.revert()
+      .catch(() => {})
   }, [])
 
   return (
-    <section
-      ref={containerRef}
-      id="home"
-      className="relative min-h-screen flex items-center overflow-hidden"
-      style={{ background: 'linear-gradient(135deg, #060608 0%, #0a0608 50%, #060608 100%)' }}
-    >
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_50%_at_50%_-20%,rgba(226,118,2,0.08),transparent)]" />
-      <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-primary/4 rounded-full blur-[120px] animate-pulse" />
-      <div className="absolute bottom-1/4 right-1/4 w-80 h-80 bg-purple-900/8 rounded-full blur-[120px] animate-pulse" style={{ animationDelay: '2s' }} />
+    <section id="home" className="relative flex min-h-screen items-center overflow-hidden pt-16">
+      {/* Background layers */}
+      <div className="absolute inset-0 bg-[#070707]" />
+      <div className="absolute inset-0 bg-grid opacity-100" />
+      <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-[#080808]" />
 
-      <Spotlight />
+      {/* Glow orbs */}
+      <div className="absolute left-1/4 top-1/4 h-[500px] w-[500px] rounded-full bg-primary/5 blur-[120px]" />
+      <div className="absolute right-1/3 bottom-1/3 h-[300px] w-[300px] rounded-full bg-orange-900/8 blur-[100px]" />
 
-      <div className="relative z-10 max-w-7xl mx-auto px-6 lg:px-12 w-full grid lg:grid-cols-[1fr_1fr] gap-8 items-center pt-24 pb-16 min-h-screen">
-        <div className="flex flex-col items-start">
-          <div className="hero-badge inline-flex items-center gap-2.5 px-4 py-2 rounded-full bg-white/5 border border-primary/30 text-primary text-xs font-bold uppercase tracking-widest mb-10">
-            <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75" />
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-primary" />
-            </span>
-            {version} is live
-          </div>
-
-          <h1 className="text-[clamp(3rem,7vw,7rem)] font-black uppercase leading-none tracking-tight mb-8" style={{ perspective: '1000px' }}>
-            {['USER-FRIENDLY'].map((word, i) => (
-              <span key={i} className="hero-title-word block text-white drop-shadow-2xl">
-                {word}
-              </span>
-            ))}
-            {['NOW MORE', 'THAN EVER', 'BEFORE'].map((word, i) => (
-              <span
-                key={i}
-                className="hero-title-word block text-gradient italic"
-                style={{ textShadow: '0 0 60px rgba(226,118,2,0.3)' }}
-              >
-                {word}
-              </span>
-            ))}
-          </h1>
-
-          <p className="hero-desc text-gray-400 text-lg md:text-xl max-w-md mb-12 leading-relaxed font-light">
-            Experience Minecraft like never before. High performance, premium UI, and seamless instance management built for enthusiasts.
-          </p>
-
-          <div className="flex flex-wrap gap-4 mb-14">
-            <div className="hero-btn relative group">
-              <div className="absolute -inset-[1.5px] rounded-2xl overflow-hidden">
-                <div
-                  className="absolute inset-0"
-                  style={{
-                    background: 'conic-gradient(from 0deg, transparent 50%, #e27602 100%)',
-                    animation: 'spin 3s linear infinite',
-                  }}
-                />
+      <div className="relative z-10 mx-auto w-full max-w-7xl px-5 pb-20 pt-16 lg:px-10">
+        <div className="grid items-center gap-12 lg:grid-cols-2 lg:gap-16">
+          {/* Left – text content */}
+          <motion.div
+            variants={container}
+            initial="hidden"
+            animate="show"
+            className="flex flex-col"
+          >
+            {/* Version badge */}
+            <motion.div variants={item} className="mb-8 flex items-center gap-3">
+              <div className="inline-flex items-center gap-2 rounded-full border border-primary/25 bg-primary/8 px-3.5 py-1.5">
+                <span className="relative flex h-1.5 w-1.5">
+                  <span className="animate-ping-slow absolute inline-flex h-full w-full rounded-full bg-primary opacity-75" />
+                  <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-primary" />
+                </span>
+                <span className="text-xs font-bold uppercase tracking-[0.15em] text-primary">
+                  {version ? `${version} is live` : 'Now available'}
+                </span>
               </div>
+              {version && (
+                <a
+                  href={`https://github.com/${REPO}/releases/latest`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="group flex items-center gap-1 text-xs font-medium text-white/30 transition-colors hover:text-white/60"
+                >
+                  See what's new
+                  <ArrowRight className="h-3 w-3 transition-transform group-hover:translate-x-0.5" />
+                </a>
+              )}
+            </motion.div>
+
+            {/* Headline */}
+            <motion.h1
+              variants={item}
+              className="mb-6 text-[clamp(2.8rem,5.5vw,5.5rem)] font-black leading-[0.95] tracking-tight"
+            >
+              <span className="block text-white">The Minecraft</span>
+              <span className="block text-gradient-static">Launcher You</span>
+              <span className="block text-white">Deserve.</span>
+            </motion.h1>
+
+            {/* Subtitle */}
+            <motion.p variants={item} className="mb-10 max-w-md text-lg leading-relaxed text-white/45 font-light">
+              High-performance, premium UI, seamless instance management —
+              built for enthusiasts who care about every detail.
+            </motion.p>
+
+            {/* CTAs */}
+            <motion.div variants={item} className="mb-10 flex flex-wrap items-center gap-3">
               <button
                 onClick={onDownload}
-                className="relative bg-primary hover:bg-primary-dark text-black px-10 py-4 rounded-2xl font-black text-base transition-all shadow-primary-glow group-hover:shadow-primary-glow-lg active:scale-95 flex items-center gap-3"
+                className="shine group relative flex items-center gap-2.5 overflow-hidden rounded-xl bg-primary px-7 py-3.5 text-sm font-bold text-black shadow-glow-sm transition-all hover:bg-primary-light hover:shadow-glow active:scale-[0.97]"
               >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                </svg>
-                Download Launcher
+                <Download className="h-4 w-4" />
+                Download Free
               </button>
-            </div>
 
-            <a
-              href="https://github.com/Lux-Client/Lux-Client"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="hero-btn relative bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/20 text-white px-10 py-4 rounded-2xl font-bold text-base transition-all backdrop-blur-sm flex items-center gap-3 group"
-            >
-              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z" />
-              </svg>
-              View Source
-            </a>
-          </div>
+              <a
+                href={`https://github.com/${REPO}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="group flex items-center gap-2.5 rounded-xl border border-white/8 bg-white/4 px-7 py-3.5 text-sm font-semibold text-white/70 transition-all hover:bg-white/8 hover:text-white hover:border-white/14 active:scale-[0.97]"
+              >
+                <Github className="h-4 w-4" />
+                View on GitHub
+              </a>
+            </motion.div>
 
-          <div className="flex flex-wrap gap-6 opacity-40">
-            {[
-              { icon: 'windows', label: 'Windows' },
-              { icon: 'linux', label: 'Linux' },
-              { icon: 'apple', label: 'macOS' },
-            ].map(({ icon, label }) => (
-              <div key={label} className="hero-platform flex items-center gap-2">
-                {icon === 'windows' && (
-                  <svg className="w-5 h-5 text-primary" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M0 3.449L9.75 2.1V11.7H0V3.449zm0 9.151h9.75v9.6L0 20.551V12.6zm10.55 0h13.45v10.8L10.55 21.3v-8.7zm0-10.5L24 0v11.7H10.55V2.1z" />
-                  </svg>
-                )}
-                {icon === 'linux' && (
-                  <svg className="w-5 h-5 text-primary" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M12.504 0c-.155 0-.315.008-.48.021C7.576.336 3.746 3.956 3.132 8.741c-.024.191-.035.383-.035.576 0 3.288 2.027 6.215 5.154 7.554.082.034.165.068.248.1-.005.063-.01.126-.01.19 0 1.015.804 1.845 1.794 1.845.992 0 1.795-.83 1.795-1.845 0-.064-.005-.127-.01-.19l.028-.012c3.127-1.34 5.154-4.267 5.154-7.555 0-.19-.011-.382-.035-.573-.614-4.785-4.444-8.405-9.712-8.72A8.28 8.28 0 0012.504 0zm-3.19 17.77c0-.65.526-1.176 1.176-1.176.649 0 1.176.526 1.176 1.176 0 .65-.527 1.176-1.176 1.176-.65 0-1.176-.526-1.176-1.176zM8.24 11.47c-.67 0-1.212-.544-1.212-1.215s.542-1.215 1.212-1.215c.671 0 1.213.544 1.213 1.215s-.542 1.215-1.213 1.215zm7.52 0c-.67 0-1.212-.544-1.212-1.215s.542-1.215 1.212-1.215c.671 0 1.213.544 1.213 1.215s-.542 1.215-1.213 1.215z"/>
-                  </svg>
-                )}
-                {icon === 'apple' && (
-                  <svg className="w-5 h-5 text-primary" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M12.152 6.896c-.948 0-2.415-1.078-3.96-1.04-2.04.027-3.91 1.183-4.961 3.014-2.117 3.675-.546 9.103 1.519 12.09 1.013 1.454 2.208 3.09 3.792 3.039 1.52-.065 2.09-.987 3.935-.987 1.831 0 2.35.987 3.96.948 1.637-.026 2.676-1.48 3.676-2.948 1.156-1.688 1.636-3.325 1.662-3.415-.039-.013-3.182-1.221-3.22-4.857-.026-3.04 2.48-4.494 2.597-4.559-1.429-2.09-3.623-2.324-4.39-2.376-2-.156-3.675 1.09-4.61 1.09zM15.53 3.83c.843-1.012 1.4-2.427 1.245-3.83-1.207.052-2.662.805-3.532 1.818-.78.896-1.454 2.338-1.273 3.714 1.338.104 2.715-.688 3.559-1.701z"/>
-                  </svg>
-                )}
-                <span className="font-bold text-sm uppercase tracking-widest text-white">{label}</span>
+            {/* Platform + quick stats */}
+            <motion.div variants={item} className="flex flex-col gap-4">
+              <div className="flex items-center gap-6">
+                {[
+                  { label: 'Windows' },
+                  { label: 'Linux' },
+                  { label: 'macOS' },
+                ].map(({ label }) => (
+                  <div key={label} className="flex items-center gap-1.5 text-white/25">
+                    <div className="h-1.5 w-1.5 rounded-full bg-white/20" />
+                    <span className="text-xs font-semibold uppercase tracking-[0.1em]">{label}</span>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
-        </div>
+              <div className="flex items-center gap-5 text-xs text-white/20">
+                <span className="flex items-center gap-1.5">
+                  <Zap className="h-3 w-3 text-primary/50" />
+                  Free &amp; open source
+                </span>
+                <span>·</span>
+                <span>Modrinth integration</span>
+                <span>·</span>
+                <span>Plugin ecosystem</span>
+              </div>
+            </motion.div>
+          </motion.div>
 
-        <div className="relative h-[400px] lg:h-[600px] hidden lg:block">
-          <div className="absolute inset-0 bg-[radial-gradient(ellipse_60%_60%_at_50%_50%,rgba(226,118,2,0.08),transparent)]" />
-          <Canvas
-            camera={{ position: [0, 0, 5.5], fov: 50 }}
-            style={{ background: 'transparent' }}
-            gl={{ alpha: true, antialias: true }}
+          {/* Right – launcher mockup */}
+          <motion.div
+            initial={{ opacity: 0, x: 40, scale: 0.96 }}
+            animate={{ opacity: 1, x: 0, scale: 1 }}
+            transition={{ duration: 0.7, delay: 0.35, ease: [0.22, 1, 0.36, 1] }}
+            className="hidden lg:block"
           >
-            <FloatingCrystal />
-          </Canvas>
+            <div className="relative">
+              {/* Ambient glow behind mockup */}
+              <div className="absolute -inset-6 rounded-3xl bg-gradient-to-br from-primary/10 via-transparent to-transparent blur-2xl" />
+              <LauncherMockup />
+            </div>
+          </motion.div>
         </div>
       </div>
 
-      <div className="absolute bottom-8 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 opacity-30">
-        <span className="text-xs uppercase tracking-widest text-gray-400 font-semibold">Scroll</span>
-        <div className="w-[1px] h-12 bg-gradient-to-b from-primary to-transparent" />
+      {/* Scroll indicator */}
+      <div className="absolute bottom-8 left-1/2 flex -translate-x-1/2 flex-col items-center gap-2 opacity-20">
+        <div className="h-10 w-px bg-gradient-to-b from-primary/80 to-transparent" />
+        <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/60">Scroll</span>
       </div>
-
-      <style>{`
-        @keyframes spin {
-          to { transform: rotate(360deg); }
-        }
-      `}</style>
     </section>
   )
 }

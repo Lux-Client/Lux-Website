@@ -1,0 +1,30 @@
+[
+  {
+    "id": 1,
+    "name": "Example Extension",
+    "identifier": "example.extension",
+    "summary": "A sample extension",
+    "description": "This is a dev placeholder.",
+    "type": "extension",
+    "status": "approved",
+    "developer": "DevAdmin",
+    "downloads": 42,
+    "banner_path": null,
+    "file_path": null,
+    "created_at": "2026-06-04T22:08:33.907Z"
+  },
+  {
+    "id": 2,
+    "name": "Dark Theme Pro",
+    "identifier": "theme.dark-pro",
+    "summary": "Premium dark theme",
+    "description": "Dark theme for Lux Client.",
+    "type": "theme",
+    "status": "pending",
+    "developer": "TestUser",
+    "downloads": 0,
+    "banner_path": null,
+    "file_path": null,
+    "created_at": "2026-06-04T22:08:33.907Z"
+  }
+]

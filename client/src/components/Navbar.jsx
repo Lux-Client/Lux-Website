@@ -1,144 +1,224 @@
-import { useEffect, useRef, useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Link, useLocation } from 'react-router-dom'
-import { gsap } from 'gsap'
+import { motion, AnimatePresence } from 'framer-motion'
+import { Github, Download, X, Menu, ChevronRight } from 'lucide-react'
 import useAuth, { fixPath } from '../hooks/useAuth'
 
-const links = [
+const NAV_LINKS = [
   { to: '/#features', label: 'Features' },
-  { href: 'https://pluginhub.de/discord.html', label: 'Support', external: true },
-  { to: '/docs', label: 'Docs' },
   { to: '/extensions', label: 'Extensions' },
+  { to: '/docs', label: 'Docs' },
   { to: '/modpack', label: 'Modpack' },
-  { href: 'https://github.com/Lux-Client/Lux-Client', label: 'GitHub', external: true },
+  { href: 'https://pluginhub.de/discord.html', label: 'Support', external: true },
 ]
 
 export default function Navbar({ onDownload }) {
-  const navRef = useRef()
   const location = useLocation()
   const auth = useAuth()
   const [scrolled, setScrolled] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
 
   useEffect(() => {
-    gsap.from(navRef.current, {
-      y: -100,
-      opacity: 0,
-      duration: 1,
-      ease: 'power3.out',
-      delay: 0.1,
-    })
-
-    const onScroll = () => setScrolled(window.scrollY > 20)
-    window.addEventListener('scroll', onScroll)
+    const onScroll = () => setScrolled(window.scrollY > 24)
+    window.addEventListener('scroll', onScroll, { passive: true })
     return () => window.removeEventListener('scroll', onScroll)
   }, [])
 
-  useEffect(() => {
-    setMobileOpen(false)
-  }, [location.pathname, location.search, location.hash])
+  useEffect(() => { setMobileOpen(false) }, [location.pathname])
 
-  const renderLink = (item, mobile = false) => {
-    const classes = mobile
-      ? 'block w-full rounded-xl py-2.5 transition-all hover:bg-white/5 hover:text-primary'
-      : 'group relative transition-colors duration-200 hover:text-primary'
-
+  const NavLink = ({ item }) => {
     if (item.external) {
       return (
-        <a key={item.label} href={item.href} target="_blank" rel="noopener noreferrer" className={classes}>
+        <a
+          href={item.href}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="relative text-sm font-medium text-white/50 transition-colors hover:text-white group"
+        >
           {item.label}
-          {!mobile && <span className="absolute -bottom-1 left-0 h-[2px] w-0 bg-primary transition-all duration-300 group-hover:w-full" />}
+          <span className="absolute -bottom-0.5 left-0 h-px w-0 bg-primary transition-all duration-300 group-hover:w-full" />
         </a>
       )
     }
-
+    const active = location.pathname === item.to || (item.to?.startsWith('/#') && location.pathname === '/')
     return (
-      <Link key={item.label} to={item.to} className={classes}>
+      <Link
+        to={item.to}
+        className={`relative text-sm font-medium transition-colors group ${active ? 'text-white' : 'text-white/50 hover:text-white'}`}
+      >
         {item.label}
-        {!mobile && <span className="absolute -bottom-1 left-0 h-[2px] w-0 bg-primary transition-all duration-300 group-hover:w-full" />}
+        <span className={`absolute -bottom-0.5 left-0 h-px bg-primary transition-all duration-300 ${active ? 'w-full' : 'w-0 group-hover:w-full'}`} />
       </Link>
     )
   }
 
   return (
-    <nav
-      ref={navRef}
-      className={`fixed left-0 right-0 top-0 z-[100] transition-all duration-500 ${
-        scrolled
-          ? 'border-b border-white/10 bg-background/90 shadow-2xl shadow-black/50 backdrop-blur-2xl'
-          : 'bg-transparent'
-      }`}
-    >
-      <div className="mx-auto max-w-7xl px-6 lg:px-12">
-        <div className="flex h-20 items-center justify-between gap-4">
-          <Link to="/" className="group flex shrink-0 items-center gap-3">
-            <div className="relative">
-              <img src="/resources/lux_icon.png?v=3" alt="Lux Client" className="h-9 w-9 object-contain transition-transform duration-300 group-hover:scale-110" />
+    <>
+      <motion.nav
+        initial={{ y: -20, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+        className={`fixed left-0 right-0 top-0 z-[100] transition-all duration-500 ${
+          scrolled
+            ? 'border-b border-white/6 bg-background/85 backdrop-blur-2xl shadow-[0_1px_0_rgba(255,255,255,0.04)]'
+            : 'bg-transparent'
+        }`}
+      >
+        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-5 lg:px-10">
+          {/* Logo */}
+          <Link to="/" className="group flex shrink-0 items-center gap-2.5">
+            <div className="relative flex h-8 w-8 items-center justify-center">
+              <img
+                src="/resources/lux_icon.png?v=3"
+                alt="Lux Client"
+                className="h-full w-full object-contain transition-transform duration-300 group-hover:scale-110"
+              />
               <div className="absolute inset-0 rounded-full bg-primary/20 opacity-0 blur-md transition-opacity group-hover:opacity-100" />
             </div>
-            <span className="hidden text-2xl font-extrabold tracking-tight text-white sm:inline">
+            <span className="text-[15px] font-extrabold tracking-tight text-white">
               Lux <span className="text-primary">Client</span>
             </span>
           </Link>
 
-          <div className="hidden items-center gap-8 text-sm font-semibold uppercase tracking-wide text-gray-400 md:flex">
-            {links.map((item) => renderLink(item))}
+          {/* Desktop nav */}
+          <div className="hidden items-center gap-7 md:flex">
+            {NAV_LINKS.map(item => <NavLink key={item.label} item={item} />)}
           </div>
 
-          <div className="hidden items-center gap-3 md:flex">
+          {/* Desktop actions */}
+          <div className="hidden items-center gap-2 md:flex">
+            <a
+              href="https://github.com/Lux-Client/Lux-Client"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex h-9 w-9 items-center justify-center rounded-lg text-white/40 transition-colors hover:bg-white/6 hover:text-white"
+              aria-label="GitHub"
+            >
+              <Github className="h-4 w-4" />
+            </a>
+
             {auth.loggedIn ? (
-              <div className="flex items-center gap-3 border-l border-white/10 pl-4">
-                <Link to="/dashboard" className="flex items-center gap-2 text-sm font-semibold text-gray-300 transition-colors hover:text-white">
-                  <img src={fixPath(auth.user?.avatar || auth.user?.avatar_url)} alt="" className="h-8 w-8 rounded-full border border-primary/30 object-cover" />
-                  <span>{auth.user?.username}</span>
+              <div className="flex items-center gap-2 border-l border-white/8 pl-3">
+                <Link to="/dashboard" className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm font-medium text-white/70 transition-colors hover:bg-white/6 hover:text-white">
+                  <img
+                    src={fixPath(auth.user?.avatar || auth.user?.avatar_url)}
+                    alt=""
+                    className="h-6 w-6 rounded-full border border-primary/30 object-cover"
+                  />
+                  <span className="max-w-[80px] truncate">{auth.user?.username}</span>
                 </Link>
-                <Link to="/profile" className="rounded-lg px-3 py-1.5 text-xs font-bold text-gray-400 transition-colors hover:bg-white/5 hover:text-white">
-                  Profile
-                </Link>
-                <a href={auth.logoutUrl} className="text-xs font-medium text-gray-500 transition-colors hover:text-red-400">
+                <a href={auth.logoutUrl} className="rounded-lg px-2 py-1.5 text-xs text-white/30 transition-colors hover:text-red-400">
                   Logout
                 </a>
               </div>
             ) : (
-              <a href={auth.loginUrl} className="rounded-lg px-3 py-1.5 text-sm font-semibold text-gray-400 transition-colors hover:bg-white/5 hover:text-white">
-                Login
+              <a href={auth.loginUrl} className="rounded-lg px-3 py-1.5 text-sm font-medium text-white/40 transition-colors hover:bg-white/6 hover:text-white">
+                Sign in
               </a>
             )}
+
             <button
               onClick={onDownload}
-              className="group relative overflow-hidden whitespace-nowrap rounded-xl bg-primary px-5 py-2.5 text-sm font-bold text-black shadow-primary-glow transition-all hover:scale-105 hover:bg-primary-dark hover:shadow-primary-glow-lg active:scale-95"
+              className="shine relative ml-1 flex h-9 items-center gap-2 overflow-hidden rounded-lg bg-primary px-4 text-sm font-bold text-black shadow-glow-sm transition-all hover:bg-primary-light hover:shadow-glow active:scale-95"
             >
-              <span className="relative z-10">Download</span>
-              <div className="absolute inset-0 -translate-x-[100%] skew-x-12 bg-white/20 transition-transform duration-500 group-hover:translate-x-[100%]" />
+              <Download className="h-3.5 w-3.5" />
+              Download
             </button>
           </div>
 
-          <button className="p-2 text-gray-300 transition-colors hover:text-primary md:hidden" onClick={() => setMobileOpen((value) => !value)} aria-label="Toggle menu">
-            <div className="flex h-5 w-6 flex-col justify-between">
-              <span className={`h-0.5 bg-current transition-all duration-300 ${mobileOpen ? 'translate-y-2 rotate-45' : ''}`} />
-              <span className={`h-0.5 bg-current transition-all duration-300 ${mobileOpen ? 'opacity-0' : ''}`} />
-              <span className={`h-0.5 bg-current transition-all duration-300 ${mobileOpen ? '-translate-y-2 -rotate-45' : ''}`} />
-            </div>
+          {/* Mobile hamburger */}
+          <button
+            onClick={() => setMobileOpen(v => !v)}
+            className="flex h-9 w-9 items-center justify-center rounded-lg text-white/60 transition-colors hover:bg-white/6 hover:text-white md:hidden"
+            aria-label="Toggle menu"
+          >
+            {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
           </button>
         </div>
-      </div>
+      </motion.nav>
 
-      <div className={`overflow-hidden border-b border-white/5 bg-surface/95 backdrop-blur-xl transition-all duration-300 md:hidden ${mobileOpen ? 'max-h-screen opacity-100' : 'max-h-0 opacity-0'}`}>
-        <div className="flex flex-col items-center space-y-3 px-6 py-6 text-center font-semibold uppercase tracking-wide text-gray-300">
-          {links.map((item) => renderLink(item, true))}
-          {auth.loggedIn ? (
-            <>
-              <Link to="/dashboard" className="block w-full rounded-xl py-2.5 transition-all hover:bg-white/5 hover:text-primary">Dashboard</Link>
-              <Link to="/profile" className="block w-full rounded-xl py-2.5 transition-all hover:bg-white/5 hover:text-primary">Profile</Link>
-              <a href={auth.logoutUrl} className="block w-full rounded-xl py-2.5 transition-all hover:bg-white/5 hover:text-primary">Logout</a>
-            </>
-          ) : (
-            <a href={auth.loginUrl} className="block w-full rounded-xl py-2.5 transition-all hover:bg-white/5 hover:text-primary">Sign in</a>
-          )}
-          <button onClick={onDownload} className="mt-4 block w-full rounded-2xl bg-primary py-4 font-black text-black shadow-primary-glow transition-all hover:bg-primary-dark active:scale-95">
-            Download Now
-          </button>
-        </div>
-      </div>
-    </nav>
+      {/* Mobile drawer */}
+      <AnimatePresence>
+        {mobileOpen && (
+          <>
+            <motion.div
+              key="backdrop"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-[90] bg-black/60 backdrop-blur-sm md:hidden"
+              onClick={() => setMobileOpen(false)}
+            />
+            <motion.div
+              key="drawer"
+              initial={{ x: '100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '100%' }}
+              transition={{ type: 'spring', damping: 28, stiffness: 280 }}
+              className="fixed right-0 top-0 z-[95] flex h-full w-72 flex-col border-l border-white/8 bg-[#0c0c0c] px-5 py-6 md:hidden"
+            >
+              <div className="mb-8 flex items-center justify-between">
+                <span className="text-sm font-bold text-white/30 uppercase tracking-widest">Menu</span>
+                <button
+                  onClick={() => setMobileOpen(false)}
+                  className="flex h-8 w-8 items-center justify-center rounded-lg text-white/40 hover:bg-white/6 hover:text-white"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+
+              <div className="flex flex-col gap-1">
+                {NAV_LINKS.map(item => (
+                  item.external ? (
+                    <a
+                      key={item.label}
+                      href={item.href}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center justify-between rounded-xl px-3 py-3 text-sm font-semibold text-white/60 transition-colors hover:bg-white/5 hover:text-white"
+                    >
+                      {item.label}
+                      <ChevronRight className="h-3.5 w-3.5 opacity-40" />
+                    </a>
+                  ) : (
+                    <Link
+                      key={item.label}
+                      to={item.to}
+                      className="flex items-center justify-between rounded-xl px-3 py-3 text-sm font-semibold text-white/60 transition-colors hover:bg-white/5 hover:text-white"
+                    >
+                      {item.label}
+                      <ChevronRight className="h-3.5 w-3.5 opacity-40" />
+                    </Link>
+                  )
+                ))}
+              </div>
+
+              <div className="mt-auto flex flex-col gap-3 border-t border-white/6 pt-6">
+                {auth.loggedIn ? (
+                  <>
+                    <Link to="/dashboard" className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold text-white/70 hover:bg-white/5 hover:text-white">
+                      <img src={fixPath(auth.user?.avatar || auth.user?.avatar_url)} alt="" className="h-7 w-7 rounded-full border border-primary/30" />
+                      {auth.user?.username}
+                    </Link>
+                    <a href={auth.logoutUrl} className="rounded-xl px-3 py-2.5 text-sm font-medium text-red-400/60 hover:bg-white/5 hover:text-red-400">Logout</a>
+                  </>
+                ) : (
+                  <a href={auth.loginUrl} className="rounded-xl border border-white/8 px-3 py-3 text-center text-sm font-semibold text-white/60 hover:bg-white/5 hover:text-white">
+                    Sign in
+                  </a>
+                )}
+                <button
+                  onClick={() => { setMobileOpen(false); onDownload() }}
+                  className="flex items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-bold text-black shadow-glow-sm hover:bg-primary-light"
+                >
+                  <Download className="h-4 w-4" />
+                  Download Launcher
+                </button>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+    </>
   )
 }

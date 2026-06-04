@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { ChevronLeft, Hash } from 'lucide-react'
 import PageShell from './PageShell'
 import MarkdownContent from './MarkdownContent'
 
@@ -7,50 +8,57 @@ export default function DocsArticleLayout({ title, description, sections, sideba
   const [activeSection, setActiveSection] = useState(sections[0]?.id)
 
   useEffect(() => {
-    const getDocumentTop = (el) => el.getBoundingClientRect().top + window.scrollY
-
+    const getTop = el => el.getBoundingClientRect().top + window.scrollY
     const onScroll = () => {
       let current = sections[0]?.id
-      sections.forEach((section) => {
-        const element = document.getElementById(section.id)
-        if (element && window.scrollY >= getDocumentTop(element) - 150) {
-          current = section.id
-        }
+      sections.forEach(s => {
+        const el = document.getElementById(s.id)
+        if (el && window.scrollY >= getTop(el) - 150) current = s.id
       })
       setActiveSection(current)
     }
-
     onScroll()
     window.addEventListener('scroll', onScroll, { passive: true })
     return () => window.removeEventListener('scroll', onScroll)
   }, [sections])
 
-  const activeClasses = 'text-primary border-l-2 border-primary pl-3'
-  const inactiveClasses = 'text-gray-500 pl-4 hover:text-white transition-colors'
-
   return (
     <PageShell>
-      <div className="max-w-[1600px] mx-auto px-6 pt-28 pb-20 xl:px-10">
-        <div className="mb-10 max-w-4xl">
-          <Link to="/docs" className="text-xs font-black uppercase tracking-[0.3em] text-primary/80 hover:text-primary">
+      <div className="mx-auto max-w-[1440px] px-5 pb-24 pt-24 lg:px-10">
+
+        {/* Breadcrumb + header */}
+        <div className="mb-10 max-w-3xl">
+          <Link
+            to="/docs"
+            className="mb-4 inline-flex items-center gap-1.5 text-xs font-semibold text-white/30 transition-colors hover:text-primary"
+          >
+            <ChevronLeft className="h-3.5 w-3.5" />
             Documentation
           </Link>
-          <h1 className="mt-4 text-4xl font-black tracking-tight text-white md:text-5xl">{title}</h1>
-          <p className="mt-4 max-w-3xl text-lg text-gray-400">{description}</p>
+          <h1 className="text-4xl font-black tracking-tight text-white md:text-5xl">{title}</h1>
+          <p className="mt-3 max-w-2xl text-base text-white/40">{description}</p>
         </div>
 
-        <div className="flex gap-10">
-          <aside className="sticky top-28 z-10 hidden h-[calc(100vh-8rem)] w-72 overflow-y-auto border-r border-white/5 pr-8 lg:block">
-            <div className="space-y-10">
-              {sidebarGroups.map((group) => (
+        <div className="flex gap-8">
+
+          {/* Left sidebar — section groups */}
+          <aside className="sticky top-24 hidden h-[calc(100vh-7rem)] w-56 shrink-0 overflow-y-auto lg:block">
+            <div className="flex flex-col gap-8">
+              {sidebarGroups.map(group => (
                 <div key={group.title}>
-                  <h3 className="mb-4 text-xs font-black uppercase tracking-[0.25em] text-gray-500">{group.title}</h3>
-                  <div className="space-y-3 text-sm font-semibold">
-                    {group.links.map((link) => (
+                  <h3 className="mb-3 text-[10px] font-bold uppercase tracking-[0.15em] text-white/20">
+                    {group.title}
+                  </h3>
+                  <div className="flex flex-col gap-0.5">
+                    {group.links.map(link => (
                       <a
                         key={link.id}
                         href={`#${link.id}`}
-                        className={activeSection === link.id ? activeClasses : inactiveClasses}
+                        className={`rounded-lg py-1.5 text-sm font-medium transition-colors ${
+                          activeSection === link.id
+                            ? 'border-l-2 border-primary pl-3 text-primary'
+                            : 'pl-3.5 text-white/35 hover:text-white'
+                        }`}
                       >
                         {link.label}
                       </a>
@@ -61,13 +69,18 @@ export default function DocsArticleLayout({ title, description, sections, sideba
             </div>
           </aside>
 
-          <main className="min-w-0 flex-1 max-w-5xl">
-            <div className="space-y-16">
-              {sections.map((section) => (
-                <section key={section.id} id={section.id} className="scroll-mt-32 rounded-[2rem] border border-white/5 bg-surface/40 p-8 backdrop-blur-xl md:p-10">
-                  <div className="mb-6 flex items-center gap-4">
-                    <span className="text-2xl font-black text-primary">#</span>
-                    <h2 className="text-3xl font-black text-white">{section.title}</h2>
+          {/* Main content */}
+          <main className="min-w-0 flex-1">
+            <div className="flex flex-col gap-6">
+              {sections.map(section => (
+                <section
+                  key={section.id}
+                  id={section.id}
+                  className="scroll-mt-28 rounded-2xl border border-white/6 bg-[#0f0f0f] p-6 md:p-8"
+                >
+                  <div className="mb-5 flex items-center gap-2.5">
+                    <Hash className="h-4 w-4 shrink-0 text-primary/60" />
+                    <h2 className="text-xl font-bold text-white">{section.title}</h2>
                   </div>
                   <MarkdownContent content={section.content} />
                 </section>
@@ -75,20 +88,24 @@ export default function DocsArticleLayout({ title, description, sections, sideba
             </div>
           </main>
 
-          <aside className="sticky top-28 z-10 hidden h-[calc(100vh-8rem)] w-64 overflow-y-auto pl-2 xl:block">
-            <h4 className="mb-6 text-[10px] font-black uppercase tracking-[0.3em] text-gray-500">On this page</h4>
-            <nav className="space-y-3 text-xs font-bold">
-              {sections.map((section) => (
+          {/* Right sidebar — on this page */}
+          <aside className="sticky top-24 hidden h-[calc(100vh-7rem)] w-48 shrink-0 overflow-y-auto xl:block">
+            <p className="mb-3 text-[10px] font-bold uppercase tracking-[0.15em] text-white/20">On this page</p>
+            <div className="flex flex-col gap-1">
+              {sections.map(section => (
                 <a
                   key={section.id}
                   href={`#${section.id}`}
-                  className={activeSection === section.id ? 'block text-primary' : 'block text-gray-500 hover:text-white'}
+                  className={`rounded-lg py-1 pl-3 text-xs font-medium transition-colors ${
+                    activeSection === section.id ? 'text-primary' : 'text-white/30 hover:text-white'
+                  }`}
                 >
                   {section.title}
                 </a>
               ))}
-            </nav>
+            </div>
           </aside>
+
         </div>
       </div>
     </PageShell>

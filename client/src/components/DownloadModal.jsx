@@ -2,16 +2,6 @@ import { useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X, Download, Copy, Check, Terminal } from 'lucide-react'
 
-const REPO = 'Lux-Client/Lux-Client'
-const fallback = {
-  version: 'v1.3.3',
-  win:      `https://github.com/${REPO}/releases/latest/download/Lux-setup.exe`,
-  deb:      `https://github.com/${REPO}/releases/latest/download/Lux-setup.deb`,
-  rpm:      `https://github.com/${REPO}/releases/latest/download/Lux-setup.rpm`,
-  appimage: `https://github.com/${REPO}/releases/latest/download/Lux-setup.AppImage`,
-  mac:      `https://github.com/${REPO}/releases/latest/download/Lux-setup.dmg`,
-}
-
 const PLATFORMS = (links) => [
   {
     href: links.win,
@@ -76,29 +66,10 @@ const CLI_CMDS = [
   { id: 'win',   label: 'Windows (PowerShell)', cmd: 'iwr https://lux.pluginhub.de/install.ps1 | iex' },
 ]
 
-export default function DownloadModal({ isOpen, onClose }) {
-  const [links, setLinks] = useState(fallback)
+export default function DownloadModal({ isOpen, onClose, releaseData }) {
+  const links = releaseData
   const [copied, setCopied] = useState(null)
   const [macExpanded, setMacExpanded] = useState(false)
-
-  useEffect(() => {
-    fetch(`https://api.github.com/repos/${REPO}/releases/latest`)
-      .then(r => r.ok ? r.json() : null)
-      .then(data => {
-        if (!data) return
-        const assets = data.assets || []
-        const getAsset = ext => assets.find(a => a.name.toLowerCase().endsWith(ext))?.browser_download_url
-        setLinks({
-          version:  data.tag_name?.startsWith('v') ? data.tag_name : `v${data.tag_name}`,
-          win:      getAsset('.exe') || fallback.win,
-          deb:      getAsset('.deb') || fallback.deb,
-          rpm:      getAsset('.rpm') || fallback.rpm,
-          appimage: getAsset('.appimage') || fallback.appimage,
-          mac:      getAsset('.dmg') || fallback.mac,
-        })
-      })
-      .catch(() => {})
-  }, [])
 
   useEffect(() => {
     if (isOpen) document.body.style.overflow = 'hidden'

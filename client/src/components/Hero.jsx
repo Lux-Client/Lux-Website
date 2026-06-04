@@ -1,4 +1,3 @@
-import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 import { Download, Github, ArrowRight, Zap } from 'lucide-react'
 
@@ -136,20 +135,7 @@ const item = {
   show:   { opacity: 1, y: 0, transition: { duration: 0.55, ease: [0.22, 1, 0.36, 1] } },
 }
 
-export default function Hero({ onDownload }) {
-  const [version, setVersion] = useState(null)
-
-  useEffect(() => {
-    fetch(`https://api.github.com/repos/${REPO}/releases/latest`)
-      .then(r => r.ok ? r.json() : null)
-      .then(data => {
-        if (data?.tag_name) {
-          const v = data.tag_name.startsWith('v') ? data.tag_name : `v${data.tag_name}`
-          setVersion(v)
-        }
-      })
-      .catch(() => {})
-  }, [])
+export default function Hero({ onDownload, version = null }) {
 
   return (
     <section id="home" className="relative flex min-h-screen items-center overflow-hidden pt-16">

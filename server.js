@@ -235,6 +235,14 @@ const saveAnalytics = () => {
 
 setInterval(saveAnalytics, 30 * 1000);
 
+// Every value below comes straight from unauthenticated Socket.IO clients and is used as an
+// object key to accumulate stats. Without this guard, a client sending e.g. type: '__proto__'
+// can walk onto Object.prototype and pollute it for the whole process via a later `[key] = n`
+// write — confirmed exploitable. Reject the dangerous key names outright before any indexing.
+function isUnsafeStatsKey(key) {
+    return key === '__proto__' || key === 'constructor' || key === 'prototype';
+}
+
 io.on('connection', (socket) => {
     activeSessions.set(socket.id, {
         version: 'unknown',
@@ -268,7 +276,7 @@ io.on('connection', (socket) => {
             activeSessions.set(socket.id, session);
         }
 
-        if (machineId && !stats.uniqueMachines[machineId]) {
+        if (machineId && !isUnsafeStatsKey(machineId) && !stats.uniqueMachines[machineId]) {
             stats.uniqueMachines[machineId] = {
                 firstSeenAt: Date.now(),
                 version: data?.version || 'unknown',
@@ -278,7 +286,7 @@ io.on('connection', (socket) => {
             saveAnalytics();
         }
 
-        if (data.version) {
+        if (data.version && !isUnsafeStatsKey(data.version)) {
             stats.clientVersions[data.version] = (stats.clientVersions[data.version] || 0) + 1;
         }
 
@@ -293,10 +301,10 @@ io.on('connection', (socket) => {
                 stats.launchesPerDay[today] = (stats.launchesPerDay[today] || 0) + 1;
 
                 const mode = data.mode === 'server' ? 'server' : 'client';
-                if (data.software) {
+                if (data.software && !isUnsafeStatsKey(data.software)) {
                     stats.software[mode][data.software] = (stats.software[mode][data.software] || 0) + 1;
                 }
-                if (data.gameVersion) {
+                if (data.gameVersion && !isUnsafeStatsKey(data.gameVersion)) {
                     stats.gameVersions[mode][data.gameVersion] = (stats.gameVersions[mode][data.gameVersion] || 0) + 1;
                 }
                 saveAnalytics();
@@ -316,10 +324,10 @@ io.on('connection', (socket) => {
     socket.on('track-creation', (data) => {
         const mode = data.mode === 'server' ? 'server' : 'client';
         console.log(`[Analytics] Track Creation (${mode}):`, data.software, data.version);
-        if (data.software) {
+        if (data.software && !isUnsafeStatsKey(data.software)) {
             stats.software[mode][data.software] = (stats.software[mode][data.software] || 0) + 1;
         }
-        if (data.version) {
+        if (data.version && !isUnsafeStatsKey(data.version)) {
             stats.gameVersions[mode][data.version] = (stats.gameVersions[mode][data.version] || 0) + 1;
         }
         saveAnalytics();
@@ -333,10 +341,15 @@ io.on('connection', (socket) => {
     socket.on('track-download', (data) => {
         const type = data.type || 'mod';
         const key = data.name || data.id || 'unknown';
+        if (isUnsafeStatsKey(type) || isUnsafeStatsKey(key)) return;
+
         const session = activeSessions.get(socket.id);
         const username = data.username || (session ? session.username : 'Anonymous');
 
-        if (!stats.downloads[type]) stats.downloads[type] = {};
+        // Object.create(null) so this dictionary has no prototype at all — even if a bad
+        // key ever slipped past the check above, there'd be no Object.prototype reachable
+        // through it to pollute.
+        if (!stats.downloads[type]) stats.downloads[type] = Object.create(null);
 
         if (key) {
             stats.downloads[type][key] = (stats.downloads[type][key] || 0) + 1;
@@ -431,11 +444,25 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage: storage });
 
+// `returnTo` is attacker-controlled (it's a query param anyone can set on a link) and must
+// never be allowed to point off-site — otherwise the real Google OAuth flow (or a bare
+// /auth/logout hit) can be turned into convincing bait for a look-alike phishing/malware page,
+// since the browser bar shows our real domain right up until the final redirect. Only accept
+// same-site relative paths; reject protocol-relative ("//evil.com") and backslash variants
+// ("/\evil.com"), which browsers also treat as absolute URLs.
+function isSafeReturnPath(value) {
+    if (typeof value !== 'string' || value.length === 0) return false;
+    if (!value.startsWith('/')) return false;
+    if (value.startsWith('//') || value.startsWith('/\\')) return false;
+    return true;
+}
+
 app.get('/auth/google', (req, res, next) => {
-    if (req.query.returnTo) {
+    if (req.query.returnTo && isSafeReturnPath(req.query.returnTo)) {
         req.session.returnTo = req.query.returnTo;
         console.log(`[Auth] Set session returnTo: ${req.session.returnTo}`);
     } else {
+        if (req.query.returnTo) console.warn(`[Auth] Rejected unsafe returnTo: ${req.query.returnTo}`);
         console.log(`[Auth] No returnTo provided, session state: ${req.session.returnTo || 'none'}`);
     }
 
@@ -464,7 +491,7 @@ app.get('/auth/google/callback', (req, res, next) => {
                 console.error('[Google OAuth] Login Error:', loginErr);
                 return res.status(500).send(`Login failed: ${loginErr.message}`);
             }
-            const returnTo = req.session.returnTo || '/';
+            const returnTo = isSafeReturnPath(req.session.returnTo) ? req.session.returnTo : '/';
             console.log(`[Auth] Redirecting after callback. returnTo was: ${req.session.returnTo}, defaulting to: ${returnTo}`);
             delete req.session.returnTo;
             console.log(`[Google OAuth] Login successful for: ${user.username}, redirecting to: ${returnTo}`);
@@ -473,8 +500,8 @@ app.get('/auth/google/callback', (req, res, next) => {
     })(req, res, next);
 });
 
-app.get('/auth/logout', (req, res) => {
-    const returnTo = req.query.returnTo || '/';
+app.get('/auth/logout', (req, res, next) => {
+    const returnTo = isSafeReturnPath(req.query.returnTo) ? req.query.returnTo : '/';
     req.logout((err) => {
         if (err) return next(err);
         res.redirect(returnTo);

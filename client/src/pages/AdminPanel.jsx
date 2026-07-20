@@ -596,9 +596,12 @@ export default function AdminPanel() {
                 <div className="flex flex-col gap-3">
                   {news.map((item, i) => (
                     <div key={i} className="flex gap-3 rounded-xl border border-white/5 bg-white/[0.02] p-3.5">
-                      {item.image && (
-                        <img src={item.image} alt="" className="h-14 w-14 shrink-0 rounded-xl object-cover" onError={e => e.currentTarget.style.display='none'} />
-                      )}
+                      <img
+                        src={item.image || '/resources/lux_icon.png?v=3'}
+                        alt=""
+                        className={`h-14 w-14 shrink-0 rounded-xl ${item.image ? 'object-cover' : 'object-contain bg-white/4 p-2'}`}
+                        onError={e => { e.currentTarget.src = '/resources/lux_icon.png?v=3' }}
+                      />
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-sm font-semibold text-white">{item.title}</p>
                         <p className="mt-0.5 line-clamp-2 text-xs text-white/35">{item.description}</p>

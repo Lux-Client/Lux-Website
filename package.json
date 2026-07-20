@@ -24,6 +24,7 @@
         "express-session": "^1.19.0",
         "multer": "^2.0.2",
         "mysql2": "^3.17.1",
+        "nodemailer": "^9.0.3",
         "passport": "^0.7.0",
         "passport-google-oauth20": "^2.0.0",
         "pg": "^8.16.3",

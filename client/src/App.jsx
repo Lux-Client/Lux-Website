@@ -2,7 +2,9 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import ScrollManager from './components/ScrollManager'
 import AdminPanel from './pages/AdminPanel'
 import AnalyticsOptOut from './pages/AnalyticsOptOut'
+import Changelog from './pages/Changelog'
 import Dashboard from './pages/Dashboard'
+import DeveloperProfile from './pages/DeveloperProfile'
 import Docs from './pages/Docs'
 import DocsExtension from './pages/DocsExtension'
 import DocsLauncher from './pages/DocsLauncher'
@@ -28,11 +30,13 @@ export default function App() {
         <Route path="/extensions/:id/edit" element={<ProjectEditor />} />
         <Route path="/extensions/:id" element={<ExtensionDetail />} />
         <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/u/:username" element={<DeveloperProfile />} />
         <Route path="/profile" element={<Profile />} />
         <Route path="/admin" element={<AdminPanel />} />
         <Route path="/docs" element={<Docs />} />
         <Route path="/docs/launcher" element={<DocsLauncher />} />
         <Route path="/docs/extension" element={<DocsExtension />} />
+        <Route path="/changelog" element={<Changelog />} />
         <Route path="/modpack" element={<ModpackEditor />} />
         <Route path="/privacy" element={<Privacy />} />
         <Route path="/imprint" element={<Imprint />} />

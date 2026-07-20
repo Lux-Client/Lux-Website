@@ -42,7 +42,8 @@ function Field({ label, hint, children }) {
 const inputClass = 'w-full rounded-xl border border-white/8 bg-white/4 px-3.5 py-2.5 text-sm text-white outline-none transition placeholder:text-white/20 focus:border-primary/50 focus:ring-1 focus:ring-primary/20'
 const fileClass  = `${inputClass} file:mr-3 file:rounded-lg file:border-0 file:bg-primary file:px-3 file:py-1.5 file:text-xs file:font-bold file:text-black file:cursor-pointer cursor-pointer`
 
-const emptyForm = { name: '', identifier: '', summary: '', description: '', visibility: 'public', version: '1.0.0' }
+const emptyForm = { name: '', identifier: '', summary: '', description: '', visibility: 'public', version: '1.0.0', category: '', mcVersion: '' }
+const capitalize = s => s ? s.charAt(0).toUpperCase() + s.slice(1) : s
 
 // type: 'extension' | 'theme' — fixed for create mode, derived from loaded project for edit mode
 export default function ProjectEditor({ type: fixedType }) {
@@ -64,8 +65,16 @@ export default function ProjectEditor({ type: fixedType }) {
   const [versions,     setVersions]     = useState([])
   const [versionForm,  setVersionForm]  = useState({ version: '', changelog: '' })
   const [versionFile,  setVersionFile]  = useState(null)
+  const [filterOptions, setFilterOptions] = useState({ categories: [], mcVersions: [] })
 
   const type = isEdit ? (project?.type || 'extension') : fixedType
+
+  useEffect(() => {
+    fetch('/api/meta/filters')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d) setFilterOptions(d) })
+      .catch(() => {})
+  }, [])
 
   // Load project for edit mode, verify ownership
   useEffect(() => {
@@ -84,6 +93,8 @@ export default function ProjectEditor({ type: fixedType }) {
           description: hit.description || '',
           visibility:  hit.visibility  || 'public',
           version:     '1.0.0',
+          category:    hit.category    || '',
+          mcVersion:   hit.mc_version  || '',
         })
       })
       .finally(() => setLoading(false))
@@ -109,6 +120,8 @@ export default function ProjectEditor({ type: fixedType }) {
       fd.append('description', form.description)
       fd.append('type',        type)
       fd.append('visibility',  form.visibility)
+      fd.append('category',    form.category)
+      fd.append('mcVersion',   form.mcVersion)
       if (!isEdit) fd.append('version', form.version)
       if (bannerFile)  fd.append('bannerImage',   bannerFile)
       if (projectFile) fd.append('extensionFile', projectFile)
@@ -290,6 +303,21 @@ export default function ProjectEditor({ type: fixedType }) {
                         <input value={form.version} onChange={e => setForm(v => ({ ...v, version: e.target.value }))} className={inputClass} placeholder="1.0.0" required />
                       </Field>
                     )}
+                  </div>
+
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <Field label="Category" hint="Optional, helps people find it">
+                      <select value={form.category} onChange={e => setForm(v => ({ ...v, category: e.target.value }))} className={inputClass}>
+                        <option value="">None</option>
+                        {filterOptions.categories.map(c => <option key={c} value={c}>{capitalize(c)}</option>)}
+                      </select>
+                    </Field>
+                    <Field label="Minecraft Version" hint="Optional">
+                      <select value={form.mcVersion} onChange={e => setForm(v => ({ ...v, mcVersion: e.target.value }))} className={inputClass}>
+                        <option value="">Any / unspecified</option>
+                        {filterOptions.mcVersions.map(mv => <option key={mv} value={mv}>{mv}</option>)}
+                      </select>
+                    </Field>
                   </div>
 
                   <Field label="Summary" hint="Short description, shown on marketplace cards">

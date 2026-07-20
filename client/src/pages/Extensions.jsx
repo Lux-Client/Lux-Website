@@ -56,9 +56,17 @@ function ExtCard({ item }) {
 
       {/* Body */}
       <div className="flex flex-1 flex-col p-5">
-        <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-white/30">
-          by {item.developer || 'Unknown'}
-        </p>
+        {item.developer ? (
+          <Link
+            to={`/u/${item.developer}`}
+            onClick={e => e.stopPropagation()}
+            className="mb-1 w-fit text-[11px] font-semibold uppercase tracking-[0.12em] text-white/30 transition-colors hover:text-primary"
+          >
+            by {item.developer}
+          </Link>
+        ) : (
+          <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-white/30">by Unknown</p>
+        )}
         <h2 className="mb-2 text-base font-bold text-white">{item.name}</h2>
         <p className="flex-1 text-sm leading-relaxed text-white/40 line-clamp-2">
           {item.summary || item.description || 'No description available.'}
@@ -81,22 +89,41 @@ function ExtCard({ item }) {
   )
 }
 
+const selectClass = 'rounded-xl border border-white/8 bg-white/4 px-3.5 py-2.5 text-sm text-white outline-none transition focus:border-primary/50 focus:ring-1 focus:ring-primary/20 appearance-none cursor-pointer'
+const capitalize = s => s ? s.charAt(0).toUpperCase() + s.slice(1) : s
+
 export default function Extensions() {
-  const [items,   setItems]   = useState([])
-  const [search,  setSearch]  = useState('')
-  const [tab,     setTab]     = useState('extension')
-  const [loading, setLoading] = useState(true)
-  const [error,   setError]   = useState('')
+  const [items,      setItems]      = useState([])
+  const [search,      setSearch]      = useState('')
+  const [tab,          setTab]          = useState('extension')
+  const [category,     setCategory]     = useState('')
+  const [mcVersion,    setMcVersion]    = useState('')
+  const [sort,          setSort]          = useState('downloads')
+  const [filterOptions, setFilterOptions] = useState({ categories: [], mcVersions: [] })
+  const [loading,      setLoading]      = useState(true)
+  const [error,         setError]         = useState('')
+
+  useEffect(() => {
+    fetch('/api/meta/filters')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d) setFilterOptions(d) })
+      .catch(() => {})
+  }, [])
 
   useEffect(() => {
     const controller = new AbortController()
     const timer = window.setTimeout(async () => {
       setLoading(true); setError('')
       try {
-        const q     = search.trim() ? `?search=${encodeURIComponent(search.trim())}` : ''
-        const res   = await fetch(`/api/extensions${q}`, { signal: controller.signal })
+        const params = new URLSearchParams()
+        if (search.trim()) params.set('search', search.trim())
+        if (category) params.set('category', category)
+        if (mcVersion) params.set('mcVersion', mcVersion)
+        if (sort) params.set('sort', sort)
+        const q   = params.toString() ? `?${params.toString()}` : ''
+        const res = await fetch(`/api/extensions${q}`, { signal: controller.signal })
         if (!res.ok) throw new Error(`Server returned ${res.status}`)
-        const data  = await res.json()
+        const data = await res.json()
         setItems(Array.isArray(data) ? data : [])
       } catch (e) {
         if (e.name !== 'AbortError') setError(e.message)
@@ -105,7 +132,7 @@ export default function Extensions() {
       }
     }, 250)
     return () => { controller.abort(); window.clearTimeout(timer) }
-  }, [search])
+  }, [search, category, mcVersion, sort])
 
   const filtered = useMemo(
     () => items.filter(i => (i.type || 'extension') === tab),
@@ -162,6 +189,22 @@ export default function Extensions() {
                   className="w-full rounded-xl border border-white/8 bg-white/4 py-2.5 pl-10 pr-4 text-sm text-white placeholder:text-white/25 outline-none transition focus:border-primary/50 focus:ring-1 focus:ring-primary/20"
                 />
               </div>
+            </div>
+
+            {/* Filters */}
+            <div className="mt-3 flex flex-wrap gap-2.5">
+              <select value={category} onChange={e => setCategory(e.target.value)} className={selectClass}>
+                <option value="">All categories</option>
+                {filterOptions.categories.map(c => <option key={c} value={c}>{capitalize(c)}</option>)}
+              </select>
+              <select value={mcVersion} onChange={e => setMcVersion(e.target.value)} className={selectClass}>
+                <option value="">All MC versions</option>
+                {filterOptions.mcVersions.map(v => <option key={v} value={v}>{v}</option>)}
+              </select>
+              <select value={sort} onChange={e => setSort(e.target.value)} className={selectClass}>
+                <option value="downloads">Most downloaded</option>
+                <option value="newest">Newest</option>
+              </select>
             </div>
           </div>
         </motion.div>

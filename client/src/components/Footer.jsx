@@ -9,7 +9,7 @@ const COLUMNS = [
       { label: 'Features', to: '/#features' },
       { label: 'Extensions', to: '/extensions' },
       { label: 'Modpack Builder', to: '/modpack' },
-      { label: 'Changelog', href: 'https://github.com/Lux-Client/Lux-Client/releases', external: true },
+      { label: 'Changelog', to: '/changelog' },
     ],
   },
   {

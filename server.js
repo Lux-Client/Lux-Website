@@ -48,6 +48,7 @@ const passport = require('passport');
 // dotenv already required at top
 
 const pool = require('./database');
+const emailService = require('./email');
 const http = require('http');
 const { Server } = require("socket.io");
 const codesSystem = require('./codes_system');
@@ -83,6 +84,11 @@ if (!ADMIN_PASSWORD) {
 const NEWS_FILE = path.join(DATA_DIR, 'news.json');
 const ANALYTICS_FILE = path.join(DATA_DIR, 'analytics.json');
 const downloadCooldowns = new Map();
+
+// Fixed marketplace taxonomies — single source of truth shared by upload/update validation,
+// the extensions list filter, and GET /api/meta/filters (which the frontend dropdowns read).
+const EXTENSION_CATEGORIES = ['utility', 'cosmetic', 'performance', 'ui', 'integration', 'other'];
+const MC_VERSIONS = ['1.21.4', '1.21.1', '1.20.6', '1.20.4', '1.20.1', '1.19.4', '1.19.2', '1.18.2', '1.17.1', '1.16.5'];
 
 app.use(cors());
 // 8mb covers a modpack export's mod list plus an embedded icon (base64-inflated, pre-validation);
@@ -534,21 +540,56 @@ function ensureAdmin(req, res, next) {
     res.status(403).json({ error: 'Forbidden' });
 }
 
-app.get('/api/extensions', async (req, res) => {
-    const { search } = req.query;
+// Every route that calls this is already behind ensureAdmin, so req.user is always a real
+// admin account here (never the standalone master-password bypass, which doesn't touch
+// moderation endpoints) — safe to read req.user directly for who/what/when.
+async function logAdminAction(req, action, targetType, targetId, details = null) {
     try {
-        const [extensions] = await pool.query(`
-            SELECT extensions.*, users.username as developer 
-            FROM extensions 
-            LEFT JOIN users ON extensions.user_id = users.id 
+        await pool.query(
+            'INSERT INTO admin_audit_log (admin_user_id, admin_label, action, target_type, target_id, details) VALUES (?, ?, ?, ?, ?, ?)',
+            [req.user.id, req.user.username, action, targetType, String(targetId), details]
+        );
+    } catch (err) {
+        console.error('[AuditLog] Failed to record admin action:', err);
+    }
+}
+
+app.get('/api/extensions', async (req, res) => {
+    const { search, category, mcVersion, sort } = req.query;
+    try {
+        let query = `
+            SELECT extensions.*, users.username as developer
+            FROM extensions
+            LEFT JOIN users ON extensions.user_id = users.id
             WHERE extensions.status = "approved"
-            ${search ? 'AND (extensions.name LIKE ? OR extensions.description LIKE ?)' : ''}
-        `, search ? [`%${search}%`, `%${search}%`] : []);
+        `;
+        const params = [];
+
+        if (search) {
+            query += ' AND (extensions.name LIKE ? OR extensions.description LIKE ?)';
+            params.push(`%${search}%`, `%${search}%`);
+        }
+        if (category && EXTENSION_CATEGORIES.includes(category)) {
+            query += ' AND extensions.category = ?';
+            params.push(category);
+        }
+        if (mcVersion && MC_VERSIONS.includes(mcVersion)) {
+            query += ' AND extensions.mc_version = ?';
+            params.push(mcVersion);
+        }
+
+        query += sort === 'newest' ? ' ORDER BY extensions.created_at DESC' : ' ORDER BY extensions.downloads DESC';
+
+        const [extensions] = await pool.query(query, params);
         res.json(extensions);
     } catch (err) {
         console.error('[API Error] Fetch Extensions failed:', err);
         res.status(500).json({ error: 'Database error', details: err.message });
     }
+});
+
+app.get('/api/meta/filters', (req, res) => {
+    res.json({ categories: EXTENSION_CATEGORIES, mcVersions: MC_VERSIONS });
 });
 
 app.post('/api/extensions/upload', ensureAuthenticated, upload.fields([
@@ -558,9 +599,11 @@ app.post('/api/extensions/upload', ensureAuthenticated, upload.fields([
     const files = req.files;
     if (!files || !files.extensionFile) return res.status(400).json({ error: 'No extension file uploaded' });
 
-    const { name, description, identifier, summary, type, visibility, version } = req.body;
+    const { name, description, identifier, summary, type, visibility, version, category, mcVersion } = req.body;
     const bannerFilename = files.bannerImage ? files.bannerImage[0].filename : null;
     const extensionFilename = files.extensionFile[0].filename;
+    const safeCategory = EXTENSION_CATEGORIES.includes(category) ? category : null;
+    const safeMcVersion = MC_VERSIONS.includes(mcVersion) ? mcVersion : null;
 
     try {
         const connection = await pool.getConnection();
@@ -568,8 +611,8 @@ app.post('/api/extensions/upload', ensureAuthenticated, upload.fields([
 
         try {
             const [extResult] = await connection.query(
-                'INSERT INTO extensions (user_id, name, identifier, summary, description, type, visibility, banner_path, file_path) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-                [req.user.id, name, identifier, summary, description, type || 'extension', visibility || 'public', bannerFilename, extensionFilename]
+                'INSERT INTO extensions (user_id, name, identifier, summary, description, type, visibility, banner_path, file_path, category, mc_version) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                [req.user.id, name, identifier, summary, description, type || 'extension', visibility || 'public', bannerFilename, extensionFilename, safeCategory, safeMcVersion]
             );
             const extensionId = extResult.insertId;
 
@@ -601,7 +644,7 @@ app.post('/api/extensions/update/:id', ensureAuthenticated, upload.fields([
     { name: 'bannerImage', maxCount: 1 }
 ]), async (req, res) => {
     const { id } = req.params;
-    const { name, description, summary, type, visibility } = req.body;
+    const { name, description, summary, type, visibility, category, mcVersion } = req.body;
     const files = req.files;
 
     try {
@@ -621,6 +664,8 @@ app.post('/api/extensions/update/:id', ensureAuthenticated, upload.fields([
         if (bannerPath) { updateFields.push('banner_path = ?'); queryParams.push(bannerPath); }
         if (type) { updateFields.push('type = ?'); queryParams.push(type); }
         if (visibility) { updateFields.push('visibility = ?'); queryParams.push(visibility); }
+        if (category !== undefined) { updateFields.push('category = ?'); queryParams.push(EXTENSION_CATEGORIES.includes(category) ? category : null); }
+        if (mcVersion !== undefined) { updateFields.push('mc_version = ?'); queryParams.push(MC_VERSIONS.includes(mcVersion) ? mcVersion : null); }
 
         if (updateFields.length > 0) {
             queryParams.push(id);
@@ -665,10 +710,14 @@ app.get('/api/extensions/i/:identifier', async (req, res) => {
     const { identifier } = req.params;
     try {
         const [rows] = await pool.query(`
-            SELECT extensions.*, users.username as developer, users.avatar as developer_avatar
-            FROM extensions 
-            LEFT JOIN users ON extensions.user_id = users.id 
+            SELECT extensions.*, users.username as developer, users.avatar as developer_avatar,
+                COALESCE(AVG(extension_ratings.rating), 0) as avg_rating,
+                COUNT(extension_ratings.id) as rating_count
+            FROM extensions
+            LEFT JOIN users ON extensions.user_id = users.id
+            LEFT JOIN extension_ratings ON extension_ratings.extension_id = extensions.id
             WHERE extensions.identifier = ?
+            GROUP BY extensions.id, users.username, users.avatar
         `, [identifier]);
 
         if (rows.length === 0) return res.status(404).json({ error: 'Extension not found' });
@@ -682,6 +731,166 @@ app.get('/api/extensions/i/:identifier', async (req, res) => {
         res.json({ ...extension, versions });
     } catch (err) {
         console.error('[API Error] Fetch Extension Detail failed:', err);
+        res.status(500).json({ error: 'Database error' });
+    }
+});
+
+// --- RATINGS ---
+
+app.get('/api/extensions/:id/ratings', async (req, res) => {
+    try {
+        const [[agg]] = await pool.query(
+            'SELECT COALESCE(AVG(rating), 0) as average, COUNT(*) as count FROM extension_ratings WHERE extension_id = ?',
+            [req.params.id]
+        );
+        let yourRating = null;
+        if (req.isAuthenticated()) {
+            const [mine] = await pool.query(
+                'SELECT rating FROM extension_ratings WHERE extension_id = ? AND user_id = ?',
+                [req.params.id, req.user.id]
+            );
+            if (mine.length > 0) yourRating = mine[0].rating;
+        }
+        res.json({ average: Number(agg.average), count: Number(agg.count), yourRating });
+    } catch (err) {
+        res.status(500).json({ error: 'Database error' });
+    }
+});
+
+app.post('/api/extensions/:id/ratings', ensureAuthenticated, async (req, res) => {
+    const rating = Number(req.body.rating);
+    if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
+        return res.status(400).json({ error: 'Rating must be an integer between 1 and 5' });
+    }
+    try {
+        const [ext] = await pool.query('SELECT id FROM extensions WHERE id = ?', [req.params.id]);
+        if (ext.length === 0) return res.status(404).json({ error: 'Extension not found' });
+
+        await pool.query(
+            `INSERT INTO extension_ratings (extension_id, user_id, rating) VALUES (?, ?, ?)
+             ON CONFLICT (extension_id, user_id) DO UPDATE SET rating = EXCLUDED.rating, updated_at = NOW()`,
+            [req.params.id, req.user.id, rating]
+        );
+        res.json({ success: true });
+    } catch (err) {
+        console.error('[API Error] Submit rating failed:', err);
+        res.status(500).json({ error: 'Database error' });
+    }
+});
+
+// --- COMMENTS ---
+
+app.get('/api/extensions/:id/comments', async (req, res) => {
+    try {
+        const [comments] = await pool.query(`
+            SELECT extension_comments.id, extension_comments.content, extension_comments.created_at, extension_comments.user_id,
+                users.username, users.avatar
+            FROM extension_comments
+            JOIN users ON extension_comments.user_id = users.id
+            WHERE extension_comments.extension_id = ? AND extension_comments.status = 'visible'
+            ORDER BY extension_comments.created_at DESC
+        `, [req.params.id]);
+        res.json(comments);
+    } catch (err) {
+        res.status(500).json({ error: 'Database error' });
+    }
+});
+
+const COMMENT_COOLDOWN_MS = 30 * 1000;
+
+app.post('/api/extensions/:id/comments', ensureAuthenticated, async (req, res) => {
+    const content = String(req.body.content || '').trim();
+    if (!content) return res.status(400).json({ error: 'Comment cannot be empty' });
+    if (content.length > 1000) return res.status(400).json({ error: 'Comment is too long (max 1000 characters)' });
+
+    try {
+        const [ext] = await pool.query('SELECT id FROM extensions WHERE id = ?', [req.params.id]);
+        if (ext.length === 0) return res.status(404).json({ error: 'Extension not found' });
+
+        const [recent] = await pool.query(
+            'SELECT created_at FROM extension_comments WHERE extension_id = ? AND user_id = ? ORDER BY created_at DESC LIMIT 1',
+            [req.params.id, req.user.id]
+        );
+        if (recent.length > 0) {
+            const elapsedMs = Date.now() - new Date(recent[0].created_at).getTime();
+            if (elapsedMs < COMMENT_COOLDOWN_MS) {
+                const waitSec = Math.ceil((COMMENT_COOLDOWN_MS - elapsedMs) / 1000);
+                return res.status(429).json({ error: `Please wait ${waitSec}s before commenting again.` });
+            }
+        }
+
+        const [result] = await pool.query(
+            'INSERT INTO extension_comments (extension_id, user_id, content) VALUES (?, ?, ?)',
+            [req.params.id, req.user.id, content]
+        );
+        res.json({
+            success: true,
+            comment: {
+                id: result.insertId,
+                content,
+                created_at: new Date().toISOString(),
+                user_id: req.user.id,
+                username: req.user.username,
+                avatar: req.user.avatar
+            }
+        });
+    } catch (err) {
+        console.error('[API Error] Post comment failed:', err);
+        res.status(500).json({ error: 'Database error' });
+    }
+});
+
+app.delete('/api/extensions/comments/:commentId', ensureAuthenticated, async (req, res) => {
+    try {
+        const [rows] = await pool.query(`
+            SELECT extension_comments.user_id as author_id, extensions.user_id as owner_id
+            FROM extension_comments
+            JOIN extensions ON extension_comments.extension_id = extensions.id
+            WHERE extension_comments.id = ?
+        `, [req.params.commentId]);
+        if (rows.length === 0) return res.status(404).json({ error: 'Comment not found' });
+
+        const { author_id, owner_id } = rows[0];
+        const isAuthor = author_id === req.user.id;
+        const isExtensionOwner = owner_id === req.user.id;
+        const isAdmin = req.user.role === 'admin';
+        if (!isAuthor && !isExtensionOwner && !isAdmin) return res.status(403).json({ error: 'Forbidden' });
+
+        await pool.query('DELETE FROM extension_comments WHERE id = ?', [req.params.commentId]);
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: 'Database error' });
+    }
+});
+
+// --- CONTENT REPORTS ---
+
+app.post('/api/reports', ensureAuthenticated, async (req, res) => {
+    const targetType = req.body.targetType;
+    const targetId = Number(req.body.targetId);
+    const reason = String(req.body.reason || '').trim();
+
+    if (!['extension', 'comment'].includes(targetType)) return res.status(400).json({ error: 'Invalid target type' });
+    if (!Number.isInteger(targetId) || targetId <= 0) return res.status(400).json({ error: 'Invalid target' });
+    if (!reason) return res.status(400).json({ error: 'Please describe why you are reporting this' });
+    if (reason.length > 500) return res.status(400).json({ error: 'Reason is too long (max 500 characters)' });
+
+    try {
+        const table = targetType === 'extension' ? 'extensions' : 'extension_comments';
+        const [target] = await pool.query(`SELECT id FROM ${table} WHERE id = ?`, [targetId]);
+        if (target.length === 0) return res.status(404).json({ error: 'Reported content not found' });
+
+        const [result] = await pool.query(
+            `INSERT INTO content_reports (reporter_user_id, target_type, target_id, reason) VALUES (?, ?, ?, ?)
+             ON CONFLICT (reporter_user_id, target_type, target_id) DO NOTHING`,
+            [req.user.id, targetType, targetId, reason]
+        );
+        if (!result.affectedRows) {
+            return res.status(409).json({ error: 'You already reported this.' });
+        }
+        res.json({ success: true });
+    } catch (err) {
+        console.error('[API Error] Submit report failed:', err);
         res.status(500).json({ error: 'Database error' });
     }
 });
@@ -958,9 +1167,16 @@ app.post('/api/admin/users/:id/:action', ensureAdmin, async (req, res) => {
     const { reason, duration } = req.body;
 
     try {
+        let targetUser = null;
+        if (action === 'warn' || action === 'ban') {
+            const [targetRows] = await pool.query('SELECT username, email FROM users WHERE id = ?', [id]);
+            targetUser = targetRows[0] || null;
+        }
+
         if (action === 'warn') {
             await pool.query('UPDATE users SET warn_count = warn_count + 1 WHERE id = ?', [id]);
             await pool.query('INSERT INTO notifications (user_id, message, type) VALUES (?, ?, ?)', [id, `You have received a warning. Reason: ${reason || 'No reason specified'}`, 'warning']);
+            if (targetUser) emailService.notifyUserWarned(targetUser, reason || 'No reason specified').catch(() => {});
         } else if (action === 'ban') {
             let expires = null;
             if (duration) {
@@ -969,6 +1185,7 @@ app.post('/api/admin/users/:id/:action', ensureAdmin, async (req, res) => {
             }
             await pool.query('UPDATE users SET banned = TRUE, ban_reason = ?, ban_expires = ? WHERE id = ?', [reason, expires, id]);
             await pool.query('INSERT INTO notifications (user_id, message, type) VALUES (?, ?, ?)', [id, `You have been banned. Reason: ${reason}`, 'error']);
+            if (targetUser) emailService.notifyUserBanned(targetUser, reason).catch(() => {});
         } else if (action === 'unban') {
             await pool.query('UPDATE users SET banned = FALSE, ban_reason = NULL, ban_expires = NULL WHERE id = ?', [id]);
             await pool.query('INSERT INTO notifications (user_id, message, type) VALUES (?, ?, ?)', [id, 'Your ban has been lifted.', 'success']);
@@ -984,6 +1201,7 @@ app.post('/api/admin/users/:id/:action', ensureAdmin, async (req, res) => {
         } else {
             return res.status(400).json({ error: 'Invalid action' });
         }
+        await logAdminAction(req, `user.${action}`, 'user', id, reason || null);
         res.json({ success: true });
     } catch (err) {
         res.status(500).json({ error: 'Database error' });
@@ -1077,6 +1295,50 @@ app.get('/api/admin/file-info', ensureAdmin, async (req, res) => {
     }
 });
 
+app.get('/api/admin/reports', ensureAdmin, async (req, res) => {
+    try {
+        const [rows] = await pool.query(`
+            SELECT content_reports.*, reporter.username as reporter_username,
+                ext_direct.name as extension_name, ext_direct.identifier as extension_identifier,
+                comment_target.content as comment_content,
+                comment_ext.name as comment_extension_name, comment_ext.identifier as comment_extension_identifier
+            FROM content_reports
+            JOIN users reporter ON content_reports.reporter_user_id = reporter.id
+            LEFT JOIN extensions ext_direct ON content_reports.target_type = 'extension' AND content_reports.target_id = ext_direct.id
+            LEFT JOIN extension_comments comment_target ON content_reports.target_type = 'comment' AND content_reports.target_id = comment_target.id
+            LEFT JOIN extensions comment_ext ON comment_target.extension_id = comment_ext.id
+            WHERE content_reports.status = 'pending'
+            ORDER BY content_reports.created_at DESC
+        `);
+        res.json(rows);
+    } catch (err) {
+        console.error('[API Error] Fetch reports failed:', err);
+        res.status(500).json({ error: 'Database error' });
+    }
+});
+
+app.post('/api/admin/reports/:id/:action', ensureAdmin, async (req, res) => {
+    const { id, action } = req.params;
+    if (!['resolve', 'dismiss'].includes(action)) return res.status(400).json({ error: 'Invalid action' });
+    const status = action === 'resolve' ? 'resolved' : 'dismissed';
+    try {
+        await pool.query('UPDATE content_reports SET status = ? WHERE id = ?', [status, id]);
+        await logAdminAction(req, `report.${status}`, 'report', id);
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: 'Database error' });
+    }
+});
+
+app.get('/api/admin/audit-log', ensureAdmin, async (req, res) => {
+    try {
+        const [rows] = await pool.query('SELECT * FROM admin_audit_log ORDER BY created_at DESC LIMIT 200');
+        res.json(rows);
+    } catch (err) {
+        res.status(500).json({ error: 'Database error' });
+    }
+});
+
 app.get('/api/admin/drafts/pending', ensureAdmin, async (req, res) => {
     try {
         const [rows] = await pool.query(`
@@ -1117,6 +1379,7 @@ app.post('/api/admin/drafts/:did/:action', ensureAdmin, async (req, res) => {
         } else {
             await pool.query('UPDATE extension_metadata_drafts SET status = "rejected" WHERE id = ?', [did]);
         }
+        await logAdminAction(req, `draft.${action}`, 'draft', did, reason || null);
         res.json({ success: true });
     } catch (err) {
         res.status(500).json({ error: 'Database error' });
@@ -1143,6 +1406,7 @@ app.post('/api/admin/versions/:vid/:action', ensureAdmin, async (req, res) => {
     const status = action === 'approve' ? 'approved' : 'rejected';
     try {
         await pool.query('UPDATE extension_versions SET status = ? WHERE id = ?', [status, vid]);
+        await logAdminAction(req, `version.${status}`, 'version', vid);
         res.json({ success: true });
     } catch (err) {
         res.status(500).json({ error: 'Database error' });
@@ -1152,6 +1416,7 @@ app.post('/api/admin/versions/:vid/:action', ensureAdmin, async (req, res) => {
 app.delete('/api/admin/extensions/:id', ensureAdmin, async (req, res) => {
     try {
         await pool.query('DELETE FROM extensions WHERE id = ?', [req.params.id]);
+        await logAdminAction(req, 'extension.delete', 'extension', req.params.id);
         res.json({ success: true });
     } catch (err) {
         res.status(500).json({ error: 'Database error' });
@@ -1169,10 +1434,14 @@ app.post('/api/admin/extensions/:id/:action', ensureAdmin, async (req, res) => {
     try {
         await pool.query('UPDATE extensions SET status = ? WHERE id = ?', [status, id]);
 
-        const [ext] = await pool.query('SELECT user_id, name FROM extensions WHERE id = ?', [id]);
+        const [ext] = await pool.query(`
+            SELECT extensions.user_id, extensions.name, extensions.identifier, users.username, users.email
+            FROM extensions JOIN users ON extensions.user_id = users.id
+            WHERE extensions.id = ?
+        `, [id]);
         if (ext.length > 0) {
-            const userId = ext[0].user_id;
-            const name = ext[0].name;
+            const owner = ext[0];
+            const name = owner.name;
             let msg = '';
             let type = 'info';
 
@@ -1180,17 +1449,21 @@ app.post('/api/admin/extensions/:id/:action', ensureAdmin, async (req, res) => {
                 msg = `Your extension "${name}" has been approved!`;
                 type = 'success';
                 await pool.query('UPDATE extension_versions SET status = "approved" WHERE extension_id = ? AND status = "pending"', [id]);
+                emailService.notifyExtensionApproved(owner, name, owner.identifier).catch(() => {});
             } else if (status === 'rejected') {
                 msg = `Your extension "${name}" was rejected. Reason: ${reason || 'No reason specified'}`;
                 type = 'error';
+                emailService.notifyExtensionRejected(owner, name, reason).catch(() => {});
             } else if (status === 'action_required') {
                 msg = `Action required for your extension "${name}". Please check the feedback: ${reason || 'No reason specified'}`;
                 type = 'warning';
+                emailService.notifyActionRequired(owner, name, reason).catch(() => {});
             }
 
-            await pool.query('INSERT INTO notifications (user_id, message, type) VALUES (?, ?, ?)', [userId, msg, type]);
+            await pool.query('INSERT INTO notifications (user_id, message, type) VALUES (?, ?, ?)', [owner.user_id, msg, type]);
         }
 
+        await logAdminAction(req, `extension.${status}`, 'extension', id, reason || null);
         res.json({ success: true });
     } catch (err) {
         console.error('[Lux] Admin extension status update error:', err);
@@ -1259,6 +1532,49 @@ app.post('/api/news', (req, res) => {
     } catch (err) {
         console.error(`[News] Write error:`, err);
         res.status(500).json({ success: false, error: 'Failed to write news: ' + err.message });
+    }
+});
+
+// --- RELEASES / CHANGELOG PROXY ---
+// GitHub's unauthenticated REST API is capped at 60 requests/hour per calling IP - since we're
+// the caller here (not each visitor), an in-memory cache keeps every real site visitor from
+// eating into that same shared budget.
+let releasesCache = { data: null, fetchedAt: 0 };
+const RELEASES_CACHE_TTL_MS = 10 * 60 * 1000;
+
+app.get('/api/releases', async (req, res) => {
+    try {
+        if (releasesCache.data && (Date.now() - releasesCache.fetchedAt) < RELEASES_CACHE_TTL_MS) {
+            return res.json(releasesCache.data);
+        }
+
+        const response = await fetch('https://api.github.com/repos/Lux-Client/Lux-Client/releases?per_page=15', {
+            headers: {
+                'User-Agent': 'Lux-Website/1.0',
+                'Accept': 'application/vnd.github+json'
+            }
+        });
+        if (!response.ok) throw new Error(`GitHub returned ${response.status}`);
+        const raw = await response.json();
+
+        const releases = (Array.isArray(raw) ? raw : [])
+            .filter(r => !r.draft)
+            .map(r => ({
+                id: r.id,
+                name: r.name || r.tag_name,
+                tag: r.tag_name,
+                body: r.body || '',
+                url: r.html_url,
+                prerelease: !!r.prerelease,
+                publishedAt: r.published_at
+            }));
+
+        releasesCache = { data: releases, fetchedAt: Date.now() };
+        res.json(releases);
+    } catch (err) {
+        console.error('[Releases Proxy] Error fetching releases:', err);
+        if (releasesCache.data) return res.json(releasesCache.data);
+        res.status(502).json({ error: 'Failed to fetch releases' });
     }
 });
 
@@ -1395,6 +1711,62 @@ pool.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS is_private BOOLEAN DEFAUL
     .catch(err => {
         console.error('[Lux] Database migration failed:', err);
     });
+
+// --- DYNAMIC OG/TWITTER META TAGS FOR EXTENSION PAGES ---
+// The SPA is client-rendered, so link-preview crawlers (Discord, Slack, Twitter, etc.) never
+// run the JS that would show the real title/image - they only see whatever's in the initial
+// HTML. This serves the same index.html but with per-extension <title>/<meta> tags swapped in
+// before the SPA takes over normally on the client.
+let indexHtmlTemplate = null;
+function getIndexHtmlTemplate() {
+    if (indexHtmlTemplate === null) {
+        try {
+            indexHtmlTemplate = fs.readFileSync(path.join(clientDistPath, 'index.html'), 'utf8');
+        } catch (e) {
+            indexHtmlTemplate = '';
+        }
+    }
+    return indexHtmlTemplate;
+}
+function escapeHtmlAttr(str) {
+    return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+app.get('/extensions/:identifier', async (req, res, next) => {
+    try {
+        const template = getIndexHtmlTemplate();
+        if (!template) return next();
+
+        const { identifier } = req.params;
+        const isNumeric = /^\d+$/.test(identifier);
+        const query = isNumeric
+            ? 'SELECT name, summary, description, banner_path FROM extensions WHERE (identifier = ? OR id = ?) AND status = "approved"'
+            : 'SELECT name, summary, description, banner_path FROM extensions WHERE identifier = ? AND status = "approved"';
+        const [rows] = await pool.query(query, isNumeric ? [identifier, identifier] : [identifier]);
+        if (rows.length === 0) return next();
+
+        const ext = rows[0];
+        const title = `${ext.name} — Lux Client Marketplace`;
+        const description = (ext.summary || ext.description || 'Discover this project on the Lux Client marketplace.').slice(0, 200);
+        const image = ext.banner_path
+            ? `https://lux.pluginhub.de/uploads/${String(ext.banner_path).replace(/^\/?uploads\//, '')}`
+            : 'https://lux.pluginhub.de/resources/lux_icon.png';
+        const url = `https://lux.pluginhub.de/extensions/${identifier}`;
+
+        const html = template
+            .replace(/<title>.*?<\/title>/, `<title>${escapeHtmlAttr(title)}</title>`)
+            .replace(/<meta name="description" content=".*?"\s*\/>/, `<meta name="description" content="${escapeHtmlAttr(description)}" />`)
+            .replace(/<meta property="og:title" content=".*?"\s*\/>/, `<meta property="og:title" content="${escapeHtmlAttr(title)}" />`)
+            .replace(/<meta property="og:description" content=".*?"\s*\/>/, `<meta property="og:description" content="${escapeHtmlAttr(description)}" />`)
+            .replace(/<meta property="og:url" content=".*?"\s*\/>/, `<meta property="og:url" content="${escapeHtmlAttr(url)}" />`)
+            .replace('</head>', `  <meta property="og:image" content="${escapeHtmlAttr(image)}" />\n  <meta name="twitter:card" content="summary_large_image" />\n</head>`);
+
+        res.send(html);
+    } catch (err) {
+        console.error('[OG Meta] Failed to render extension meta tags:', err);
+        next();
+    }
+});
 
 // SPA catch-all: serve React app for all non-API GET routes
 app.get('*', (req, res) => {

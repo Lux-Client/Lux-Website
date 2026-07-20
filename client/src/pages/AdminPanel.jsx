@@ -10,6 +10,7 @@ import {
   Lock, RefreshCw, Wifi, WifiOff, AlertTriangle, Wrench,
   Trash2, Check, X, LogOut, ChevronRight, User, Download,
   Users as UsersIcon, FileSearch, Tag, FileText, TrendingUp,
+  History, Flag,
 } from 'lucide-react'
 import useAuth, { fixPath } from '../hooks/useAuth'
 
@@ -208,6 +209,7 @@ const TABS = [
   { id: 'codes',      label: 'Codes',      icon: Code2,           authLevel: 'tools' },
   { id: 'moderation', label: 'Moderation', icon: ShieldCheck,     authLevel: 'admin' },
   { id: 'users',      label: 'Users',      icon: UsersIcon,       authLevel: 'admin' },
+  { id: 'auditlog',   label: 'Audit Log',  icon: History,         authLevel: 'admin' },
 ]
 
 export default function AdminPanel() {
@@ -229,6 +231,9 @@ export default function AdminPanel() {
   const [pendingExtensions, setPendingExtensions] = useState([])
   const [pendingVersions,   setPendingVersions]   = useState([])
   const [pendingDrafts,     setPendingDrafts]     = useState([])
+  const [reports,           setReports]           = useState([])
+  const [auditLog,          setAuditLog]          = useState([])
+  const [auditLogLoaded,    setAuditLogLoaded]    = useState(false)
 
   const isSessionAdmin = auth.user?.role === 'admin'
   const canView        = isSessionAdmin || passwordVerified
@@ -283,6 +288,11 @@ export default function AdminPanel() {
     if (!isSessionAdmin) return
     loadModerationData()
   }, [isSessionAdmin])
+
+  useEffect(() => {
+    if (!isSessionAdmin || tab !== 'auditlog' || auditLogLoaded) return
+    loadAuditLog()
+  }, [isSessionAdmin, tab, auditLogLoaded])
 
   // Charts
   const versionsChart = useMemo(() => ({
@@ -352,16 +362,30 @@ export default function AdminPanel() {
     setMaintenanceMode(!!data.isMaintenanceMode)
   }
   const loadModerationData = async () => {
-    const [u, e, v, d] = await Promise.all([
+    const [u, e, v, d, r] = await Promise.all([
       fetch('/api/admin/users').then(r => r.ok ? r.json() : []),
       fetch('/api/admin/extensions/pending').then(r => r.ok ? r.json() : []),
       fetch('/api/admin/versions/pending').then(r => r.ok ? r.json() : []),
       fetch('/api/admin/drafts/pending').then(r => r.ok ? r.json() : []),
+      fetch('/api/admin/reports').then(r => r.ok ? r.json() : []),
     ])
     setUsers(Array.isArray(u) ? u : [])
     setPendingExtensions(Array.isArray(e) ? e : [])
     setPendingVersions(Array.isArray(v) ? v : [])
     setPendingDrafts(Array.isArray(d) ? d : [])
+    setReports(Array.isArray(r) ? r : [])
+  }
+
+  const loadAuditLog = async () => {
+    const res = await fetch('/api/admin/audit-log')
+    const data = res.ok ? await res.json().catch(() => []) : []
+    setAuditLog(Array.isArray(data) ? data : [])
+    setAuditLogLoaded(true)
+  }
+
+  const moderateReport = async (id, action) => {
+    await fetch(`/api/admin/reports/${id}/${action}`, { method: 'POST' })
+    loadModerationData()
   }
 
   const submitNews = async e => {
@@ -553,10 +577,11 @@ export default function AdminPanel() {
             {isSessionAdmin && (
               <div>
                 <h2 className="mb-3 text-xs font-bold uppercase tracking-widest text-white/30">Needs Attention</h2>
-                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
                   <StatCard icon={ShieldCheck} label="Pending Extensions" value={pendingExtensions.length} color="#e27602" onClick={() => setTab('moderation')} />
                   <StatCard icon={Tag}         label="Pending Versions"   value={pendingVersions.length}   color="#3b82f6" onClick={() => setTab('moderation')} />
                   <StatCard icon={FileText}    label="Pending Drafts"     value={pendingDrafts.length}     color="#8b5cf6" onClick={() => setTab('moderation')} />
+                  <StatCard icon={Flag}        label="User Reports"       value={reports.length}           color="#ef4444" onClick={() => setTab('moderation')} />
                   <StatCard icon={UsersIcon}   label="Registered Users"   value={users.length}             color="#10b981" onClick={() => setTab('users')} />
                 </div>
               </div>
@@ -722,6 +747,36 @@ export default function AdminPanel() {
         {/* ── MODERATION ── */}
         {tab === 'moderation' && isSessionAdmin && (
           <div className="flex flex-col gap-5">
+            <SectionCard title="User Reports" description="Content flagged by users. Take action via the relevant queue below, then resolve or dismiss.">
+              {reports.length === 0 ? <EmptyState message="No pending reports." /> : (
+                <div className="flex flex-col gap-3">
+                  {reports.map(item => {
+                    const isComment = item.target_type === 'comment'
+                    const title = isComment
+                      ? `Comment on "${item.comment_extension_name || 'Unknown'}"`
+                      : (item.extension_name || 'Unknown extension')
+                    const subtitle = `Reported by ${item.reporter_username} · ${item.reason}`
+                    return (
+                      <ModerationItem
+                        key={item.id}
+                        title={title}
+                        subtitle={subtitle}
+                        actions={[
+                          { label: 'Resolve',  onClick: () => moderateReport(item.id, 'resolve'),  tone: 'primary' },
+                          { label: 'Dismiss',  onClick: () => moderateReport(item.id, 'dismiss') },
+                        ]}
+                        extra={isComment && (
+                          <div className="mt-3 rounded-lg border border-white/5 bg-black/20 p-3 text-xs text-white/50">
+                            "{item.comment_content}"
+                          </div>
+                        )}
+                      />
+                    )
+                  })}
+                </div>
+              )}
+            </SectionCard>
+
             <SectionCard title="Pending Extensions" description="Review new marketplace submissions. Inspect the file before approving.">
               {pendingExtensions.length === 0 ? <EmptyState message="No pending extensions." /> : (
                 <div className="flex flex-col gap-3">
@@ -807,6 +862,46 @@ export default function AdminPanel() {
                     ]}
                   />
                 ))}
+              </div>
+            )}
+          </SectionCard>
+        )}
+
+        {/* ── AUDIT LOG ── */}
+        {tab === 'auditlog' && isSessionAdmin && (
+          <SectionCard
+            title="Audit Log"
+            description="Who did what, and when. Last 200 moderation actions."
+            action={
+              <button onClick={loadAuditLog} className="flex items-center gap-1.5 rounded-xl border border-white/6 bg-white/4 px-3.5 py-2 text-xs font-semibold text-white/50 transition-colors hover:text-white">
+                <RefreshCw className="h-3.5 w-3.5" /> Refresh
+              </button>
+            }
+          >
+            {auditLog.length === 0 ? <EmptyState message="No admin actions recorded yet." /> : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-white/5 text-[11px] font-bold uppercase tracking-widest text-white/20">
+                      <th className="pb-3 text-left">When</th>
+                      <th className="pb-3 text-left">Admin</th>
+                      <th className="pb-3 text-left">Action</th>
+                      <th className="pb-3 text-left">Target</th>
+                      <th className="pb-3 text-left">Details</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/4">
+                    {auditLog.map(entry => (
+                      <tr key={entry.id} className="text-sm text-white/60">
+                        <td className="whitespace-nowrap py-3 text-white/30">{new Date(entry.created_at).toLocaleString()}</td>
+                        <td className="py-3 font-semibold text-white">{entry.admin_label}</td>
+                        <td className="py-3 font-mono text-xs text-primary">{entry.action}</td>
+                        <td className="py-3 text-white/50">{entry.target_type} #{entry.target_id}</td>
+                        <td className="py-3 text-white/30">{entry.details || '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             )}
           </SectionCard>

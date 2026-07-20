@@ -85,8 +85,10 @@ const ANALYTICS_FILE = path.join(DATA_DIR, 'analytics.json');
 const downloadCooldowns = new Map();
 
 app.use(cors());
-app.use(bodyParser.json());
-app.use(bodyParser.urlencoded({ extended: true }));
+// 8mb covers a modpack export's mod list plus an embedded icon (base64-inflated, pre-validation);
+// the icon itself is re-encoded and capped far smaller server-side before being persisted.
+app.use(bodyParser.json({ limit: '8mb' }));
+app.use(bodyParser.urlencoded({ extended: true, limit: '8mb' }));
 
 const SESSION_SECRET = process.env.SESSION_SECRET;
 if (!SESSION_SECRET && process.env.NODE_ENV === 'production') {

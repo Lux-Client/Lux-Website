@@ -1,5 +1,6 @@
 ﻿const fs = require('fs');
 const path = require('path');
+const sharp = require('sharp');
 const BASE_DATA_DIR = process.env.DATA_DIR
     ? path.resolve(process.env.DATA_DIR)
     : __dirname;
@@ -61,6 +62,44 @@ function generateCode() {
     return code;
 }
 
+// Modpack icons arrive as arbitrary user-submitted bytes (base64 data URIs) and get
+// redistributed to whoever imports the code, so they can't be trusted as-is — a
+// crafted "image" could smuggle a polyglot payload. Decoding and re-encoding through
+// sharp/libvips only ever serializes genuine pixel data it understood, which drops any
+// non-image bytes appended or hidden in the original file, and rejects anything that
+// isn't a real image outright. Any failure here just means "no icon", not a failed export.
+const ICON_MAX_INPUT_BYTES = 6 * 1024 * 1024;
+const ICON_MAX_OUTPUT_BYTES = 1 * 1024 * 1024;
+const ICON_MAX_DIMENSION = 256;
+
+async function sanitizeIcon(iconValue) {
+    if (!iconValue || typeof iconValue !== 'string') return null;
+    const match = /^data:image\/[a-zA-Z0-9.+-]+;base64,([A-Za-z0-9+/=]+)$/.exec(iconValue.trim());
+    if (!match) return null;
+
+    const base64Payload = match[1];
+    // Rough pre-check on the encoded string length before paying for a full decode.
+    if (base64Payload.length > ICON_MAX_INPUT_BYTES * 1.4) return null;
+
+    try {
+        const inputBuffer = Buffer.from(base64Payload, 'base64');
+        if (inputBuffer.length === 0 || inputBuffer.length > ICON_MAX_INPUT_BYTES) return null;
+
+        const outputBuffer = await sharp(inputBuffer, { limitInputPixels: 50_000_000, failOn: 'error' })
+            .rotate()
+            .resize(ICON_MAX_DIMENSION, ICON_MAX_DIMENSION, { fit: 'inside', withoutEnlargement: true })
+            .png({ compressionLevel: 8 })
+            .toBuffer();
+
+        if (outputBuffer.length === 0 || outputBuffer.length > ICON_MAX_OUTPUT_BYTES) return null;
+
+        return `data:image/png;base64,${outputBuffer.toString('base64')}`;
+    } catch (e) {
+        console.warn('[CodesSystem] Rejected modpack icon (not a valid image):', e.message);
+        return null;
+    }
+}
+
 module.exports = function (app, ADMIN_PASSWORD, pool) {
     console.log('[CodesSystem] Initializing routes...');
 
@@ -69,7 +108,7 @@ module.exports = function (app, ADMIN_PASSWORD, pool) {
 
     async function handleSave(req, res) {
         try {
-            const { name, mods, resourcePacks, shaders, instanceVersion, instanceLoader, keybinds, ownerUuid } = req.body;
+            const { name, mods, resourcePacks, shaders, instanceVersion, instanceLoader, keybinds, ownerUuid, icon } = req.body;
             let ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
             if (ip) {
                 // x-forwarded-for can contain multiple comma-separated IPs. We only want the first one (the original client).
@@ -95,6 +134,7 @@ module.exports = function (app, ADMIN_PASSWORD, pool) {
 
             const code = generateCode();
             const expiryDays = ownerUuid ? 7 : 5;
+            const safeIcon = await sanitizeIcon(icon);
 
             const data = {
                 code,
@@ -105,6 +145,7 @@ module.exports = function (app, ADMIN_PASSWORD, pool) {
                 resourcePacks: resourcePacks || [],
                 shaders: shaders || [],
                 keybinds: keybinds || null,
+                icon: safeIcon,
                 created: Date.now(),
                 expires: Date.now() + (expiryDays * 24 * 60 * 60 * 1000),
                 uses: 0,
@@ -166,7 +207,8 @@ module.exports = function (app, ADMIN_PASSWORD, pool) {
                             name: content.name,
                             created: content.created,
                             expires: content.expires,
-                            uses: content.uses || 0
+                            uses: content.uses || 0,
+                            hasIcon: !!content.icon
                         });
                     } catch (e) {
                         console.error(`[CodesSystem-Debug] âŒ JSON Parse Error for code ${row.code}:`, e.message);
@@ -241,7 +283,8 @@ module.exports = function (app, ADMIN_PASSWORD, pool) {
                         created: content.created,
                         expires: content.expires,
                         owner_uuid: content.owner_uuid,
-                        owner_ip: content.owner_ip
+                        owner_ip: content.owner_ip,
+                        hasIcon: !!content.icon
                     };
                 } catch (e) {
                     return null;

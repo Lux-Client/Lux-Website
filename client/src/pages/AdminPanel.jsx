@@ -9,7 +9,7 @@ import {
   LayoutDashboard, Newspaper, BarChart2, Code2, ShieldCheck,
   Lock, RefreshCw, Wifi, WifiOff, AlertTriangle, Wrench,
   Trash2, Check, X, LogOut, ChevronRight, User, Download,
-  Users as UsersIcon, FileSearch,
+  Users as UsersIcon, FileSearch, Tag, FileText, TrendingUp,
 } from 'lucide-react'
 import useAuth, { fixPath } from '../hooks/useAuth'
 
@@ -33,20 +33,25 @@ const emptyStats = {
 
 // ─── Sub-components ──────────────────────────────────────────────────────────
 
-function StatCard({ icon: Icon, label, value, color = '#e27602', live = false }) {
+function StatCard({ icon: Icon, label, value, color = '#e27602', live = false, onClick }) {
+  const Wrapper = onClick ? 'button' : 'div'
   return (
-    <div className="flex items-center gap-4 rounded-2xl border border-white/6 bg-[#0f0f0f] p-5">
+    <Wrapper
+      onClick={onClick}
+      className={`flex w-full items-center gap-4 rounded-2xl border border-white/6 bg-[#0f0f0f] p-5 text-left transition-colors ${onClick ? 'cursor-pointer hover:border-white/15 hover:bg-white/[0.03]' : ''}`}
+    >
       <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl" style={{ backgroundColor: color + '15', color }}>
         <Icon className="h-4 w-4" />
       </div>
-      <div className="min-w-0">
+      <div className="min-w-0 flex-1">
         <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-white/30">{label}</p>
         <p className="mt-0.5 text-2xl font-black text-white tabular-nums">
           {live && <span className="mr-1.5 inline-block h-1.5 w-1.5 rounded-full bg-emerald-500 align-middle shadow-[0_0_4px_rgba(16,185,129,0.7)]" />}
           {String(value)}
         </p>
       </div>
-    </div>
+      {onClick && <ChevronRight className="h-4 w-4 shrink-0 text-white/15" />}
+    </Wrapper>
   )
 }
 
@@ -303,6 +308,12 @@ export default function AdminPanel() {
     ],
   }), [activity])
 
+  const totalDownloads = useMemo(() => Object.values(statsData.downloads || {})
+    .flatMap(items => Object.values(items || {}))
+    .reduce((sum, n) => sum + Number(n || 0), 0), [statsData.downloads])
+
+  const todaysLaunches = statsData.launchesPerDay?.[new Date().toISOString().split('T')[0]] || 0
+
   // API helpers
   const verifyPassword = async (val = password, persist = true) => {
     setUnlockError('')
@@ -537,11 +548,41 @@ export default function AdminPanel() {
 
         {/* ── OVERVIEW ── */}
         {tab === 'overview' && (
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            <StatCard icon={Lock}           label="Password"     value={passwordVerified ? 'Unlocked' : 'Locked'} />
-            <StatCard icon={User}           label="Session Role" value={auth.user?.role || 'guest'} color="#7c3aed" />
-            <StatCard icon={Wifi}           label="Socket"       value={socketStatus} color="#3b82f6" />
-            <StatCard icon={Wrench}         label="Maintenance"  value={maintenanceMode ? 'ON' : 'OFF'} color={maintenanceMode ? '#f59e0b' : '#e27602'} />
+          <div className="flex flex-col gap-6">
+
+            {isSessionAdmin && (
+              <div>
+                <h2 className="mb-3 text-xs font-bold uppercase tracking-widest text-white/30">Needs Attention</h2>
+                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                  <StatCard icon={ShieldCheck} label="Pending Extensions" value={pendingExtensions.length} color="#e27602" onClick={() => setTab('moderation')} />
+                  <StatCard icon={Tag}         label="Pending Versions"   value={pendingVersions.length}   color="#3b82f6" onClick={() => setTab('moderation')} />
+                  <StatCard icon={FileText}    label="Pending Drafts"     value={pendingDrafts.length}     color="#8b5cf6" onClick={() => setTab('moderation')} />
+                  <StatCard icon={UsersIcon}   label="Registered Users"   value={users.length}             color="#10b981" onClick={() => setTab('users')} />
+                </div>
+              </div>
+            )}
+
+            {canTools && (
+              <div>
+                <h2 className="mb-3 text-xs font-bold uppercase tracking-widest text-white/30">Live Platform</h2>
+                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                  <StatCard icon={Wifi}        label="Active Users"     value={liveStats.activeUsers || 0}  color="#10b981" live />
+                  <StatCard icon={Download}    label="Playing Users"    value={liveStats.playingUsers || 0} color="#3b82f6" live />
+                  <StatCard icon={BarChart2}   label="Today's Launches" value={todaysLaunches}              color="#e27602" />
+                  <StatCard icon={TrendingUp}  label="Total Downloads"  value={totalDownloads.toLocaleString()} color="#f59e0b" />
+                </div>
+              </div>
+            )}
+
+            <div>
+              <h2 className="mb-3 text-xs font-bold uppercase tracking-widest text-white/30">System</h2>
+              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                <StatCard icon={Lock}           label="Password"     value={passwordVerified ? 'Unlocked' : 'Locked'} />
+                <StatCard icon={User}           label="Session Role" value={auth.user?.role || 'guest'} color="#7c3aed" />
+                <StatCard icon={Wifi}           label="Socket"       value={socketStatus} color="#3b82f6" />
+                <StatCard icon={Wrench}         label="Maintenance"  value={maintenanceMode ? 'ON' : 'OFF'} color={maintenanceMode ? '#f59e0b' : '#e27602'} />
+              </div>
+            </div>
           </div>
         )}
 

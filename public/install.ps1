@@ -1,7 +1,7 @@
-# MCLC Installer Script for Windows
-# Run with: iwr https://mclc.pluginhub.de/install.ps1 | iex
+# Lux Installer Script for Windows
+# Run with: iwr https://lux.pluginhub.de/install.ps1 | iex
 
-$repo = "Lux-Client/LuxClient"
+$repo = "Lux-Client/Lux-Client"
 $baseUrl = "https://github.com/$repo/releases/latest/download"
 $filename = "Lux-setup.exe"
 $url = "$baseUrl/$filename"

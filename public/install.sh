@@ -1,11 +1,12 @@
 #!/bin/bash
 
-# MCLC Installer Script
+# Lux Installer Script
 # Works on Linux and macOS
+# Run with: curl -sSL https://lux.pluginhub.de/install.sh | bash
 
 set -e
 
-REPO="Lux-Client/LuxClient"
+REPO="Lux-Client/Lux-Client"
 BASE_URL="https://github.com/$REPO/releases/latest/download"
 
 OS="$(uname -s)"

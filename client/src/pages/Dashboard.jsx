@@ -5,11 +5,11 @@ import {
   ArcElement, BarElement, CategoryScale,
   Chart as ChartJS, Legend, LinearScale, Tooltip,
 } from 'chart.js'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import {
   Puzzle, Download, CheckCircle2, Clock, Bell, BellOff,
   ChevronRight, ExternalLink, User, Settings, LogOut,
-  TrendingUp, Package, Check,
+  TrendingUp, Package, Check, Plus, X, Palette,
 } from 'lucide-react'
 import PageShell from '../components/PageShell'
 import useAuth, { fixPath } from '../hooks/useAuth'
@@ -98,6 +98,7 @@ export default function Dashboard() {
   const [notifications,  setNotifications]  = useState([])
   const [dataLoading,    setDataLoading]    = useState(true)
   const [error,          setError]          = useState('')
+  const [newProjectOpen, setNewProjectOpen] = useState(false)
 
   useEffect(() => {
     if (!auth.loggedIn) return
@@ -226,6 +227,12 @@ export default function Dashboard() {
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-2">
+              <button
+                onClick={() => setNewProjectOpen(true)}
+                className="flex items-center gap-1.5 rounded-xl bg-primary px-3.5 py-2 text-xs font-bold text-black shadow-glow-sm transition hover:bg-primary-light"
+              >
+                <Plus className="h-3.5 w-3.5" /> New Project
+              </button>
               {auth.user?.role === 'admin' && (
                 <Link to="/admin" className="flex items-center gap-1.5 rounded-xl border border-primary/20 bg-primary/8 px-3.5 py-2 text-xs font-semibold text-primary transition-colors hover:bg-primary/15">
                   Admin Panel <ChevronRight className="h-3.5 w-3.5" />
@@ -352,7 +359,7 @@ export default function Dashboard() {
                               <ExternalLink className="h-3.5 w-3.5" />
                             </Link>
                             <Link
-                              to={`/profile?edit=${ext.id}`}
+                              to={`/extensions/${ext.id}/edit`}
                               className="flex h-8 w-8 items-center justify-center rounded-lg text-white/30 hover:bg-white/8 hover:text-white"
                               title="Edit"
                             >
@@ -434,6 +441,68 @@ export default function Dashboard() {
           </div>
         </motion.div>
       </main>
+
+      <NewProjectModal isOpen={newProjectOpen} onClose={() => setNewProjectOpen(false)} />
     </PageShell>
+  )
+}
+
+function NewProjectModal({ isOpen, onClose }) {
+  return (
+    <AnimatePresence>
+      {isOpen && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="absolute inset-0 bg-black/75 backdrop-blur-md"
+            onClick={onClose}
+          />
+          <motion.div
+            initial={{ opacity: 0, scale: 0.96, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.96, y: 10 }}
+            transition={{ type: 'spring', damping: 28, stiffness: 320 }}
+            className="relative z-10 w-full max-w-md rounded-2xl border border-white/8 bg-[#0f0f0f] shadow-[0_40px_120px_rgba(0,0,0,0.8)]"
+          >
+            <div className="flex items-center justify-between border-b border-white/6 px-6 py-5">
+              <h3 className="text-lg font-bold text-white">New Project</h3>
+              <button onClick={onClose} className="flex h-8 w-8 items-center justify-center rounded-lg text-white/30 transition-colors hover:bg-white/6 hover:text-white">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="flex flex-col gap-3 p-5">
+              <p className="text-sm text-white/40">What would you like to submit?</p>
+              <Link
+                to="/extensions/create"
+                className="group flex items-center gap-3 rounded-xl border border-white/6 bg-white/[0.02] p-4 transition-all hover:border-primary/30 hover:bg-primary/5"
+              >
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                  <Puzzle className="h-4.5 w-4.5" />
+                </div>
+                <div className="flex-1">
+                  <div className="text-sm font-semibold text-white">Extension</div>
+                  <div className="text-xs text-white/30">Adds new functionality to Lux Client</div>
+                </div>
+                <ChevronRight className="h-4 w-4 text-white/15 transition-colors group-hover:text-primary" />
+              </Link>
+              <Link
+                to="/themes/create"
+                className="group flex items-center gap-3 rounded-xl border border-white/6 bg-white/[0.02] p-4 transition-all hover:border-primary/30 hover:bg-primary/5"
+              >
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                  <Palette className="h-4.5 w-4.5" />
+                </div>
+                <div className="flex-1">
+                  <div className="text-sm font-semibold text-white">Theme</div>
+                  <div className="text-xs text-white/30">Customizes the look and feel of Lux Client</div>
+                </div>
+                <ChevronRight className="h-4 w-4 text-white/15 transition-colors group-hover:text-primary" />
+              </Link>
+            </div>
+          </motion.div>
+        </div>
+      )}
+    </AnimatePresence>
   )
 }

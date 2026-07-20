@@ -14,6 +14,7 @@ import Maintenance from './pages/Maintenance'
 import ModpackEditor from './pages/ModpackEditor'
 import Privacy from './pages/Privacy'
 import Profile from './pages/Profile'
+import ProjectEditor from './pages/ProjectEditor'
 
 export default function App() {
   return (
@@ -22,6 +23,9 @@ export default function App() {
       <Routes>
         <Route path="/" element={<LandingPage />} />
         <Route path="/extensions" element={<Extensions />} />
+        <Route path="/extensions/create" element={<ProjectEditor type="extension" />} />
+        <Route path="/themes/create" element={<ProjectEditor type="theme" />} />
+        <Route path="/extensions/:id/edit" element={<ProjectEditor />} />
         <Route path="/extensions/:id" element={<ExtensionDetail />} />
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/profile" element={<Profile />} />

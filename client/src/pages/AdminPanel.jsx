@@ -9,6 +9,7 @@ import {
   LayoutDashboard, Newspaper, BarChart2, Code2, ShieldCheck,
   Lock, RefreshCw, Wifi, WifiOff, AlertTriangle, Wrench,
   Trash2, Check, X, LogOut, ChevronRight, User, Download,
+  Users as UsersIcon, FileSearch,
 } from 'lucide-react'
 import useAuth, { fixPath } from '../hooks/useAuth'
 
@@ -98,27 +99,97 @@ function EmptyState({ message }) {
   )
 }
 
-function ModerationItem({ title, subtitle, image, actions }) {
+function ModerationItem({ title, subtitle, image, actions, extra }) {
   return (
-    <div className="flex flex-col gap-4 rounded-xl border border-white/5 bg-white/[0.02] p-4 sm:flex-row sm:items-center sm:justify-between">
-      <div className="flex items-center gap-3">
-        {image && <img src={image} alt="" className="h-11 w-11 rounded-xl object-cover" onError={e => e.currentTarget.style.display='none'} />}
-        <div>
-          <p className="text-sm font-semibold text-white">{title}</p>
-          <p className="mt-0.5 text-xs text-white/30">{subtitle}</p>
+    <div className="rounded-xl border border-white/5 bg-white/[0.02] p-4">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-3">
+          {image && <img src={image} alt="" className="h-11 w-11 rounded-xl object-cover" onError={e => e.currentTarget.style.display='none'} />}
+          <div>
+            <p className="text-sm font-semibold text-white">{title}</p>
+            <p className="mt-0.5 text-xs text-white/30">{subtitle}</p>
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {actions.map(a => (
+            <button key={a.label} onClick={a.onClick}
+              className={`rounded-lg px-3.5 py-2 text-xs font-bold transition ${
+                a.tone === 'danger'   ? 'border border-red-500/15 bg-red-500/8 text-red-400 hover:bg-red-500/15' :
+                a.tone === 'primary'  ? 'bg-primary text-black hover:bg-primary-light' :
+                'border border-white/8 bg-white/4 text-white/60 hover:bg-white/8 hover:text-white'
+              }`}
+            >{a.label}</button>
+          ))}
         </div>
       </div>
-      <div className="flex flex-wrap gap-2">
-        {actions.map(a => (
-          <button key={a.label} onClick={a.onClick}
-            className={`rounded-lg px-3.5 py-2 text-xs font-bold transition ${
-              a.tone === 'danger'   ? 'border border-red-500/15 bg-red-500/8 text-red-400 hover:bg-red-500/15' :
-              a.tone === 'primary'  ? 'bg-primary text-black hover:bg-primary-light' :
-              'border border-white/8 bg-white/4 text-white/60 hover:bg-white/8 hover:text-white'
-            }`}
-          >{a.label}</button>
-        ))}
-      </div>
+      {extra}
+    </div>
+  )
+}
+
+// Lazily fetches size/SHA-256 for an uploaded file and links out to VirusTotal —
+// there's no automated scan, but this gives moderators enough to run one manually.
+function FileInspector({ filePath }) {
+  const [open,    setOpen]    = useState(false)
+  const [info,    setInfo]    = useState(null)
+  const [loading, setLoading] = useState(false)
+  const [error,   setError]   = useState('')
+
+  if (!filePath) return null
+
+  const toggle = async () => {
+    const next = !open
+    setOpen(next)
+    if (next && !info && !loading) {
+      setLoading(true); setError('')
+      try {
+        const res  = await fetch(`/api/admin/file-info?file=${encodeURIComponent(filePath)}`)
+        const data = await res.json().catch(() => ({}))
+        if (res.ok) setInfo(data)
+        else setError(data.error || 'Failed to inspect file')
+      } catch {
+        setError('Failed to inspect file')
+      } finally {
+        setLoading(false)
+      }
+    }
+  }
+
+  return (
+    <div className="mt-3 border-t border-white/5 pt-3">
+      <button onClick={toggle} className="flex items-center gap-1.5 text-xs font-semibold text-white/40 transition-colors hover:text-white">
+        <FileSearch className="h-3.5 w-3.5" /> {open ? 'Hide file info' : 'Inspect file'}
+      </button>
+      {open && (
+        <div className="mt-2 rounded-lg border border-white/5 bg-black/20 p-3 text-xs">
+          {loading && <p className="text-white/30">Loading…</p>}
+          {error && <p className="text-red-400">{error}</p>}
+          {info && (
+            <div className="flex flex-col gap-1.5">
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-white/30">File</span>
+                <span className="truncate font-mono text-white/70">{info.filename}</span>
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-white/30">Size</span>
+                <span className="text-white/70">{(info.size / 1024).toFixed(1)} KB</span>
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-white/30">SHA-256</span>
+                <span className="truncate font-mono text-white/70">{info.sha256}</span>
+              </div>
+              <div className="mt-1.5 flex flex-wrap gap-2">
+                <a href={info.downloadUrl} target="_blank" rel="noopener noreferrer" className="rounded-md border border-white/8 bg-white/4 px-2.5 py-1.5 text-[11px] font-semibold text-white/60 transition-colors hover:text-white">
+                  Download
+                </a>
+                <a href={info.virusTotalUrl} target="_blank" rel="noopener noreferrer" className="rounded-md border border-primary/15 bg-primary/8 px-2.5 py-1.5 text-[11px] font-semibold text-primary transition-colors hover:bg-primary/15">
+                  Check on VirusTotal
+                </a>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }
@@ -131,6 +202,7 @@ const TABS = [
   { id: 'analytics',  label: 'Analytics',  icon: BarChart2,       authLevel: 'tools' },
   { id: 'codes',      label: 'Codes',      icon: Code2,           authLevel: 'tools' },
   { id: 'moderation', label: 'Moderation', icon: ShieldCheck,     authLevel: 'admin' },
+  { id: 'users',      label: 'Users',      icon: UsersIcon,       authLevel: 'admin' },
 ]
 
 export default function AdminPanel() {
@@ -321,6 +393,8 @@ export default function AdminPanel() {
     let reason = ''; let duration = ''
     if (action === 'warn' || action === 'ban') { reason = window.prompt(`Reason for ${action}:`) || ''; if (!reason) return }
     if (action === 'ban') duration = window.prompt('Duration in hours (empty = permanent):') || ''
+    if (action === 'promote' && !window.confirm('Grant this user admin access?')) return
+    if (action === 'demote' && !window.confirm('Remove admin access from this user?')) return
     await fetch(`/api/admin/users/${id}/${action}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason, duration }) })
     loadModerationData()
   }
@@ -604,28 +678,41 @@ export default function AdminPanel() {
         {/* ── MODERATION ── */}
         {tab === 'moderation' && isSessionAdmin && (
           <div className="flex flex-col gap-5">
-            <SectionCard title="Pending Extensions" description="Review new marketplace submissions.">
+            <SectionCard title="Pending Extensions" description="Review new marketplace submissions. Inspect the file before approving.">
               {pendingExtensions.length === 0 ? <EmptyState message="No pending extensions." /> : (
                 <div className="flex flex-col gap-3">
                   {pendingExtensions.map(item => (
-                    <ModerationItem key={item.id} title={item.name} subtitle={`${item.developer || 'Unknown'} · ${item.identifier}`} image={fixPath(item.banner_path)} actions={[
-                      { label: 'Approve', onClick: () => moderateExtension(item.id, 'approve'), tone: 'primary' },
-                      { label: 'Action Req.', onClick: () => moderateExtension(item.id, 'action_required') },
-                      { label: 'Reject', onClick: () => moderateExtension(item.id, 'reject'), tone: 'danger' },
-                    ]} />
+                    <ModerationItem
+                      key={item.id}
+                      title={item.name}
+                      subtitle={`${item.developer || 'Unknown'} · ${item.identifier}`}
+                      image={fixPath(item.banner_path)}
+                      extra={<FileInspector filePath={item.file_path} />}
+                      actions={[
+                        { label: 'Approve', onClick: () => moderateExtension(item.id, 'approve'), tone: 'primary' },
+                        { label: 'Action Req.', onClick: () => moderateExtension(item.id, 'action_required') },
+                        { label: 'Reject', onClick: () => moderateExtension(item.id, 'reject'), tone: 'danger' },
+                      ]}
+                    />
                   ))}
                 </div>
               )}
             </SectionCard>
 
-            <SectionCard title="Pending Versions" description="Additional version uploads for approved projects.">
+            <SectionCard title="Pending Versions" description="Additional version uploads for approved projects. Inspect the file before approving.">
               {pendingVersions.length === 0 ? <EmptyState message="No pending versions." /> : (
                 <div className="flex flex-col gap-3">
                   {pendingVersions.map(item => (
-                    <ModerationItem key={item.id} title={`${item.extension_name} ${item.version}`} subtitle={item.developer || 'Unknown'} actions={[
-                      { label: 'Approve', onClick: () => moderateVersion(item.id, 'approve'), tone: 'primary' },
-                      { label: 'Reject',  onClick: () => moderateVersion(item.id, 'reject'),  tone: 'danger' },
-                    ]} />
+                    <ModerationItem
+                      key={item.id}
+                      title={`${item.extension_name} ${item.version}`}
+                      subtitle={item.developer || 'Unknown'}
+                      extra={<FileInspector filePath={item.file_path} />}
+                      actions={[
+                        { label: 'Approve', onClick: () => moderateVersion(item.id, 'approve'), tone: 'primary' },
+                        { label: 'Reject',  onClick: () => moderateVersion(item.id, 'reject'),  tone: 'danger' },
+                      ]}
+                    />
                   ))}
                 </div>
               )}
@@ -643,28 +730,42 @@ export default function AdminPanel() {
                 </div>
               )}
             </SectionCard>
-
-            <SectionCard title="Users" description="Manage user accounts.">
-              {users.length === 0 ? <EmptyState message="No users." /> : (
-                <div className="flex flex-col gap-3">
-                  {users.map(user => (
-                    <ModerationItem
-                      key={user.id}
-                      title={user.username}
-                      subtitle={`${user.email || 'No email'} · ${user.role}${user.banned ? ' · BANNED' : ''}`}
-                      image={fixPath(user.avatar)}
-                      actions={[
-                        { label: 'Warn', onClick: () => moderateUser(user.id, 'warn') },
-                        user.banned
-                          ? { label: 'Unban', onClick: () => moderateUser(user.id, 'unban'), tone: 'primary' }
-                          : { label: 'Ban',   onClick: () => moderateUser(user.id, 'ban'),   tone: 'danger' },
-                      ]}
-                    />
-                  ))}
-                </div>
-              )}
-            </SectionCard>
           </div>
+        )}
+
+        {/* ── USERS ── */}
+        {tab === 'users' && isSessionAdmin && (
+          <SectionCard
+            title="Users"
+            description={`${users.length} account${users.length !== 1 ? 's' : ''} registered.`}
+            action={
+              <button onClick={loadModerationData} className="flex items-center gap-1.5 rounded-xl border border-white/6 bg-white/4 px-3.5 py-2 text-xs font-semibold text-white/50 transition-colors hover:text-white">
+                <RefreshCw className="h-3.5 w-3.5" /> Refresh
+              </button>
+            }
+          >
+            {users.length === 0 ? <EmptyState message="No users." /> : (
+              <div className="flex flex-col gap-3">
+                {users.map(user => (
+                  <ModerationItem
+                    key={user.id}
+                    title={user.username}
+                    subtitle={`${user.email || 'No email'} · ${user.role}${user.banned ? ' · BANNED' : ''}`}
+                    image={fixPath(user.avatar)}
+                    actions={[
+                      { label: 'Warn', onClick: () => moderateUser(user.id, 'warn') },
+                      user.banned
+                        ? { label: 'Unban', onClick: () => moderateUser(user.id, 'unban'), tone: 'primary' }
+                        : { label: 'Ban',   onClick: () => moderateUser(user.id, 'ban'),   tone: 'danger' },
+                      user.role === 'admin'
+                        ? { label: 'Remove Admin', onClick: () => moderateUser(user.id, 'demote'), tone: 'danger' }
+                        : { label: 'Make Admin',   onClick: () => moderateUser(user.id, 'promote'), tone: 'primary' },
+                    ]}
+                  />
+                ))}
+              </div>
+            )}
+          </SectionCard>
         )}
 
       </main>

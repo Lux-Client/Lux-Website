@@ -4,6 +4,7 @@ const bodyParser = require('body-parser');
 const cors = require('cors');
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 
 const DATA_DIR = process.env.DATA_DIR
     ? path.resolve(process.env.DATA_DIR)
@@ -942,6 +943,15 @@ app.post('/api/admin/users/:id/:action', ensureAdmin, async (req, res) => {
         } else if (action === 'unban') {
             await pool.query('UPDATE users SET banned = FALSE, ban_reason = NULL, ban_expires = NULL WHERE id = ?', [id]);
             await pool.query('INSERT INTO notifications (user_id, message, type) VALUES (?, ?, ?)', [id, 'Your ban has been lifted.', 'success']);
+        } else if (action === 'promote') {
+            await pool.query('UPDATE users SET role = ? WHERE id = ?', ['admin', id]);
+            await pool.query('INSERT INTO notifications (user_id, message, type) VALUES (?, ?, ?)', [id, 'You have been granted administrator access.', 'success']);
+        } else if (action === 'demote') {
+            if (Number(id) === Number(req.user.id)) {
+                return res.status(400).json({ error: 'You cannot remove your own admin role.' });
+            }
+            await pool.query('UPDATE users SET role = ? WHERE id = ?', ['user', id]);
+            await pool.query('INSERT INTO notifications (user_id, message, type) VALUES (?, ?, ?)', [id, 'Your administrator access has been removed.', 'info']);
         } else {
             return res.status(400).json({ error: 'Invalid action' });
         }
@@ -999,6 +1009,42 @@ app.get('/api/admin/extensions/pending', ensureAdmin, async (req, res) => {
         res.json(rows);
     } catch (err) {
         res.status(500).json({ error: 'Database error' });
+    }
+});
+
+// File inspection for moderation: size, sha256 hash, and a VirusTotal lookup link.
+// No API key required — admins paste the hash into VirusTotal manually via the link.
+app.get('/api/admin/file-info', ensureAdmin, async (req, res) => {
+    const { file } = req.query;
+    if (!file || typeof file !== 'string' || file.includes('..') || file.includes('/') || file.includes('\\')) {
+        return res.status(400).json({ error: 'Invalid file parameter' });
+    }
+    let filePath = path.join(UPLOAD_DIR, file);
+    if (!fs.existsSync(filePath)) filePath = path.join(__dirname, 'public/uploads', file);
+    try {
+        const stat = await fs.promises.stat(filePath);
+        if (!stat.isFile()) return res.status(404).json({ error: 'File not found' });
+
+        const hash = crypto.createHash('sha256');
+        await new Promise((resolve, reject) => {
+            const stream = fs.createReadStream(filePath);
+            stream.on('data', chunk => hash.update(chunk));
+            stream.on('end', resolve);
+            stream.on('error', reject);
+        });
+        const sha256 = hash.digest('hex');
+
+        res.json({
+            filename: file,
+            size: stat.size,
+            sha256,
+            downloadUrl: `/uploads/${file}`,
+            virusTotalUrl: `https://www.virustotal.com/gui/file/${sha256}`,
+        });
+    } catch (err) {
+        if (err.code === 'ENOENT') return res.status(404).json({ error: 'File not found' });
+        console.error('[Lux] File info error:', err);
+        res.status(500).json({ error: 'Failed to inspect file' });
     }
 });
 

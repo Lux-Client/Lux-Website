@@ -2,6 +2,25 @@ import { useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X, Download, Copy, Check, Terminal } from 'lucide-react'
 
+// A minimal Tux-style penguin, built from plain shapes so it actually reads as
+// "Linux" instead of the Debian swirl that used to stand in for every distro here.
+function TuxIcon({ className }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className}>
+      <ellipse cx="12" cy="14" rx="5.5" ry="7.5" fill="currentColor" />
+      <circle cx="12" cy="6.5" r="3.6" fill="currentColor" />
+      <ellipse cx="6.3" cy="13" rx="1.6" ry="4" fill="currentColor" transform="rotate(-18 6.3 13)" />
+      <ellipse cx="17.7" cy="13" rx="1.6" ry="4" fill="currentColor" transform="rotate(18 17.7 13)" />
+      <ellipse cx="9.5" cy="21.3" rx="1.8" ry="0.9" fill="currentColor" />
+      <ellipse cx="14.5" cy="21.3" rx="1.8" ry="0.9" fill="currentColor" />
+      <ellipse cx="12" cy="15.2" rx="3" ry="5.6" fill="#fff" />
+      <circle cx="10.5" cy="6" r="0.55" fill="#0f0f0f" />
+      <circle cx="13.5" cy="6" r="0.55" fill="#0f0f0f" />
+      <polygon points="11,7.5 13,7.5 12,8.6" fill="#f59e0b" />
+    </svg>
+  )
+}
+
 const PLATFORMS = (links) => [
   {
     href: links.win,
@@ -18,33 +37,21 @@ const PLATFORMS = (links) => [
     href: links.deb,
     label: 'Linux (Debian)',
     sub: '.deb — Ubuntu / Debian',
-    icon: (
-      <svg viewBox="0 0 24 24" fill="currentColor" className="h-5 w-5">
-        <path d="M12.504 0c-.155 0-.315.008-.48.021C7.576.336 3.746 3.956 3.132 8.741c-.024.191-.035.383-.035.576 0 3.288 2.027 6.215 5.154 7.554.082.034.165.068.248.1-.005.063-.01.126-.01.19 0 1.015.804 1.845 1.794 1.845.992 0 1.795-.83 1.795-1.845 0-.064-.005-.127-.01-.19l.028-.012c3.127-1.34 5.154-4.267 5.154-7.555 0-.19-.011-.382-.035-.573-.614-4.785-4.444-8.405-9.712-8.72A8.28 8.28 0 0012.504 0zm-3.19 17.77c0-.65.526-1.176 1.176-1.176.649 0 1.176.526 1.176 1.176 0 .65-.527 1.176-1.176 1.176-.65 0-1.176-.526-1.176-1.176z"/>
-      </svg>
-    ),
+    icon: <TuxIcon className="h-5 w-5" />,
     color: '#f59e0b',
   },
   {
     href: links.rpm,
     label: 'Linux (RPM)',
     sub: '.rpm — Fedora / RedHat',
-    icon: (
-      <svg viewBox="0 0 24 24" fill="currentColor" className="h-5 w-5">
-        <path d="M12.504 0c-.155 0-.315.008-.48.021C7.576.336 3.746 3.956 3.132 8.741c-.024.191-.035.383-.035.576 0 3.288 2.027 6.215 5.154 7.554.082.034.165.068.248.1-.005.063-.01.126-.01.19 0 1.015.804 1.845 1.794 1.845.992 0 1.795-.83 1.795-1.845 0-.064-.005-.127-.01-.19l.028-.012c3.127-1.34 5.154-4.267 5.154-7.555 0-.19-.011-.382-.035-.573-.614-4.785-4.444-8.405-9.712-8.72A8.28 8.28 0 0012.504 0z"/>
-      </svg>
-    ),
+    icon: <TuxIcon className="h-5 w-5" />,
     color: '#ef4444',
   },
   {
     href: links.appimage,
     label: 'Linux (AppImage)',
     sub: 'Universal Linux',
-    icon: (
-      <svg viewBox="0 0 24 24" fill="currentColor" className="h-5 w-5">
-        <path d="M12.504 0c-.155 0-.315.008-.48.021C7.576.336 3.746 3.956 3.132 8.741c-.024.191-.035.383-.035.576 0 3.288 2.027 6.215 5.154 7.554.082.034.165.068.248.1-.005.063-.01.126-.01.19 0 1.015.804 1.845 1.794 1.845.992 0 1.795-.83 1.795-1.845 0-.064-.005-.127-.01-.19l.028-.012c3.127-1.34 5.154-4.267 5.154-7.555 0-.19-.011-.382-.035-.573-.614-4.785-4.444-8.405-9.712-8.72A8.28 8.28 0 0012.504 0z"/>
-      </svg>
-    ),
+    icon: <TuxIcon className="h-5 w-5" />,
     color: '#f59e0b',
   },
   {

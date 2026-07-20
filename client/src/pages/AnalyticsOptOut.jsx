@@ -36,7 +36,7 @@ Website-created codes expire after **5 days**. Launcher account codes expire aft
 
 ## Opting out
 
-This page documents the tracking scope. Functional modpack-code data is retained only when you actively create or use share codes.`
+In the Lux Client desktop app, go to **Settings → Privacy** and turn off **"Share anonymous usage data"**. This immediately stops the launcher from sending session data (whether you're playing) and download tracking — no restart required. Functional modpack-code data is retained only when you actively create or use share codes, independent of this setting.`
 
 export default function AnalyticsOptOut() {
   return (

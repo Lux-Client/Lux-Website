@@ -1,130 +1,8 @@
 import { motion } from 'framer-motion'
 import { Download, Github, ArrowRight, Zap } from 'lucide-react'
+import LauncherShot from './LauncherShot'
 
 const REPO = 'Lux-Client/Lux-Client'
-
-function LauncherMockup() {
-  const sidebarItems = [
-    { label: 'Home', active: true },
-    { label: 'Library' },
-    { label: 'Search' },
-    { label: 'Skins' },
-    { label: 'Extensions' },
-  ]
-
-  const instances = [
-    { name: 'Survival World', version: '1.21.1', loader: 'Fabric', color: '#22c55e' },
-    { name: 'Modded 1.20', version: '1.20.4', loader: 'Forge', color: '#e27602' },
-    { name: 'Creative Build', version: '1.21.3', loader: 'Vanilla', color: '#3b82f6' },
-    { name: 'Speedrun SMP', version: '1.8.9', loader: 'Vanilla', color: '#a855f7' },
-  ]
-
-  return (
-    <div className="relative w-full select-none overflow-hidden rounded-2xl border border-white/10 bg-[#0e0e0e] shadow-[0_40px_120px_rgba(0,0,0,0.8),0_0_0_1px_rgba(255,255,255,0.05)]">
-      {/* Title bar */}
-      <div className="flex h-10 items-center justify-between border-b border-white/5 bg-[#0a0a0a] px-4">
-        <div className="flex items-center gap-2">
-          <div className="h-2.5 w-2.5 rounded-full bg-[#ff5f57]" />
-          <div className="h-2.5 w-2.5 rounded-full bg-[#febc2e]" />
-          <div className="h-2.5 w-2.5 rounded-full bg-[#28c840]" />
-        </div>
-        <div className="flex items-center gap-1 rounded-md bg-white/4 px-3 py-0.5 text-[10px] font-semibold text-white/30">
-          <span>Launcher</span>
-          <span className="opacity-40">·</span>
-          <span>Server</span>
-          <span className="opacity-40">·</span>
-          <span>Client</span>
-          <span className="opacity-40">·</span>
-          <span>Tools</span>
-        </div>
-        <div className="w-14" />
-      </div>
-
-      <div className="flex">
-        {/* Sidebar */}
-        <div className="flex w-11 flex-col items-center gap-1 border-r border-white/5 bg-[#0a0a0a] py-3">
-          {sidebarItems.map(item => (
-            <div
-              key={item.label}
-              className={`flex h-9 w-9 items-center justify-center rounded-xl transition-colors ${
-                item.active ? 'bg-primary/15 text-primary' : 'text-white/20 hover:text-white/40'
-              }`}
-            >
-              <div className={`h-3.5 w-3.5 rounded-sm ${item.active ? 'bg-primary/60' : 'bg-white/15'}`} />
-            </div>
-          ))}
-          <div className="mt-auto mb-1 flex h-9 w-9 items-center justify-center rounded-xl text-white/20">
-            <div className="h-3.5 w-3.5 rounded-sm bg-white/10" />
-          </div>
-        </div>
-
-        {/* Main content */}
-        <div className="flex-1 p-4">
-          {/* Header bar */}
-          <div className="mb-4 flex items-center justify-between">
-            <div>
-              <div className="h-2.5 w-24 rounded-full bg-white/10" />
-              <div className="mt-1.5 h-2 w-16 rounded-full bg-white/5" />
-            </div>
-            <div className="h-7 w-20 rounded-lg bg-primary/20 border border-primary/20">
-              <div className="flex h-full items-center justify-center gap-1">
-                <div className="h-1.5 w-1.5 rounded-full bg-primary/60" />
-                <div className="h-1.5 w-10 rounded-full bg-primary/30" />
-              </div>
-            </div>
-          </div>
-
-          {/* Instance grid */}
-          <div className="grid grid-cols-2 gap-2.5">
-            {instances.map((inst, i) => (
-              <motion.div
-                key={inst.name}
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.7 + i * 0.08, duration: 0.4, ease: 'easeOut' }}
-                className="group relative overflow-hidden rounded-xl border border-white/6 bg-white/[0.03] p-3"
-              >
-                {/* Icon area */}
-                <div
-                  className="mb-2.5 flex h-10 w-10 items-center justify-center rounded-xl"
-                  style={{ backgroundColor: inst.color + '18', borderColor: inst.color + '25', border: '1px solid' }}
-                >
-                  <div className="h-5 w-5 rounded-md" style={{ backgroundColor: inst.color + '50' }} />
-                </div>
-                {/* Text */}
-                <div className="h-2 w-20 rounded-full bg-white/20 mb-1.5" />
-                <div className="flex items-center gap-1.5">
-                  <div className="h-1.5 w-10 rounded-full bg-white/8" />
-                  <span className="text-[9px] font-bold rounded-full px-1.5 py-0.5" style={{ backgroundColor: inst.color + '18', color: inst.color + 'cc' }}>
-                    {inst.loader}
-                  </span>
-                </div>
-                {/* Play button hover */}
-                <div className="absolute bottom-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <div className="flex h-6 w-6 items-center justify-center rounded-full" style={{ backgroundColor: inst.color + '22' }}>
-                    <div className="ml-0.5 h-0 w-0 border-y-[4px] border-l-[7px] border-y-transparent" style={{ borderLeftColor: inst.color }} />
-                  </div>
-                </div>
-              </motion.div>
-            ))}
-          </div>
-
-          {/* Bottom bar */}
-          <div className="mt-3 flex items-center justify-between rounded-xl border border-white/5 bg-white/[0.02] px-3 py-2">
-            <div className="flex items-center gap-2">
-              <div className="h-2 w-2 rounded-full bg-emerald-500/60 shadow-[0_0_6px_rgba(16,185,129,0.5)]" />
-              <div className="h-1.5 w-20 rounded-full bg-white/10" />
-            </div>
-            <div className="h-1.5 w-12 rounded-full bg-white/6" />
-          </div>
-        </div>
-      </div>
-
-      {/* Glow overlay */}
-      <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-primary/3 via-transparent to-transparent" />
-    </div>
-  )
-}
 
 const container = {
   hidden: {},
@@ -245,7 +123,7 @@ export default function Hero({ onDownload, version = null }) {
             </motion.div>
           </motion.div>
 
-          {/* Right – launcher mockup */}
+          {/* Right – real launcher screenshot */}
           <motion.div
             initial={{ opacity: 0, x: 40, scale: 0.96 }}
             animate={{ opacity: 1, x: 0, scale: 1 }}
@@ -253,9 +131,15 @@ export default function Hero({ onDownload, version = null }) {
             className="hidden lg:block"
           >
             <div className="relative">
-              {/* Ambient glow behind mockup */}
+              {/* Ambient glow behind the screenshot */}
               <div className="absolute -inset-6 rounded-3xl bg-gradient-to-br from-primary/10 via-transparent to-transparent blur-2xl" />
-              <LauncherMockup />
+              <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-[#0e0e0e] shadow-[0_40px_120px_rgba(0,0,0,0.8),0_0_0_1px_rgba(255,255,255,0.05)]">
+                <LauncherShot
+                  name="launcher-home"
+                  alt="The Lux Client home screen with recently played instances, mod of the day and featured modpacks"
+                  priority
+                />
+              </div>
             </div>
           </motion.div>
         </div>

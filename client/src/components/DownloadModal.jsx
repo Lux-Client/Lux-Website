@@ -1,25 +1,7 @@
 import { useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X, Download, Copy, Check, Terminal } from 'lucide-react'
-
-// A minimal Tux-style penguin, built from plain shapes so it actually reads as
-// "Linux" instead of the Debian swirl that used to stand in for every distro here.
-function TuxIcon({ className }) {
-  return (
-    <svg viewBox="0 0 24 24" className={className}>
-      <ellipse cx="12" cy="14" rx="5.5" ry="7.5" fill="currentColor" />
-      <circle cx="12" cy="6.5" r="3.6" fill="currentColor" />
-      <ellipse cx="6.3" cy="13" rx="1.6" ry="4" fill="currentColor" transform="rotate(-18 6.3 13)" />
-      <ellipse cx="17.7" cy="13" rx="1.6" ry="4" fill="currentColor" transform="rotate(18 17.7 13)" />
-      <ellipse cx="9.5" cy="21.3" rx="1.8" ry="0.9" fill="currentColor" />
-      <ellipse cx="14.5" cy="21.3" rx="1.8" ry="0.9" fill="currentColor" />
-      <ellipse cx="12" cy="15.2" rx="3" ry="5.6" fill="#fff" />
-      <circle cx="10.5" cy="6" r="0.55" fill="#0f0f0f" />
-      <circle cx="13.5" cy="6" r="0.55" fill="#0f0f0f" />
-      <polygon points="11,7.5 13,7.5 12,8.6" fill="#f59e0b" />
-    </svg>
-  )
-}
+import LinuxIcon from './icons/LinuxIcon'
 
 const PLATFORMS = (links) => [
   {
@@ -37,21 +19,21 @@ const PLATFORMS = (links) => [
     href: links.deb,
     label: 'Linux (Debian)',
     sub: '.deb — Ubuntu / Debian',
-    icon: <TuxIcon className="h-5 w-5" />,
+    icon: <LinuxIcon className="h-5 w-5" />,
     color: '#f59e0b',
   },
   {
     href: links.rpm,
     label: 'Linux (RPM)',
     sub: '.rpm — Fedora / RedHat',
-    icon: <TuxIcon className="h-5 w-5" />,
+    icon: <LinuxIcon className="h-5 w-5" />,
     color: '#ef4444',
   },
   {
     href: links.appimage,
     label: 'Linux (AppImage)',
     sub: 'Universal Linux',
-    icon: <TuxIcon className="h-5 w-5" />,
+    icon: <LinuxIcon className="h-5 w-5" />,
     color: '#f59e0b',
   },
   {

@@ -1619,6 +1619,8 @@ if (process.env.NODE_ENV === 'production' && (!LUXCLOUD_JWT_SECRET || LUXCLOUD_J
 }
 app.use('/', require('./routes/deviceAuth'));
 app.use('/api/cloud', require('./routes/cloud'));
+app.use('/api/cloud', require('./routes/cloudBlobs'));
+app.use('/api/admin/cloud', require('./routes/adminCloud'));
 
 app.use((err, req, res, next) => {
     console.error(`[Server Error] ${req.method} ${req.url}:`, err);
@@ -1793,5 +1795,11 @@ server.listen(PORT, async () => {
     const { pruneDeviceAuthCodes } = require('./db_init_cloud');
     pruneDeviceAuthCodes();
     setInterval(pruneDeviceAuthCodes, 60 * 60 * 1000).unref();
+
+    try {
+        require('./jobs/cloudGc').startCloudJobs();
+    } catch (err) {
+        console.error('[LuxCloud] Could not start the cloud jobs:', err.message);
+    }
 });
 

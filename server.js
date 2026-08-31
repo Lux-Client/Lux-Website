@@ -1612,6 +1612,14 @@ app.get('/api/modrinth/search', async (req, res) => {
     }
 });
 
+const LUXCLOUD_JWT_SECRET = process.env.LUXCLOUD_JWT_SECRET;
+if (process.env.NODE_ENV === 'production' && (!LUXCLOUD_JWT_SECRET || LUXCLOUD_JWT_SECRET.length < 32)) {
+    console.error('[CRITICAL] LUXCLOUD_JWT_SECRET is missing or shorter than 32 characters in production. Server will not start.');
+    process.exit(1);
+}
+app.use('/', require('./routes/deviceAuth'));
+app.use('/api/cloud', require('./routes/cloud'));
+
 app.use((err, req, res, next) => {
     console.error(`[Server Error] ${req.method} ${req.url}:`, err);
     res.status(500).json({
@@ -1781,5 +1789,9 @@ server.listen(PORT, async () => {
     } catch (err) {
         console.error('[Database] Critical error during auto-init:', err.message);
     }
+
+    const { pruneDeviceAuthCodes } = require('./db_init_cloud');
+    pruneDeviceAuthCodes();
+    setInterval(pruneDeviceAuthCodes, 60 * 60 * 1000).unref();
 });
 

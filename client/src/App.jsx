@@ -2,6 +2,7 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import ScrollManager from './components/ScrollManager'
 import AdminPanel from './pages/AdminPanel'
 import AnalyticsOptOut from './pages/AnalyticsOptOut'
+import AuthorizeDevice from './pages/AuthorizeDevice'
 import Changelog from './pages/Changelog'
 import Dashboard from './pages/Dashboard'
 import DeveloperProfile from './pages/DeveloperProfile'
@@ -42,6 +43,7 @@ export default function App() {
         <Route path="/imprint" element={<Imprint />} />
         <Route path="/maintenance" element={<Maintenance />} />
         <Route path="/opt-out" element={<AnalyticsOptOut />} />
+        <Route path="/authorize-device" element={<AuthorizeDevice />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>

@@ -1,4 +1,5 @@
 const pool = require('./database');
+const { createCloudTables } = require('./db_init_cloud');
 
 const createTables = async () => {
     let connection;
@@ -203,6 +204,8 @@ const createTables = async () => {
                 );
             }
         }
+
+        await createCloudTables(connection);
 
         return true;
     } catch (err) {

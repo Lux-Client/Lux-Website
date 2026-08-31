@@ -10,10 +10,12 @@
         "client:dev": "cd client && npm run dev",
         "client:build": "cd client && npm run build",
         "db:init": "node db_init.js",
-        "db:migrate:maria-to-pg": "node migrate-mariadb-to-postgres.js"
+        "db:migrate:maria-to-pg": "node migrate-mariadb-to-postgres.js",
+        "test:cloud": "node tests/deviceAuth.phase1.test.js"
     },
     "devDependencies": {
-        "concurrently": "^9.0.0"
+        "concurrently": "^9.0.0",
+        "pg-mem": "^3.0.14"
     },
     "dependencies": {
         "body-parser": "^1.20.2",
@@ -21,7 +23,9 @@
         "cors": "^2.8.5",
         "dotenv": "^17.3.1",
         "express": "^4.18.2",
+        "express-rate-limit": "^8.7.0",
         "express-session": "^1.19.0",
+        "jsonwebtoken": "^9.0.3",
         "multer": "^2.0.2",
         "mysql2": "^3.17.1",
         "nodemailer": "^9.0.3",

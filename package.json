@@ -11,7 +11,7 @@
         "client:build": "cd client && npm run build",
         "db:init": "node db_init.js",
         "db:migrate:maria-to-pg": "node migrate-mariadb-to-postgres.js",
-        "test:cloud": "node tests/deviceAuth.phase1.test.js && node tests/cloudInstances.phase2.test.js && node tests/cloudBlobs.phase3.test.js"
+        "test:cloud": "node tests/deviceAuth.phase1.test.js && node tests/cloudInstances.phase2.test.js && node tests/cloudBlobs.phase3.test.js && node tests/manifestSchema.phase4.test.js"
     },
     "devDependencies": {
         "concurrently": "^9.0.0",

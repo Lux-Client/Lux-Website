@@ -419,4 +419,217 @@ router.get('/instances/:uuid/revisions', ensureDeviceAuth, async (req, res) => {
     }
 });
 
+router.post('/instances/:uuid/revisions/:rev/rollback', ensureDeviceAuth, async (req, res) => {
+    const target = Number(req.params.rev);
+    if (!Number.isSafeInteger(target) || target < 1) {
+        return cloudError(res, 400, 'invalid_request', 'revision must be a positive integer');
+    }
+
+    const connection = await pool.getConnection();
+    try {
+        await connection.beginTransaction();
+        await ensureCloudSettingsRow(req.cloudUserId, connection);
+
+        const [lockRows] = await connection.query(
+            `SELECT ${INSTANCE_COLUMNS} FROM cloud_instances i
+              WHERE i.user_id = ? AND i.instance_uuid = ? AND i.status = ?
+              FOR UPDATE`,
+            [req.cloudUserId, String(req.params.uuid), 'active']
+        );
+        if (lockRows.length === 0) {
+            await connection.rollback();
+            return cloudError(res, 404, 'not_found', 'Instance not found');
+        }
+        const [instance] = await decorate(lockRows, connection);
+        const currentRevision = Number(instance.current_revision);
+
+        if (target === currentRevision) {
+            await connection.rollback();
+            return cloudError(res, 409, 'already_current', 'That revision is already the current one');
+        }
+
+        const [targetRows] = await connection.query(
+            'SELECT manifest_blob, entry_count, logical_bytes, has_worlds FROM cloud_revisions WHERE instance_id = ? AND revision = ?',
+            [instance.id, target]
+        );
+        const source = targetRows[0];
+        if (!source) {
+            await connection.rollback();
+            return cloudError(res, 404, 'not_found', 'Revision not found');
+        }
+
+        let manifest;
+        try {
+            manifest = JSON.parse((await readManifestBlob(source.manifest_blob)).toString('utf8'));
+        } catch (err) {
+            await connection.rollback();
+            console.error(`[LuxCloud] rollback: manifest ${source.manifest_blob} unreadable:`, err.message);
+            return cloudError(res, 409, 'manifest_gone', 'The manifest of that revision is no longer available');
+        }
+
+        const validation = validateManifest(manifest);
+        if (!validation.valid) {
+            await connection.rollback();
+            return cloudError(res, 409, 'manifest_gone', 'The manifest of that revision is no longer usable');
+        }
+
+        const { missing } = await assertBlobsUsable(validation.stats.blobHashes, req.cloudUserId, connection);
+        if (missing.length > 0) {
+            await connection.rollback();
+            return cloudError(res, 409, 'blobs_gone', 'Some files of that revision were already cleaned up', {
+                details: { missingCount: missing.length }
+            });
+        }
+
+        const revision = currentRevision + 1;
+        const [inserted] = await connection.query(
+            `INSERT INTO cloud_revisions
+                (instance_id, revision, parent_revision, manifest_blob, device_id,
+                 entry_count, logical_bytes, has_worlds)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+            [
+                instance.id,
+                revision,
+                currentRevision,
+                source.manifest_blob,
+                req.device.id,
+                source.entry_count,
+                source.logical_bytes,
+                source.has_worlds
+            ]
+        );
+
+        await addRefs(inserted.insertId, [...validation.stats.blobHashes, source.manifest_blob], connection);
+
+        await connection.query(
+            `UPDATE cloud_instances
+                SET current_revision = ?, logical_bytes = ?, name = ?,
+                    last_touched_at = NOW(), updated_at = NOW()
+              WHERE id = ?`,
+            [revision, Number(source.logical_bytes), String(manifest.name), instance.id]
+        );
+
+        await recalcUsedBytes(req.cloudUserId, connection);
+        const updated = await ownedInstance(req.cloudUserId, String(req.params.uuid), { executor: connection });
+        await connection.commit();
+
+        return res.status(201).json({
+            revision,
+            rolledBackTo: target,
+            manifestHash: source.manifest_blob,
+            instance: serializeInstance(updated)
+        });
+    } catch (err) {
+        await connection.rollback().catch(() => {});
+        console.error('[LuxCloud] POST /rollback failed:', err);
+        return cloudError(res, 500, 'server_error', 'Could not roll back');
+    } finally {
+        connection.release();
+    }
+});
+
+const SESSION_STALE_MINUTES = Number(process.env.LUXCLOUD_SESSION_STALE_MINUTES || 5);
+const SESSION_UUID_RE = /^[A-Za-z0-9_-]{8,32}$/;
+
+router.post('/instances/:uuid/session', ensureDeviceAuth, async (req, res) => {
+    try {
+        const instance = await requireInstance(req, res);
+        if (!instance) return null;
+
+        await pool.query(
+            `UPDATE cloud_sessions SET ended_at = NOW()
+              WHERE instance_id = ? AND ended_at IS NULL
+                AND last_heartbeat_at < NOW() - INTERVAL '${SESSION_STALE_MINUTES} minutes'`,
+            [instance.id]
+        );
+
+        const [activeRows] = await pool.query(
+            `SELECT s.session_uuid, s.started_at, d.device_uuid, d.name AS device_name
+               FROM cloud_sessions s
+               JOIN client_devices d ON d.id = s.device_id
+              WHERE s.instance_id = ? AND s.ended_at IS NULL AND s.device_id <> ?`,
+            [instance.id, req.device.id]
+        );
+
+        await pool.query(
+            'UPDATE cloud_sessions SET ended_at = NOW() WHERE instance_id = ? AND device_id = ? AND ended_at IS NULL',
+            [instance.id, req.device.id]
+        );
+
+        const sessionUuid = crypto.randomBytes(12).toString('hex');
+        await pool.query(
+            'INSERT INTO cloud_sessions (instance_id, device_id, session_uuid) VALUES (?, ?, ?)',
+            [instance.id, req.device.id, sessionUuid]
+        );
+
+        await pool.query('UPDATE cloud_instances SET last_touched_at = NOW() WHERE id = ?', [instance.id]);
+
+        return res.status(201).json({
+            sessionId: sessionUuid,
+            heartbeatIntervalMs: 60 * 1000,
+            otherActiveSessions: activeRows.map((row) => ({
+                sessionId: row.session_uuid,
+                deviceUuid: row.device_uuid,
+                deviceName: row.device_name,
+                startedAt: new Date(row.started_at).getTime()
+            }))
+        });
+    } catch (err) {
+        console.error('[LuxCloud] POST /session failed:', err);
+        return cloudError(res, 500, 'server_error', 'Could not start the session');
+    }
+});
+
+async function ownedSession(sessionUuid, userId, deviceId) {
+    const [rows] = await pool.query(
+        `SELECT s.id, s.instance_id, s.ended_at
+           FROM cloud_sessions s
+           JOIN cloud_instances i ON i.id = s.instance_id
+          WHERE s.session_uuid = ? AND i.user_id = ? AND s.device_id = ?`,
+        [sessionUuid, userId, deviceId]
+    );
+    return rows[0] || null;
+}
+
+router.post('/sessions/:sid/heartbeat', ensureDeviceAuth, async (req, res) => {
+    if (!SESSION_UUID_RE.test(String(req.params.sid))) {
+        return cloudError(res, 404, 'not_found', 'Session not found');
+    }
+
+    try {
+        const session = await ownedSession(String(req.params.sid), req.cloudUserId, req.device.id);
+        if (!session) return cloudError(res, 404, 'not_found', 'Session not found');
+        if (session.ended_at) return cloudError(res, 409, 'session_ended', 'This session was already closed');
+
+        await pool.query('UPDATE cloud_sessions SET last_heartbeat_at = NOW() WHERE id = ?', [session.id]);
+        await pool.query('UPDATE cloud_instances SET last_touched_at = NOW() WHERE id = ?', [session.instance_id]);
+
+        return res.json({ ok: true, nextHeartbeatMs: 60 * 1000 });
+    } catch (err) {
+        console.error('[LuxCloud] POST /heartbeat failed:', err);
+        return cloudError(res, 500, 'server_error', 'Could not refresh the session');
+    }
+});
+
+router.post('/sessions/:sid/end', ensureDeviceAuth, async (req, res) => {
+    if (!SESSION_UUID_RE.test(String(req.params.sid))) {
+        return cloudError(res, 404, 'not_found', 'Session not found');
+    }
+
+    try {
+        const session = await ownedSession(String(req.params.sid), req.cloudUserId, req.device.id);
+        if (!session) return cloudError(res, 404, 'not_found', 'Session not found');
+
+        if (!session.ended_at) {
+            await pool.query('UPDATE cloud_sessions SET ended_at = NOW() WHERE id = ?', [session.id]);
+        }
+        await pool.query('UPDATE cloud_instances SET last_touched_at = NOW() WHERE id = ?', [session.instance_id]);
+
+        return res.json({ ok: true, alreadyEnded: Boolean(session.ended_at) });
+    } catch (err) {
+        console.error('[LuxCloud] POST /session end failed:', err);
+        return cloudError(res, 500, 'server_error', 'Could not end the session');
+    }
+});
+
 module.exports = router;

@@ -31,6 +31,8 @@ const {
 
 const router = express.Router();
 
+const SESSION_STALE_MINUTES = Number(process.env.LUXCLOUD_SESSION_STALE_MINUTES || 5);
+
 const SETTINGS_FIELDS = {
     cloudSyncEnabled: 'cloud_sync_enabled',
     autoSync: 'auto_sync',
@@ -224,6 +226,7 @@ router.get('/instances/:uuid/head', ensureDeviceAuth, async (req, res) => {
                FROM cloud_instances i
                LEFT JOIN cloud_revisions r ON r.instance_id = i.id AND r.revision = i.current_revision
                LEFT JOIN cloud_sessions s ON s.instance_id = i.id AND s.ended_at IS NULL
+                    AND s.last_heartbeat_at > NOW() - INTERVAL '${SESSION_STALE_MINUTES} minutes'
                LEFT JOIN client_devices d ON d.id = s.device_id
               WHERE i.user_id = ? AND i.instance_uuid = ? AND i.status = ?
               ORDER BY s.started_at DESC

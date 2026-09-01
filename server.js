@@ -1799,6 +1799,7 @@ server.listen(PORT, async () => {
 
     try {
         require('./jobs/cloudGc').startCloudJobs();
+        require('./jobs/cloudRetention').startRetentionJob();
     } catch (err) {
         console.error('[LuxCloud] Could not start the cloud jobs:', err.message);
     }

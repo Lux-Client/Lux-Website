@@ -157,6 +157,12 @@ async function ensureCloudUser(req, res, next) {
         if (req.user && req.user.banned) {
             return cloudError(res, 403, 'forbidden', 'Account is banned');
         }
+        // The same ban has to hold on the website session, not just on device tokens --
+        // otherwise a banned account could still manage its cloud data from the browser.
+        if (req.user && req.user.cloud_banned) {
+            return cloudError(res, 403, 'cloud_banned',
+                req.user.cloud_ban_reason || 'Lux Cloud has been disabled for this account');
+        }
         req.cloudUser = req.user;
         req.cloudUserId = req.user.id;
         req.device = null;

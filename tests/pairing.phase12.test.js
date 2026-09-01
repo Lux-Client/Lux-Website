@@ -208,6 +208,10 @@ async function main() {
     });
     h.check('ein gesperrtes Konto kann nichts mehr freigeben',
         res.status === 403 && res.body.error === 'cloud_banned', res.body);
+    h.setSessionUser(banned);
+    res = await h.request({ method: 'GET', url: '/api/cloud/instances' });
+    h.check('auch ueber die Website-Sitzung kein Zugriff',
+        res.status === 403 && res.body.error === 'cloud_banned', res.body);
     h.setSessionUser(null);
 
     h.section('8) Entsperren');

@@ -39,6 +39,19 @@ const avatarUpload = require('multer')({
     }
 });
 
+const avatarUploadSingle = (req, res, next) => {
+    avatarUpload.single('avatar')(req, res, (err) => {
+        if (!err) return next();
+        const tooLarge = err.code === 'LIMIT_FILE_SIZE';
+        return cloudError(
+            res,
+            400,
+            tooLarge ? 'too_large' : 'invalid_request',
+            tooLarge ? 'The picture may be at most 4 MB' : (err.message || 'The image could not be read')
+        );
+    });
+};
+
 const router = express.Router();
 
 const SESSION_STALE_MINUTES = Number(process.env.LUXCLOUD_SESSION_STALE_MINUTES || 5);
@@ -201,7 +214,7 @@ router.post('/notifications/read', ensureCloudUser, async (req, res) => {
     }
 });
 
-router.post('/me/avatar', ensureCloudUser, avatarUpload.single('avatar'), async (req, res) => {
+router.post('/me/avatar', ensureCloudUser, avatarUploadSingle, async (req, res) => {
     try {
         if (!req.file) {
             return cloudError(res, 400, 'invalid_request', 'No image received');
@@ -216,6 +229,8 @@ router.post('/me/avatar', ensureCloudUser, avatarUpload.single('avatar'), async 
             : nodePath.join(process.env.DATA_DIR
                 ? nodePath.resolve(process.env.DATA_DIR)
                 : nodePath.join(__dirname, '..', 'data'), 'uploads');
+
+        await fsp.mkdir(uploadDir, { recursive: true });
 
         const fileName = `avatar-${req.cloudUserId}-${Date.now()}.webp`;
         const target = nodePath.join(uploadDir, fileName);

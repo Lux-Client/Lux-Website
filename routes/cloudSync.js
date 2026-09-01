@@ -138,6 +138,7 @@ router.post('/instances/:uuid/negotiate', ensureDeviceAuth, async (req, res) => 
 async function assertBlobsUsable(hashes, userId, executor) {
     const missing = [];
     const forbidden = [];
+    let actualBytes = 0;
 
     for (const hash of hashes) {
         const blob = await getBlob(hash, executor);
@@ -145,12 +146,15 @@ async function assertBlobsUsable(hashes, userId, executor) {
             missing.push(hash);
             continue;
         }
+
+        actualBytes += Number(blob.size) || 0;
+
         if (await isReferencedByUser(hash, userId, executor)) continue;
         if (await hasFreshClaim(hash, userId, executor)) continue;
         forbidden.push(hash);
     }
 
-    return { missing, forbidden };
+    return { missing, forbidden, actualBytes };
 }
 
 router.post('/instances/:uuid/commit', ensureDeviceAuth, async (req, res) => {
@@ -210,7 +214,7 @@ router.post('/instances/:uuid/commit', ensureDeviceAuth, async (req, res) => {
         }
 
         const blobHashes = validation.stats.blobHashes;
-        const { missing, forbidden } = await assertBlobsUsable(blobHashes, req.cloudUserId, connection);
+        const { missing, forbidden, actualBytes } = await assertBlobsUsable(blobHashes, req.cloudUserId, connection);
 
         if (missing.length > 0) {
             await connection.rollback();
@@ -231,7 +235,7 @@ router.post('/instances/:uuid/commit', ensureDeviceAuth, async (req, res) => {
         );
         const quotaBytes = Number(quotaRows[0] ? quotaRows[0].quota_bytes : 0);
         const usedBytes = Number(quotaRows[0] ? quotaRows[0].used_bytes : 0);
-        const logicalBytes = Number(validation.stats.logicalBytes) + serialized.length;
+        const logicalBytes = actualBytes + serialized.length;
         const nextUsed = usedBytes - Number(instance.logical_bytes || 0) + logicalBytes;
 
         if (quotaBytes > 0 && nextUsed > quotaBytes) {

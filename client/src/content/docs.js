@@ -59,6 +59,48 @@ For the Fabric version, install **Fabric Loader** first and then copy the Lux Cl
 3. Browse content and install new projects directly from the launcher.`,
   },
   {
+    id: 'cloud-sync',
+    title: 'Cloud Sync',
+    content: `Cloud Sync lets an instance follow you between PCs. It needs a **Lux Account**, which is optional — Lux Client works fully without one.
+
+### How it works
+
+Sign in under **Settings → Lux Account**, then open an instance and switch on Cloud Sync in its **Cloud** tab. On another PC, sign in with the same account and download the instance from the dashboard.
+
+Before each launch Lux checks whether your local files still match the cloud. If they do, the game starts immediately. If the cloud is newer, the instance is updated first. If both sides changed, you are asked which version to keep — and the other one is saved as a backup either way.
+
+### What gets synced
+
+| Synced | Not synced |
+| --- | --- |
+| Instance settings, version, loader | Minecraft, libraries, assets |
+| Mods, resource packs, shaders | Logs, crash reports, caches |
+| Config files | Rendered map tiles |
+| Server list, waypoints, schematics | Anything re-downloadable |
+| Playtime | |
+| Worlds and screenshots *(optional)* | |
+
+Mods from Modrinth are **not uploaded at all**. Lux only remembers which mod and version it was, and the other PC fetches it straight from Modrinth. That is why a 17 GB instance often needs less than 150 MB of your storage.
+
+### Limits
+
+- **5 GB** of cloud storage per account
+- **10** cloud instances per account
+- Worlds are off by default — they are large and the most common source of conflicts
+
+### The 15-day rule
+
+Lux Cloud is a way to move instances **between** PCs, not a backup service. An instance that is never downloaded or used on a second PC is removed from the cloud after 15 days.
+
+You get a notification after 8 days, a second one plus an email after 12, and another when it is removed. After removal you can still restore it for 30 days.
+
+**Your local files are never touched.** Removal from the cloud only affects the cloud copy — the instance on your PC stays exactly as it is. Any activity from a second PC resets the countdown.
+
+### Deleting your data
+
+Under **Settings → Lux Account** you can either delete just your cloud data, keeping your account and devices, or delete your Lux Account entirely. Neither one touches the instances on your PCs.`,
+  },
+  {
     id: 'settings',
     title: 'Settings',
     content: `Tune the launcher to match your hardware and play style.
@@ -136,6 +178,7 @@ export const launcherSidebarGroups = [
       { id: 'installation', label: 'Installation' },
       { id: 'accounts', label: 'Accounts' },
       { id: 'instances', label: 'Instances' },
+      { id: 'cloud-sync', label: 'Cloud Sync' },
       { id: 'settings', label: 'Settings' },
       { id: 'troubleshooting', label: 'Troubleshooting' },
     ],

@@ -1620,6 +1620,7 @@ if (process.env.NODE_ENV === 'production' && (!LUXCLOUD_JWT_SECRET || LUXCLOUD_J
 app.use('/', require('./routes/deviceAuth'));
 app.use('/api/cloud', require('./routes/cloud'));
 app.use('/api/cloud', require('./routes/cloudBlobs'));
+app.use('/api/cloud', require('./routes/cloudSync'));
 app.use('/api/admin/cloud', require('./routes/adminCloud'));
 
 app.use((err, req, res, next) => {

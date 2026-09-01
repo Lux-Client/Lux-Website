@@ -157,9 +157,26 @@ router.post('/auth/device/approve', approveLimiter, ensureSameOrigin, ensureAuth
             ]
         );
 
+        // Fallback for machines where the luxclient:// handler never fires. The same
+        // approval also gets a short code the user can type into Lux; it stays bound to
+        // the same PKCE challenge, so the code alone is useless to anyone else.
+        let manualCode = null;
+        try {
+            const { issueApprovedCode } = require('./devicePairing');
+            manualCode = await issueApprovedCode({
+                userId: req.user.id,
+                codeChallenge: String(codeChallenge),
+                deviceName: cleanDeviceName(deviceName),
+                platform: PLATFORMS.has(String(platform)) ? String(platform) : 'win32'
+            });
+        } catch (err) {
+            console.error('[LuxCloud] Could not issue a manual code:', err.message);
+        }
+
         const redirectParams = new URLSearchParams({ code, state: String(state) });
         return res.json({
             redirectUrl: `${REDIRECT_SCHEME}?${redirectParams.toString()}`,
+            manualCode,
             expiresIn: Math.floor(AUTH_CODE_TTL_MS / 1000)
         });
     } catch (err) {

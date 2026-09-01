@@ -214,15 +214,10 @@ router.post('/api/auth/device/pair/deny', lookupLimiter, ensureAuthenticated, as
     }
 });
 
-router.post('/api/auth/device/pair/poll', pollLimiter, async (req, res) => {
+async function completePairing(req, res, deviceCodeHash) {
     const body = req.body || {};
-    const deviceCode = String(body.device_code || '');
     const verifier = String(body.code_verifier || '');
     const deviceUuid = String(body.device_uuid || '');
-
-    if (!deviceCode || !verifier || !deviceUuid) {
-        return res.status(400).json({ error: 'invalid_request', message: 'Missing pairing fields' });
-    }
 
     const connection = await pool.getConnection();
     try {
@@ -230,7 +225,7 @@ router.post('/api/auth/device/pair/poll', pollLimiter, async (req, res) => {
 
         const [rows] = await connection.query(
             'SELECT * FROM device_pairing_codes WHERE device_code_hash = ? FOR UPDATE',
-            [sha256(deviceCode)]
+            [deviceCodeHash]
         );
         const entry = rows[0];
 
@@ -361,6 +356,16 @@ router.post('/api/auth/device/pair/poll', pollLimiter, async (req, res) => {
     } finally {
         connection.release();
     }
+}
+
+router.post('/api/auth/device/pair/poll', pollLimiter, async (req, res) => {
+    const body = req.body || {};
+    const deviceCode = String(body.device_code || '');
+
+    if (!deviceCode || !body.code_verifier || !body.device_uuid) {
+        return res.status(400).json({ error: 'invalid_request', message: 'Missing pairing fields' });
+    }
+    return completePairing(req, res, sha256(deviceCode));
 });
 
 async function prunePairingCodes() {
@@ -378,6 +383,78 @@ async function prunePairingCodes() {
     }
 }
 
+// Used by the browser sign-in: the approval already knows the user, so the row is
+// created pre-approved. The client redeems it with the verifier it already holds.
+async function issueApprovedCode({ userId, codeChallenge, deviceName, platform }) {
+    const deviceCode = crypto.randomBytes(32).toString('base64url');
+    const expiresAt = new Date(Date.now() + PAIRING_TTL_MS);
+
+    let userCode = null;
+    for (let attempt = 0; attempt < 8 && !userCode; attempt += 1) {
+        const candidate = newUserCode();
+        const [clash] = await pool.query(
+            `SELECT 1 AS taken FROM device_pairing_codes
+              WHERE user_code = ? AND consumed_at IS NULL AND denied_at IS NULL AND expires_at > NOW()`,
+            [candidate]
+        );
+        if (clash.length === 0) userCode = candidate;
+    }
+    if (!userCode) return null;
+
+    await pool.query(
+        `INSERT INTO device_pairing_codes
+            (user_code, device_code_hash, code_challenge, device_name, platform,
+             user_id, approved_at, expires_at)
+         VALUES (?, ?, ?, ?, ?, ?, NOW(), ?)`,
+        [userCode, sha256(deviceCode), codeChallenge, deviceName, platform || 'win32', userId, expiresAt]
+    );
+
+    return userCode;
+}
+
+router.post('/api/auth/device/pair/redeem', pollLimiter, async (req, res) => {
+    const body = req.body || {};
+    const userCode = String(body.user_code || '').trim().toUpperCase();
+    const verifier = String(body.code_verifier || '');
+    const deviceUuid = String(body.device_uuid || '');
+
+    if (!USER_CODE_RE.test(userCode)) {
+        return res.status(400).json({ error: 'invalid_code', message: 'That is not a valid code' });
+    }
+    if (!verifier || !deviceUuid) {
+        return res.status(400).json({ error: 'invalid_request', message: 'Missing fields' });
+    }
+
+    try {
+        const [rows] = await pool.query(
+            `SELECT device_code_hash FROM device_pairing_codes
+              WHERE user_code = ? AND consumed_at IS NULL AND denied_at IS NULL
+                AND approved_at IS NOT NULL AND expires_at > NOW()`,
+            [userCode]
+        );
+        if (rows.length === 0) {
+            return res.status(400).json({ error: 'invalid_grant', message: 'Unknown, expired or unapproved code' });
+        }
+
+        // The poll route already does every check that matters, including the PKCE
+        // verifier. Reusing it keeps exactly one place where sessions are handed out.
+        req.body = {
+            device_code: null,
+            code_verifier: verifier,
+            device_uuid: deviceUuid,
+            device_name: body.device_name,
+            platform: body.platform,
+            app_version: body.app_version,
+            __deviceCodeHash: rows[0].device_code_hash
+        };
+        return completePairing(req, res, rows[0].device_code_hash);
+    } catch (err) {
+        console.error('[LuxCloud] Pairing redeem failed:', err);
+        return res.status(500).json({ error: 'server_error', message: 'Could not redeem the code' });
+    }
+});
+
 module.exports = router;
+module.exports.issueApprovedCode = issueApprovedCode;
 module.exports.prunePairingCodes = prunePairingCodes;
 module.exports.USER_CODE_RE = USER_CODE_RE;

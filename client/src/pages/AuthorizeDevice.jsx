@@ -19,6 +19,7 @@ export default function AuthorizeDevice() {
   const [user, setUser] = useState(null)
   const [status, setStatus] = useState('loading')
   const [error, setError] = useState(null)
+  const [manualCode, setManualCode] = useState(null)
 
   const codeChallenge = params.get('code_challenge') || ''
   const state = params.get('state') || ''
@@ -72,6 +73,7 @@ export default function AuthorizeDevice() {
       if (!res.ok) throw new Error(data.message || 'Request failed')
 
       setStatus(doneStatus)
+      if (data.manualCode) setManualCode(data.manualCode)
       window.location.href = data.redirectUrl
     } catch (err) {
       setError(err.message || 'Something went wrong.')
@@ -132,9 +134,25 @@ export default function AuthorizeDevice() {
               )}
 
               {status === 'approved' && (
-                <p className="mt-6 rounded-2xl border border-emerald-500/20 bg-emerald-500/5 px-4 py-3 text-sm text-emerald-300">
-                  Device authorized. You can close this tab and return to the Lux Client.
-                </p>
+                <>
+                  <p className="mt-6 rounded-2xl border border-emerald-500/20 bg-emerald-500/5 px-4 py-3 text-sm text-emerald-300">
+                    Device authorized. You can close this tab and return to the Lux Client.
+                  </p>
+
+                  {manualCode && (
+                    <div className="mt-4 rounded-2xl border border-white/10 bg-black/30 px-5 py-5 text-center">
+                      <p className="text-sm text-gray-400">
+                        Did Lux not react? Enter this code in the launcher instead:
+                      </p>
+                      <p className="mt-3 font-mono text-4xl font-black tracking-[0.35em] text-white">
+                        {manualCode}
+                      </p>
+                      <p className="mt-3 text-xs text-gray-500">
+                        Valid for 10 minutes and only usable by the launcher that started this sign-in.
+                      </p>
+                    </div>
+                  )}
+                </>
               )}
 
               <div className="mt-8 flex flex-wrap gap-3">

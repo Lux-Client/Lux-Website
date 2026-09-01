@@ -1627,16 +1627,42 @@ app.get('/api/modrinth/search', async (req, res) => {
     }
 });
 
+// Lux Cloud can be switched off entirely. A missing or weak signing secret disables it
+// as well -- it must never take the rest of the site down with it, because the
+// marketplace, the news and the admin panel do not depend on any of this.
 const LUXCLOUD_JWT_SECRET = process.env.LUXCLOUD_JWT_SECRET;
-if (process.env.NODE_ENV === 'production' && (!LUXCLOUD_JWT_SECRET || LUXCLOUD_JWT_SECRET.length < 32)) {
-    console.error('[CRITICAL] LUXCLOUD_JWT_SECRET is missing or shorter than 32 characters in production. Server will not start.');
-    process.exit(1);
+const LUXCLOUD_SWITCHED_OFF = String(process.env.LUXCLOUD_ENABLED || 'true').toLowerCase() === 'false';
+const LUXCLOUD_SECRET_OK = Boolean(LUXCLOUD_JWT_SECRET) && LUXCLOUD_JWT_SECRET.length >= 32;
+const LUXCLOUD_ACTIVE = !LUXCLOUD_SWITCHED_OFF && (LUXCLOUD_SECRET_OK || process.env.NODE_ENV !== 'production');
+
+if (LUXCLOUD_SWITCHED_OFF) {
+    console.log('[LuxCloud] Disabled via LUXCLOUD_ENABLED=false. Cloud routes are not mounted.');
+} else if (!LUXCLOUD_SECRET_OK && process.env.NODE_ENV === 'production') {
+    console.error('[LuxCloud] CRITICAL: LUXCLOUD_JWT_SECRET is missing or shorter than 32 characters.');
+    console.error('[LuxCloud] Cloud sync stays OFF. The rest of the site runs normally.');
+    console.error('[LuxCloud] Generate one with: node -e "console.log(require(\'crypto\').randomBytes(48).toString(\'base64url\'))"');
+} else if (!LUXCLOUD_SECRET_OK) {
+    console.warn('[LuxCloud] No LUXCLOUD_JWT_SECRET set - using a development fallback. Never do this in production.');
 }
-app.use('/', require('./routes/deviceAuth'));
-app.use('/api/cloud', require('./routes/cloud'));
-app.use('/api/cloud', require('./routes/cloudBlobs'));
-app.use('/api/cloud', require('./routes/cloudSync'));
-app.use('/api/admin/cloud', require('./routes/adminCloud'));
+
+app.get('/api/cloud/status', (req, res) => {
+    res.json({ enabled: LUXCLOUD_ACTIVE, reason: LUXCLOUD_ACTIVE ? null : (LUXCLOUD_SWITCHED_OFF ? 'disabled' : 'not_configured') });
+});
+
+if (LUXCLOUD_ACTIVE) {
+    app.use('/', require('./routes/deviceAuth'));
+    app.use('/api/cloud', require('./routes/cloud'));
+    app.use('/api/cloud', require('./routes/cloudBlobs'));
+    app.use('/api/cloud', require('./routes/cloudSync'));
+    app.use('/api/admin/cloud', require('./routes/adminCloud'));
+} else {
+    app.use(['/api/cloud', '/auth/device', '/api/auth/device'], (req, res) => {
+        res.status(503).json({
+            error: 'cloud_disabled',
+            message: 'Lux Cloud is not available on this server'
+        });
+    });
+}
 
 app.use((err, req, res, next) => {
     console.error(`[Server Error] ${req.method} ${req.url}:`, err);
@@ -1813,9 +1839,13 @@ server.listen(PORT, async () => {
     setInterval(pruneDeviceAuthCodes, 60 * 60 * 1000).unref();
 
     try {
-        require('./jobs/cloudGc').startCloudJobs();
-        require('./jobs/cloudRetention').startRetentionJob();
-        require('./jobs/cloudExpiry').startExpiryJob();
+        if (LUXCLOUD_ACTIVE) {
+            require('./jobs/cloudGc').startCloudJobs();
+            require('./jobs/cloudRetention').startRetentionJob();
+            require('./jobs/cloudExpiry').startExpiryJob();
+        } else {
+            console.log('[LuxCloud] Cloud jobs not started because Lux Cloud is off.');
+        }
     } catch (err) {
         console.error('[LuxCloud] Could not start the cloud jobs:', err.message);
     }

@@ -531,6 +531,135 @@ router.post('/instances/:uuid/revisions/:rev/rollback', ensureDeviceAuth, async 
 const SESSION_STALE_MINUTES = Number(process.env.LUXCLOUD_SESSION_STALE_MINUTES || 5);
 const SESSION_UUID_RE = /^[A-Za-z0-9_-]{8,32}$/;
 
+const MAX_PLAYTIME_MS = Number(process.env.LUXCLOUD_MAX_PLAYTIME_MS || 20 * 365 * 24 * 60 * 60 * 1000);
+const PLAYTIME_GRACE_MS = Number(process.env.LUXCLOUD_PLAYTIME_GRACE_MS || 60 * 60 * 1000);
+
+async function playtimeBreakdown(instanceId, executor = pool) {
+    const [rows] = await executor.query(
+        `SELECT p.total_ms, p.updated_at, d.device_uuid, d.name
+           FROM cloud_instance_playtime p
+           JOIN client_devices d ON d.id = p.device_id
+          WHERE p.instance_id = ?
+          ORDER BY p.total_ms DESC`,
+        [instanceId]
+    );
+
+    return {
+        totalMs: rows.reduce((sum, row) => sum + Number(row.total_ms), 0),
+        byDevice: rows.map((row) => ({
+            deviceUuid: row.device_uuid,
+            deviceName: row.name,
+            totalMs: Number(row.total_ms),
+            updatedAt: row.updated_at
+        }))
+    };
+}
+
+router.get('/instances/:uuid/playtime', ensureDeviceAuth, async (req, res) => {
+    try {
+        const instance = await requireInstance(req, res);
+        if (!instance) return null;
+
+        const breakdown = await playtimeBreakdown(instance.id);
+        const mine = breakdown.byDevice.find((entry) => entry.deviceUuid === req.device.uuid);
+
+        return res.json({
+            ...breakdown,
+            deviceTotalMs: mine ? mine.totalMs : 0
+        });
+    } catch (err) {
+        console.error('[LuxCloud] GET /playtime failed:', err);
+        return cloudError(res, 500, 'server_error', 'Could not read playtime');
+    }
+});
+
+router.put('/instances/:uuid/playtime', ensureDeviceAuth, async (req, res) => {
+    const body = req.body || {};
+    const deviceTotalMs = Number(body.deviceTotalMs);
+
+    if (!Number.isSafeInteger(deviceTotalMs) || deviceTotalMs < 0) {
+        return cloudError(res, 400, 'invalid_request', 'deviceTotalMs must be a non-negative integer');
+    }
+    if (deviceTotalMs > MAX_PLAYTIME_MS) {
+        return cloudError(res, 422, 'implausible_playtime', 'That playtime is not plausible', {
+            details: { maxTotalMs: MAX_PLAYTIME_MS }
+        });
+    }
+
+    const connection = await pool.getConnection();
+    try {
+        await connection.beginTransaction();
+
+        const instance = await ownedInstance(req.cloudUserId, String(req.params.uuid), { executor: connection });
+        if (!instance) {
+            await connection.rollback();
+            return cloudError(res, 404, 'not_found', 'Instance not found');
+        }
+
+        const [existingRows] = await connection.query(
+            `SELECT total_ms, updated_at FROM cloud_instance_playtime
+              WHERE instance_id = ? AND device_id = ? FOR UPDATE`,
+            [instance.id, req.device.id]
+        );
+        const existing = existingRows[0] || null;
+        const stored = existing ? Number(existing.total_ms) : 0;
+
+        if (deviceTotalMs < stored) {
+            await connection.rollback();
+            return cloudError(res, 409, 'non_monotonic', 'The stored playtime is already higher', {
+                details: { storedTotalMs: stored }
+            });
+        }
+
+        if (existing && deviceTotalMs > stored) {
+            const elapsed = Date.now() - new Date(existing.updated_at).getTime();
+            const increment = deviceTotalMs - stored;
+
+            if (increment > elapsed + PLAYTIME_GRACE_MS) {
+                await connection.rollback();
+                return cloudError(res, 422, 'implausible_playtime', 'More playtime than time has passed', {
+                    details: { storedTotalMs: stored, increment, elapsedMs: Math.max(elapsed, 0) }
+                });
+            }
+        }
+
+        if (existing) {
+            await connection.query(
+                `UPDATE cloud_instance_playtime
+                    SET total_ms = ?, last_session_id = ?, updated_at = NOW()
+                  WHERE instance_id = ? AND device_id = ?`,
+                [deviceTotalMs, body.lastSessionId ? String(body.lastSessionId).slice(0, 32) : null,
+                    instance.id, req.device.id]
+            );
+        } else {
+            await connection.query(
+                `INSERT INTO cloud_instance_playtime (instance_id, device_id, total_ms, last_session_id)
+                 VALUES (?, ?, ?, ?)
+                 RETURNING instance_id`,
+                [instance.id, req.device.id, deviceTotalMs,
+                    body.lastSessionId ? String(body.lastSessionId).slice(0, 32) : null]
+            );
+        }
+
+        await connection.query('UPDATE cloud_instances SET last_touched_at = NOW() WHERE id = ?', [instance.id]);
+
+        const breakdown = await playtimeBreakdown(instance.id, connection);
+        await connection.commit();
+
+        return res.json({
+            deviceTotalMs,
+            instanceTotalMs: breakdown.totalMs,
+            byDevice: breakdown.byDevice
+        });
+    } catch (err) {
+        await connection.rollback().catch(() => {});
+        console.error('[LuxCloud] PUT /playtime failed:', err);
+        return cloudError(res, 500, 'server_error', 'Could not store playtime');
+    } finally {
+        connection.release();
+    }
+});
+
 router.post('/instances/:uuid/session', ensureDeviceAuth, async (req, res) => {
     try {
         const instance = await requireInstance(req, res);

@@ -13,8 +13,22 @@ const UPLOAD_DIR = process.env.UPLOAD_DIR
     ? path.resolve(process.env.UPLOAD_DIR)
     : path.join(DATA_DIR, 'uploads');
 
-if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+const DATA_DIR_EXISTED = fs.existsSync(DATA_DIR);
+
+if (!DATA_DIR_EXISTED) fs.mkdirSync(DATA_DIR, { recursive: true });
 if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+
+// Everything that survives a restart lives here: uploaded avatars and extension
+// files, analytics, news and the cloud blob store. Without a mounted volume this
+// is a directory inside the container image and every redeploy starts empty --
+// which looks exactly like "the server deleted my data".
+console.log(`[Storage] DATA_DIR   = ${DATA_DIR}${process.env.DATA_DIR ? '' : '  (default, DATA_DIR not set)'}`);
+console.log(`[Storage] UPLOAD_DIR = ${UPLOAD_DIR}`);
+if (!DATA_DIR_EXISTED) {
+    console.warn('[Storage] WARNING: the data directory did not exist and was created empty.');
+    console.warn('[Storage] If this appears after every deployment, DATA_DIR is not on a persistent volume');
+    console.warn('[Storage] and uploads, avatars and analytics are lost on each redeploy.');
+}
 
 // --- LOGGING TO latest.log ---
 const logFile = path.join(DATA_DIR, 'latest.log');

@@ -170,6 +170,11 @@ const createCloudTables = async (connection) => {
     `);
     console.log('[Database] blob_upload_claims table checked/created.');
 
+    await connection.query('ALTER TABLE cloud_instances ADD COLUMN IF NOT EXISTS last_foreign_pull_at TIMESTAMPTZ');
+    await connection.query('ALTER TABLE cloud_instances ADD COLUMN IF NOT EXISTS last_commit_device_id INTEGER');
+    await connection.query('ALTER TABLE cloud_instances ADD COLUMN IF NOT EXISTS final_warned_at TIMESTAMPTZ');
+    console.log('[Database] cloud_instances expiry columns checked/added.');
+
     await connection.query('CREATE INDEX IF NOT EXISTS idx_client_devices_user ON client_devices(user_id)');
     await connection.query('CREATE INDEX IF NOT EXISTS idx_device_auth_codes_expiry ON device_auth_codes(expires_at)');
     await connection.query('CREATE INDEX IF NOT EXISTS idx_cloud_instances_user ON cloud_instances(user_id)');

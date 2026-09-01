@@ -49,6 +49,17 @@ async function requireInstance(req, res, { executor = pool } = {}) {
     return instance;
 }
 
+async function markForeignActivity(instance, deviceId, executor = pool) {
+    const owner = instance.last_commit_device_id;
+    if (owner !== null && owner !== undefined && Number(owner) === Number(deviceId)) return false;
+
+    await executor.query(
+        'UPDATE cloud_instances SET last_foreign_pull_at = NOW(), expiry_warned_at = NULL, final_warned_at = NULL WHERE id = ?',
+        [instance.id]
+    );
+    return true;
+}
+
 router.post('/instances/:uuid/negotiate', ensureDeviceAuth, async (req, res) => {
     const body = req.body || {};
     const entries = Array.isArray(body.blobs) ? body.blobs : null;
@@ -275,7 +286,7 @@ router.post('/instances/:uuid/commit', ensureDeviceAuth, async (req, res) => {
             `UPDATE cloud_instances
                 SET current_revision = ?, logical_bytes = ?, name = ?,
                     mc_version = ?, loader = ?, loader_version = ?, icon_blob = ?,
-                    last_touched_at = NOW(), updated_at = NOW()
+                    last_commit_device_id = ?, last_touched_at = NOW(), updated_at = NOW()
               WHERE id = ?`,
             [
                 revision,
@@ -285,6 +296,7 @@ router.post('/instances/:uuid/commit', ensureDeviceAuth, async (req, res) => {
                 runtime.loader ? String(runtime.loader) : instance.loader,
                 runtime.loaderVersion ? String(runtime.loaderVersion) : instance.loader_version,
                 manifest.icon && manifest.icon.blob ? manifest.icon.blob : null,
+                req.device.id,
                 instance.id
             ]
         );
@@ -363,6 +375,7 @@ router.get('/instances/:uuid/manifest', ensureDeviceAuth, async (req, res) => {
                 'UPDATE cloud_instances SET last_pulled_at = NOW(), last_touched_at = NOW() WHERE id = ?',
                 [instance.id]
             );
+            await markForeignActivity(instance, req.device.id);
         }
 
         return res.json({
@@ -642,6 +655,7 @@ router.put('/instances/:uuid/playtime', ensureDeviceAuth, async (req, res) => {
         }
 
         await connection.query('UPDATE cloud_instances SET last_touched_at = NOW() WHERE id = ?', [instance.id]);
+        await markForeignActivity(instance, req.device.id, connection);
 
         const breakdown = await playtimeBreakdown(instance.id, connection);
         await connection.commit();
@@ -692,6 +706,7 @@ router.post('/instances/:uuid/session', ensureDeviceAuth, async (req, res) => {
         );
 
         await pool.query('UPDATE cloud_instances SET last_touched_at = NOW() WHERE id = ?', [instance.id]);
+        await markForeignActivity(instance, req.device.id);
 
         return res.status(201).json({
             sessionId: sessionUuid,

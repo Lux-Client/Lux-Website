@@ -5,6 +5,7 @@ const INSTANCE_COLUMNS = `
     i.id, i.instance_uuid, i.name, i.icon_blob, i.mc_version, i.loader, i.loader_version,
     i.current_revision, i.origin_platform, i.cross_platform, i.sync_worlds, i.sync_screenshots,
     i.logical_bytes, i.status, i.last_touched_at, i.last_pulled_at, i.trashed_at,
+    i.last_foreign_pull_at, i.last_commit_device_id, i.expiry_warned_at, i.final_warned_at,
     i.created_at, i.updated_at
 `;
 
@@ -81,9 +82,15 @@ function serializeInstance(row) {
         trashedAt: row.trashed_at,
         createdAt: row.created_at,
         updatedAt: row.updated_at,
-        expiresAt: row.status === 'active' ? expiresAt(row.last_touched_at) : null,
-        purgesAt: row.status === 'trashed' ? purgesAt(row.trashed_at) : null
+        expiresAt: row.status === 'active' ? expiresAt(row.last_foreign_pull_at || row.created_at) : null,
+        purgesAt: row.status === 'trashed' ? purgesAt(row.trashed_at) : null,
+        lastForeignPullAt: row.last_foreign_pull_at || null,
+        everPulledElsewhere: Boolean(row.last_foreign_pull_at)
     };
+}
+
+function expiryBasis(row) {
+    return row.last_foreign_pull_at || row.created_at;
 }
 
 async function ownedInstance(userId, instanceUuid, { status = 'active', executor = pool } = {}) {
@@ -142,6 +149,7 @@ module.exports = {
     PATCHABLE_FIELDS,
     countActiveInstances,
     decorate,
+    expiryBasis,
     ownedInstance,
     readQuota,
     recalcUsedBytes,

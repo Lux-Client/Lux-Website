@@ -28,6 +28,7 @@ const {
     ownedInstance,
     serializeInstance
 } = require('../cloudInstances');
+const { purgeCloudData } = require('../cloudAccount');
 
 const router = express.Router();
 
@@ -109,6 +110,32 @@ router.get('/me', ensureDeviceAuth, async (req, res) => {
     } catch (err) {
         console.error('[LuxCloud] GET /me failed:', err);
         return cloudError(res, 500, 'server_error', 'Could not load account');
+    }
+});
+
+router.delete('/me', ensureCloudUser, async (req, res) => {
+    if (String(req.body && req.body.confirm) !== 'delete-my-cloud-data') {
+        return cloudError(res, 400, 'invalid_request', 'Missing confirmation');
+    }
+
+    const connection = await pool.getConnection();
+    try {
+        await connection.beginTransaction();
+        const result = await purgeCloudData(req.cloudUserId, connection);
+        await connection.commit();
+
+        console.log(`[LuxCloud] Cloud data purged for user ${req.cloudUserId}:`, result);
+        return res.json({
+            ok: true,
+            ...result,
+            note: 'Local instance files on any device are untouched.'
+        });
+    } catch (err) {
+        await connection.rollback().catch(() => {});
+        console.error('[LuxCloud] DELETE /me failed:', err);
+        return cloudError(res, 500, 'server_error', 'Could not delete cloud data');
+    } finally {
+        connection.release();
     }
 });
 
@@ -220,6 +247,7 @@ router.get('/instances/:uuid/head', ensureDeviceAuth, async (req, res) => {
     try {
         const [rows] = await pool.query(
             `SELECT i.id, i.current_revision, i.updated_at, i.last_touched_at,
+                    i.last_foreign_pull_at, i.created_at,
                     r.manifest_blob AS manifest_hash,
                     s.session_uuid, s.started_at,
                     d.device_uuid AS session_device_uuid, d.name AS session_device_name
@@ -259,7 +287,8 @@ router.get('/instances/:uuid/head', ensureDeviceAuth, async (req, res) => {
                     startedAt: new Date(row.started_at).getTime()
                 }
                 : null,
-            expiresAt: expiresAt(row.last_touched_at)
+            expiresAt: expiresAt(row.last_foreign_pull_at || row.created_at),
+            everPulledElsewhere: Boolean(row.last_foreign_pull_at)
         });
     } catch (err) {
         console.error('[LuxCloud] GET /instances/:uuid/head failed:', err);

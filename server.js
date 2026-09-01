@@ -1117,6 +1117,21 @@ app.delete('/api/user/delete', ensureAuthenticated, async (req, res) => {
             }
         }
 
+        // Cloud data has to go first. DELETE FROM users cascades into cloud_instances and
+        // blob_refs, and a cascade does not decrement blobs.refcount -- the blobs would stay
+        // referenced forever and never be collected.
+        try {
+            const { purgeEverything } = require('./cloudAccount');
+            const purged = await purgeEverything(userId);
+            console.log(`[Lux] Cloud data purged before account deletion for user ${userId}:`, purged);
+        } catch (cloudErr) {
+            console.error('[Lux] Cloud purge failed, aborting account deletion:', cloudErr);
+            return res.status(500).json({
+                error: 'Could not delete the cloud data, so the account was kept',
+                details: cloudErr.message
+            });
+        }
+
         // Delete user (CASCADE handles extensions, versions, notifications, drafts)
         await pool.query('DELETE FROM users WHERE id = ?', [userId]);
 
@@ -1800,6 +1815,7 @@ server.listen(PORT, async () => {
     try {
         require('./jobs/cloudGc').startCloudJobs();
         require('./jobs/cloudRetention').startRetentionJob();
+        require('./jobs/cloudExpiry').startExpiryJob();
     } catch (err) {
         console.error('[LuxCloud] Could not start the cloud jobs:', err.message);
     }

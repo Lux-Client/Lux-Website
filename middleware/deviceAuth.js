@@ -99,7 +99,8 @@ async function ensureDeviceAuth(req, res, next) {
     try {
         const [rows] = await pool.query(
             `SELECT d.id, d.user_id, d.device_uuid, d.name, d.platform, d.token_generation,
-                    d.revoked_at, u.username, u.avatar, u.banned, u.role
+                    d.revoked_at, u.username, u.avatar, u.banned, u.role,
+                    u.cloud_banned, u.cloud_ban_reason
                FROM client_devices d
                JOIN users u ON u.id = d.user_id
               WHERE d.device_uuid = ?`,
@@ -118,6 +119,10 @@ async function ensureDeviceAuth(req, res, next) {
         }
         if (device.banned) {
             return cloudError(res, 403, 'forbidden', 'Account is banned');
+        }
+        if (device.cloud_banned) {
+            return cloudError(res, 403, 'cloud_banned',
+                device.cloud_ban_reason || 'Lux Cloud has been disabled for this account');
         }
 
         req.device = {

@@ -124,6 +124,7 @@ class Harness {
             next();
         });
         app.use('/', require(path.join(SITE, 'routes', 'deviceAuth.js')));
+        app.use('/', require(path.join(SITE, 'routes', 'devicePairing.js')));
         app.use('/api/cloud', require(path.join(SITE, 'routes', 'cloud.js')));
         app.use('/api/cloud', require(path.join(SITE, 'routes', 'cloudBlobs.js')));
         app.use('/api/cloud', require(path.join(SITE, 'routes', 'cloudSync.js')));

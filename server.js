@@ -1665,6 +1665,7 @@ app.get('/api/cloud/status', (req, res) => {
 
 if (LUXCLOUD_ACTIVE) {
     app.use('/', require('./routes/deviceAuth'));
+    app.use('/', require('./routes/devicePairing'));
     app.use('/api/cloud', require('./routes/cloud'));
     app.use('/api/cloud', require('./routes/cloudBlobs'));
     app.use('/api/cloud', require('./routes/cloudSync'));
@@ -1847,6 +1848,10 @@ server.listen(PORT, async () => {
     } catch (err) {
         console.error('[Database] Critical error during auto-init:', err.message);
     }
+
+    const { prunePairingCodes } = require('./routes/devicePairing');
+    prunePairingCodes();
+    setInterval(prunePairingCodes, 60 * 60 * 1000).unref();
 
     const { pruneDeviceAuthCodes } = require('./db_init_cloud');
     pruneDeviceAuthCodes();

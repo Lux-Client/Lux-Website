@@ -30,6 +30,15 @@ const {
 } = require('../cloudInstances');
 const { purgeCloudData } = require('../cloudAccount');
 
+const avatarUpload = require('multer')({
+    storage: require('multer').memoryStorage(),
+    limits: { fileSize: 4 * 1024 * 1024, files: 1 },
+    fileFilter: (req, file, cb) => {
+        const ok = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'].includes(file.mimetype);
+        cb(ok ? null : new Error('Unsupported image type'), ok);
+    }
+});
+
 const router = express.Router();
 
 const SESSION_STALE_MINUTES = Number(process.env.LUXCLOUD_SESSION_STALE_MINUTES || 5);
@@ -136,6 +145,104 @@ router.delete('/me', ensureCloudUser, async (req, res) => {
         return cloudError(res, 500, 'server_error', 'Could not delete cloud data');
     } finally {
         connection.release();
+    }
+});
+
+router.get('/notifications', ensureCloudUser, async (req, res) => {
+    const limit = Math.min(Math.max(Number(req.query.limit) || 30, 1), 100);
+
+    try {
+        const [rows] = await pool.query(
+            `SELECT id, message, type, is_read, created_at
+               FROM notifications WHERE user_id = ?
+              ORDER BY created_at DESC LIMIT ?`,
+            [req.cloudUserId, limit]
+        );
+        const [unread] = await pool.query(
+            'SELECT COUNT(*) AS count FROM notifications WHERE user_id = ? AND is_read = FALSE',
+            [req.cloudUserId]
+        );
+
+        return res.json({
+            unreadCount: Number(unread[0] ? unread[0].count : 0),
+            notifications: rows.map((row) => ({
+                id: Number(row.id),
+                message: row.message,
+                type: row.type,
+                isRead: Boolean(row.is_read),
+                createdAt: row.created_at
+            }))
+        });
+    } catch (err) {
+        console.error('[LuxCloud] GET /notifications failed:', err);
+        return cloudError(res, 500, 'server_error', 'Could not load notifications');
+    }
+});
+
+router.post('/notifications/read', ensureCloudUser, async (req, res) => {
+    const id = req.body && req.body.id !== undefined ? Number(req.body.id) : null;
+
+    try {
+        if (id === null) {
+            await pool.query('UPDATE notifications SET is_read = TRUE WHERE user_id = ?', [req.cloudUserId]);
+        } else {
+            if (!Number.isSafeInteger(id) || id <= 0) {
+                return cloudError(res, 400, 'invalid_request', 'Bad notification id');
+            }
+            await pool.query(
+                'UPDATE notifications SET is_read = TRUE WHERE user_id = ? AND id = ?',
+                [req.cloudUserId, id]
+            );
+        }
+        return res.json({ ok: true });
+    } catch (err) {
+        console.error('[LuxCloud] POST /notifications/read failed:', err);
+        return cloudError(res, 500, 'server_error', 'Could not update notifications');
+    }
+});
+
+router.post('/me/avatar', ensureCloudUser, avatarUpload.single('avatar'), async (req, res) => {
+    try {
+        if (!req.file) {
+            return cloudError(res, 400, 'invalid_request', 'No image received');
+        }
+
+        const sharp = require('sharp');
+        const fsp = require('fs/promises');
+        const nodePath = require('path');
+
+        const uploadDir = process.env.UPLOAD_DIR
+            ? nodePath.resolve(process.env.UPLOAD_DIR)
+            : nodePath.join(process.env.DATA_DIR
+                ? nodePath.resolve(process.env.DATA_DIR)
+                : nodePath.join(__dirname, '..', 'data'), 'uploads');
+
+        const fileName = `avatar-${req.cloudUserId}-${Date.now()}.webp`;
+        const target = nodePath.join(uploadDir, fileName);
+
+        await sharp(req.file.buffer)
+            .resize(256, 256, { fit: 'cover' })
+            .webp({ quality: 88 })
+            .toFile(target);
+
+        const base = process.env.SITE_URL || `${req.protocol}://${req.get('host')}`;
+        const url = `${base.replace(/\/+$/, '')}/uploads/${fileName}`;
+
+        const [previous] = await pool.query('SELECT avatar FROM users WHERE id = ?', [req.cloudUserId]);
+        await pool.query('UPDATE users SET avatar = ? WHERE id = ?', [url, req.cloudUserId]);
+
+        const old = previous[0] && previous[0].avatar;
+        if (typeof old === 'string' && old.includes('/uploads/avatar-')) {
+            const oldName = old.split('/uploads/').pop();
+            if (oldName && !oldName.includes('/') && !oldName.includes('..')) {
+                await fsp.unlink(nodePath.join(uploadDir, oldName)).catch(() => {});
+            }
+        }
+
+        return res.json({ ok: true, avatar: url });
+    } catch (err) {
+        console.error('[LuxCloud] POST /me/avatar failed:', err);
+        return cloudError(res, 500, 'server_error', 'Could not save the picture');
     }
 });
 

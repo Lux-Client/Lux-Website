@@ -106,7 +106,8 @@ router.get('/users', ensureAdmin, async (req, res) => {
     try {
         const [rows] = await pool.query(
             `SELECT u.id, u.username, u.email,
-                    s.used_bytes, s.quota_bytes, s.max_instances
+                    s.used_bytes, s.quota_bytes, s.max_instances,
+                    u.cloud_banned, u.cloud_ban_reason
                FROM user_cloud_settings s
                JOIN users u ON u.id = s.user_id
               ORDER BY s.used_bytes DESC
@@ -137,6 +138,8 @@ router.get('/users', ensureAdmin, async (req, res) => {
                 usedBytes: Number(row.used_bytes || 0),
                 quotaBytes: Number(row.quota_bytes || 0),
                 maxInstances: Number(row.max_instances || 0),
+                cloudBanned: Boolean(row.cloud_banned),
+                cloudBanReason: row.cloud_ban_reason,
                 instanceCount: counts.get(Number(row.id))?.count || 0,
                 lastActivity: counts.get(Number(row.id))?.lastActivity || null
             }))
@@ -193,6 +196,62 @@ router.patch('/users/:id/quota', ensureAdmin, async (req, res) => {
     } catch (err) {
         console.error('[LuxCloud] PATCH /api/admin/cloud/users/:id/quota failed:', err);
         return res.status(500).json({ error: 'server_error', message: 'Could not change the quota' });
+    }
+});
+
+router.post('/users/:id/ban', ensureAdmin, async (req, res) => {
+    const userId = Number(req.params.id);
+    const body = req.body || {};
+    const banned = body.banned !== false;
+    const reason = typeof body.reason === 'string' ? body.reason.slice(0, 500) : null;
+
+    if (!Number.isSafeInteger(userId) || userId <= 0) {
+        return res.status(400).json({ error: 'invalid_request', message: 'Bad user id' });
+    }
+    if (Number(userId) === Number(req.user.id)) {
+        return res.status(400).json({ error: 'invalid_request', message: 'You cannot ban yourself' });
+    }
+
+    try {
+        const [result] = await pool.query(
+            `UPDATE users
+                SET cloud_banned = ?, cloud_ban_reason = ?, cloud_banned_at = ?
+              WHERE id = ?`,
+            [banned, banned ? reason : null, banned ? new Date() : null, userId]
+        );
+        if (!result || result.affectedRows === 0) {
+            return res.status(404).json({ error: 'not_found', message: 'User not found' });
+        }
+
+        if (banned) {
+            // Cut every device loose right away. Without this the account keeps
+            // working for up to an hour on the access tokens it already holds.
+            await pool.query(
+                `UPDATE client_devices
+                    SET revoked_at = NOW(), refresh_token_hash = NULL,
+                        prev_refresh_token_hash = NULL,
+                        token_generation = token_generation + 1
+                  WHERE user_id = ? AND revoked_at IS NULL`,
+                [userId]
+            );
+        }
+
+        await pool.query(
+            'INSERT INTO notifications (user_id, message, type) VALUES (?, ?, ?)',
+            [
+                userId,
+                banned
+                    ? `Lux Cloud has been disabled for your account.${reason ? ` Reason: ${reason}` : ''} Your local instances are not affected.`
+                    : 'Lux Cloud has been re-enabled for your account.',
+                banned ? 'error' : 'success'
+            ]
+        );
+
+        await logAdminAction(req, banned ? 'cloud_ban' : 'cloud_unban', 'user', userId, reason);
+        return res.json({ ok: true, banned });
+    } catch (err) {
+        console.error('[LuxCloud] POST /api/admin/cloud/users/:id/ban failed:', err);
+        return res.status(500).json({ error: 'server_error', message: 'Could not change the ban' });
     }
 });
 

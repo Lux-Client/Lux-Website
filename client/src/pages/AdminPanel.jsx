@@ -5,12 +5,13 @@ import {
   LineElement, LinearScale, PointElement, Tooltip,
 } from 'chart.js'
 import { io } from 'socket.io-client'
+import CloudPanel from '../components/admin/CloudPanel'
 import {
   LayoutDashboard, Newspaper, BarChart2, Code2, ShieldCheck,
   Lock, RefreshCw, Wifi, WifiOff, AlertTriangle, Wrench,
   Trash2, Check, X, LogOut, ChevronRight, User, Download,
   Users as UsersIcon, FileSearch, Tag, FileText, TrendingUp,
-  History, Flag,
+  History, Flag, Cloud as CloudIcon,
 } from 'lucide-react'
 import useAuth, { fixPath } from '../hooks/useAuth'
 
@@ -210,6 +211,7 @@ const TABS = [
   { id: 'moderation', label: 'Moderation', icon: ShieldCheck,     authLevel: 'admin' },
   { id: 'users',      label: 'Users',      icon: UsersIcon,       authLevel: 'admin' },
   { id: 'auditlog',   label: 'Audit Log',  icon: History,         authLevel: 'admin' },
+  { id: 'cloud',      label: 'Cloud',      icon: CloudIcon,       authLevel: 'admin' },
 ]
 
 export default function AdminPanel() {
@@ -868,6 +870,15 @@ export default function AdminPanel() {
         )}
 
         {/* ── AUDIT LOG ── */}
+        {tab === 'cloud' && isSessionAdmin && (
+          <SectionCard
+            title="Lux Cloud"
+            description="Storage, deduplication, quotas and the jobs that delete data."
+          >
+            <CloudPanel />
+          </SectionCard>
+        )}
+
         {tab === 'auditlog' && isSessionAdmin && (
           <SectionCard
             title="Audit Log"

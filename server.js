@@ -13,8 +13,22 @@ const UPLOAD_DIR = process.env.UPLOAD_DIR
     ? path.resolve(process.env.UPLOAD_DIR)
     : path.join(DATA_DIR, 'uploads');
 
-if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+const DATA_DIR_EXISTED = fs.existsSync(DATA_DIR);
+
+if (!DATA_DIR_EXISTED) fs.mkdirSync(DATA_DIR, { recursive: true });
 if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+
+// Everything that survives a restart lives here: uploaded avatars and extension
+// files, analytics, news and the cloud blob store. Without a mounted volume this
+// is a directory inside the container image and every redeploy starts empty --
+// which looks exactly like "the server deleted my data".
+console.log(`[Storage] DATA_DIR   = ${DATA_DIR}${process.env.DATA_DIR ? '' : '  (default, DATA_DIR not set)'}`);
+console.log(`[Storage] UPLOAD_DIR = ${UPLOAD_DIR}`);
+if (!DATA_DIR_EXISTED) {
+    console.warn('[Storage] WARNING: the data directory did not exist and was created empty.');
+    console.warn('[Storage] If this appears after every deployment, DATA_DIR is not on a persistent volume');
+    console.warn('[Storage] and uploads, avatars and analytics are lost on each redeploy.');
+}
 
 // --- LOGGING TO latest.log ---
 const logFile = path.join(DATA_DIR, 'latest.log');
@@ -1117,6 +1131,21 @@ app.delete('/api/user/delete', ensureAuthenticated, async (req, res) => {
             }
         }
 
+        // Cloud data has to go first. DELETE FROM users cascades into cloud_instances and
+        // blob_refs, and a cascade does not decrement blobs.refcount -- the blobs would stay
+        // referenced forever and never be collected.
+        try {
+            const { purgeEverything } = require('./cloudAccount');
+            const purged = await purgeEverything(userId);
+            console.log(`[Lux] Cloud data purged before account deletion for user ${userId}:`, purged);
+        } catch (cloudErr) {
+            console.error('[Lux] Cloud purge failed, aborting account deletion:', cloudErr);
+            return res.status(500).json({
+                error: 'Could not delete the cloud data, so the account was kept',
+                details: cloudErr.message
+            });
+        }
+
         // Delete user (CASCADE handles extensions, versions, notifications, drafts)
         await pool.query('DELETE FROM users WHERE id = ?', [userId]);
 
@@ -1612,6 +1641,44 @@ app.get('/api/modrinth/search', async (req, res) => {
     }
 });
 
+// Lux Cloud can be switched off entirely. A missing or weak signing secret disables it
+// as well -- it must never take the rest of the site down with it, because the
+// marketplace, the news and the admin panel do not depend on any of this.
+const LUXCLOUD_JWT_SECRET = process.env.LUXCLOUD_JWT_SECRET;
+const LUXCLOUD_SWITCHED_OFF = String(process.env.LUXCLOUD_ENABLED || 'true').toLowerCase() === 'false';
+const LUXCLOUD_SECRET_OK = Boolean(LUXCLOUD_JWT_SECRET) && LUXCLOUD_JWT_SECRET.length >= 32;
+const LUXCLOUD_ACTIVE = !LUXCLOUD_SWITCHED_OFF && (LUXCLOUD_SECRET_OK || process.env.NODE_ENV !== 'production');
+
+if (LUXCLOUD_SWITCHED_OFF) {
+    console.log('[LuxCloud] Disabled via LUXCLOUD_ENABLED=false. Cloud routes are not mounted.');
+} else if (!LUXCLOUD_SECRET_OK && process.env.NODE_ENV === 'production') {
+    console.error('[LuxCloud] CRITICAL: LUXCLOUD_JWT_SECRET is missing or shorter than 32 characters.');
+    console.error('[LuxCloud] Cloud sync stays OFF. The rest of the site runs normally.');
+    console.error('[LuxCloud] Generate one with: node -e "console.log(require(\'crypto\').randomBytes(48).toString(\'base64url\'))"');
+} else if (!LUXCLOUD_SECRET_OK) {
+    console.warn('[LuxCloud] No LUXCLOUD_JWT_SECRET set - using a development fallback. Never do this in production.');
+}
+
+app.get('/api/cloud/status', (req, res) => {
+    res.json({ enabled: LUXCLOUD_ACTIVE, reason: LUXCLOUD_ACTIVE ? null : (LUXCLOUD_SWITCHED_OFF ? 'disabled' : 'not_configured') });
+});
+
+if (LUXCLOUD_ACTIVE) {
+    app.use('/', require('./routes/deviceAuth'));
+    app.use('/', require('./routes/devicePairing'));
+    app.use('/api/cloud', require('./routes/cloud'));
+    app.use('/api/cloud', require('./routes/cloudBlobs'));
+    app.use('/api/cloud', require('./routes/cloudSync'));
+    app.use('/api/admin/cloud', require('./routes/adminCloud'));
+} else {
+    app.use(['/api/cloud', '/auth/device', '/api/auth/device'], (req, res) => {
+        res.status(503).json({
+            error: 'cloud_disabled',
+            message: 'Lux Cloud is not available on this server'
+        });
+    });
+}
+
 app.use((err, req, res, next) => {
     console.error(`[Server Error] ${req.method} ${req.url}:`, err);
     res.status(500).json({
@@ -1780,6 +1847,26 @@ server.listen(PORT, async () => {
         await createTables();
     } catch (err) {
         console.error('[Database] Critical error during auto-init:', err.message);
+    }
+
+    const { prunePairingCodes } = require('./routes/devicePairing');
+    prunePairingCodes();
+    setInterval(prunePairingCodes, 60 * 60 * 1000).unref();
+
+    const { pruneDeviceAuthCodes } = require('./db_init_cloud');
+    pruneDeviceAuthCodes();
+    setInterval(pruneDeviceAuthCodes, 60 * 60 * 1000).unref();
+
+    try {
+        if (LUXCLOUD_ACTIVE) {
+            require('./jobs/cloudGc').startCloudJobs();
+            require('./jobs/cloudRetention').startRetentionJob();
+            require('./jobs/cloudExpiry').startExpiryJob();
+        } else {
+            console.log('[LuxCloud] Cloud jobs not started because Lux Cloud is off.');
+        }
+    } catch (err) {
+        console.error('[LuxCloud] Could not start the cloud jobs:', err.message);
     }
 });
 

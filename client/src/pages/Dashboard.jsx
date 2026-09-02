@@ -13,6 +13,7 @@ import {
 } from 'lucide-react'
 import PageShell from '../components/PageShell'
 import useAuth, { fixPath } from '../hooks/useAuth'
+import CloudSection from '../components/CloudSection'
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, ArcElement, Tooltip, Legend)
 
@@ -266,6 +267,8 @@ export default function Dashboard() {
 
             {/* ── Left: charts + projects ── */}
             <motion.div variants={fadeUp} className="flex flex-col gap-5">
+
+              <CloudSection />
 
               {/* Charts */}
               {extensions.length > 0 && (

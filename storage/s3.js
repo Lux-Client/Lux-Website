@@ -30,12 +30,12 @@ function createS3Storage({ bucket, endpoint, region, accessKeyId, secretAccessKe
             Bucket: bucket,
             Key: key,
             Body: source,
-            ContentLength: meta.storedSize,
+            ContentLength: meta.storedSize !== undefined ? meta.storedSize : meta.contentLength,
             ContentType: 'application/octet-stream',
             Metadata: metadata
         }));
 
-        return { key, storedSize: meta.storedSize };
+        return { key, storedSize: meta.storedSize !== undefined ? meta.storedSize : meta.contentLength };
     }
 
     async function get(key) {

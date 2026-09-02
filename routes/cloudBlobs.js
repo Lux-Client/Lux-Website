@@ -186,7 +186,7 @@ router.put('/blobs/:hash', ensureDeviceAuth, uploadLimiter, async (req, res) => 
 
     try {
         const existing = await getBlob(hash);
-        if (existing) {
+        if (existing && await getStorage().head(blobKey(hash)).catch(() => null)) {
             await claimUpload(hash, req.cloudUserId, req.device.id);
             return res.status(409).json({
                 error: 'already_exists',
@@ -273,7 +273,7 @@ router.post('/blobs/batch', ensureDeviceAuth, uploadLimiter, async (req, res) =>
     try {
         for (const item of prepared) {
             const existing = await getBlob(item.hash);
-            if (existing) {
+            if (existing && await getStorage().head(blobKey(item.hash)).catch(() => null)) {
                 await claimUpload(item.hash, req.cloudUserId, req.device.id);
                 skipped.push(item.hash);
                 continue;

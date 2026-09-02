@@ -1,6 +1,7 @@
 const express = require('express');
 const crypto = require('crypto');
 const { Readable } = require('stream');
+const zlib = require('zlib');
 const pool = require('../database');
 const { cloudError, ensureCloudSettingsRow, ensureDeviceAuth } = require('../middleware/deviceAuth');
 const { INSTANCE_UUID_RE, SHA256_RE, MAX_BLOB_BYTES } = require('../cloudConfig');
@@ -103,8 +104,8 @@ router.post('/instances/:uuid/negotiate', ensureDeviceAuth, async (req, res) => 
             for (const row of rows) known.push(row.hash);
         }
 
-        const knownSet = new Set(known);
-        const missing = hashes.filter((hash) => !knownSet.has(hash));
+        const present = VERIFY_NEGOTIATE ? await filterStoredBlobs(known) : new Set(known);
+        const missing = hashes.filter((hash) => !present.has(hash));
 
         const quota = await readQuota(req.cloudUserId);
         const projected = Number(body.projectedBytes);
@@ -125,7 +126,7 @@ router.post('/instances/:uuid/negotiate', ensureDeviceAuth, async (req, res) => 
 
         return res.json({
             missing,
-            known,
+            known: hashes.filter((hash) => present.has(hash)),
             missingBytes: missing.reduce((sum, hash) => sum + (wanted.get(hash) || 0), 0),
             quota: quotaPayload(quota, { wouldExceed: false })
         });
@@ -250,8 +251,14 @@ router.post('/instances/:uuid/commit', ensureDeviceAuth, async (req, res) => {
             });
         }
 
-        if (!await getBlob(manifestHash, connection)) {
-            await getStorage().put(blobKey(manifestHash), Readable.from(serialized), {
+        const manifestKey = blobKey(manifestHash);
+        const manifestRow = await getBlob(manifestHash, connection);
+        const manifestObject = await getStorage().head(manifestKey).catch(() => null);
+
+        if (!manifestRow || !manifestObject) {
+            await getStorage().put(manifestKey, Readable.from(serialized), {
+                storedSize: serialized.length,
+                originalSize: serialized.length,
                 contentLength: serialized.length
             });
             storagePut = true;
@@ -329,11 +336,56 @@ router.post('/instances/:uuid/commit', ensureDeviceAuth, async (req, res) => {
     }
 });
 
+const VERIFY_NEGOTIATE = String(process.env.LUXCLOUD_VERIFY_NEGOTIATE || 'true').toLowerCase() !== 'false';
+const VERIFY_CONCURRENCY = Number(process.env.LUXCLOUD_VERIFY_CONCURRENCY || 16);
+
+async function filterStoredBlobs(hashes) {
+    const storage = getStorage();
+    const present = new Set();
+    let cursor = 0;
+
+    const worker = async () => {
+        while (cursor < hashes.length) {
+            const hash = hashes[cursor];
+            cursor += 1;
+            const found = await storage.head(blobKey(hash)).catch(() => null);
+            if (found) present.add(hash);
+        }
+    };
+
+    await Promise.all(
+        new Array(Math.min(VERIFY_CONCURRENCY, hashes.length || 1)).fill(null).map(() => worker())
+    );
+    return present;
+}
+
 async function readManifestBlob(hash) {
     const { stream } = await getStorage().get(blobKey(hash));
     const chunks = [];
     for await (const chunk of stream) chunks.push(chunk);
-    return Buffer.concat(chunks);
+    const stored = Buffer.concat(chunks);
+
+    const record = await getBlob(hash);
+    if (record && record.compression === 'zstd' && typeof zlib.zstdDecompressSync === 'function') {
+        return zlib.zstdDecompressSync(stored);
+    }
+    return stored;
+}
+
+function manifestReadFailure(res, hash, err) {
+    const missing = err && (err.code === 'ENOENT' || err.name === 'NoSuchKey'
+        || (err.$metadata && err.$metadata.httpStatusCode === 404));
+
+    console.error(`[LuxCloud] manifest blob ${hash} unreadable:`, err && err.message);
+
+    if (missing) {
+        return cloudError(res, 410, 'manifest_missing',
+            'The stored manifest for this revision is gone. Upload the instance again from a PC that still has it.',
+            { details: { manifestHash: hash } });
+    }
+    return cloudError(res, 500, 'server_error', 'Manifest could not be read', {
+        details: { manifestHash: hash, cause: (err && err.message) || 'unknown' }
+    });
 }
 
 router.get('/instances/:uuid/manifest', ensureDeviceAuth, async (req, res) => {
@@ -370,8 +422,7 @@ router.get('/instances/:uuid/manifest', ensureDeviceAuth, async (req, res) => {
         try {
             manifest = JSON.parse((await readManifestBlob(row.manifest_blob)).toString('utf8'));
         } catch (err) {
-            console.error(`[LuxCloud] manifest blob ${row.manifest_blob} unreadable:`, err.message);
-            return cloudError(res, 500, 'server_error', 'Manifest could not be read');
+            return manifestReadFailure(res, row.manifest_blob, err);
         }
 
         if (String(req.query.touch) === '1') {

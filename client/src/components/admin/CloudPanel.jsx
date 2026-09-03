@@ -1,4 +1,13 @@
 import { useCallback, useEffect, useState } from 'react'
+import {
+  Archive, Ban, Database, HardDrive, Layers, Play, RefreshCw,
+  Trash2, TriangleAlert, UserCheck, Users as UsersIcon,
+} from 'lucide-react'
+import {
+  Badge, Button, Cell, EmptyState, Field, GroupHeading, Modal,
+  Panel, Row, SearchField, StatTile, Table, TextInput,
+} from './ui'
+import { useDialog, useToast } from './feedback'
 
 function formatBytes(bytes) {
   if (!bytes) return '0 B'
@@ -7,27 +16,31 @@ function formatBytes(bytes) {
   return `${(bytes / Math.pow(1024, index)).toFixed(index === 0 ? 0 : 1)} ${units[index]}`
 }
 
-function Stat({ label, value, hint, tone = 'default' }) {
-  const tones = {
-    default: 'border-white/5 bg-surface/50',
-    warn: 'border-amber-400/20 bg-amber-500/[0.06]',
-    good: 'border-green-400/20 bg-green-500/[0.06]'
-  }
-  return (
-    <div className={`rounded-2xl border p-5 ${tones[tone]}`}>
-      <p className="text-xs uppercase tracking-wider text-gray-500">{label}</p>
-      <p className="mt-2 text-2xl font-black text-white">{value}</p>
-      {hint && <p className="mt-1 text-xs text-gray-500">{hint}</p>}
-    </div>
-  )
-}
+const JOBS = [
+  { endpoint: 'gc',     mode: 'gc',        label: 'Garbage collection', hint: 'Delete blobs nothing references any more.' },
+  { endpoint: 'gc',     mode: 'reconcile', label: 'Reconcile refcounts', hint: 'Recount references and repair drift.' },
+  { endpoint: 'expiry', mode: 'retention', label: 'Retention',           hint: 'Apply the configured retention window.' },
+  { endpoint: 'expiry', mode: 'expiry',    label: '15 day rule',         hint: 'Remove instances no second PC ever pulled.' },
+]
+
+const USER_COLUMNS = [
+  { label: 'Account' },
+  { label: 'Storage used' },
+  { label: 'Instances' },
+  { label: 'Last activity' },
+  { label: '', align: 'right' },
+]
 
 export default function CloudPanel() {
-  const [stats, setStats] = useState(null)
-  const [users, setUsers] = useState([])
-  const [jobs, setJobs] = useState(null)
-  const [busy, setBusy] = useState(null)
-  const [message, setMessage] = useState(null)
+  const toast  = useToast()
+  const dialog = useDialog()
+
+  const [stats,     setStats]     = useState(null)
+  const [users,     setUsers]     = useState([])
+  const [jobs,      setJobs]      = useState(null)
+  const [busy,      setBusy]      = useState(null)
+  const [output,    setOutput]    = useState(null)
+  const [query,     setQuery]     = useState('')
   const [banTarget, setBanTarget] = useState(null)
   const [banReason, setBanReason] = useState('')
 
@@ -36,51 +49,79 @@ export default function CloudPanel() {
       const [statsRes, usersRes, jobsRes] = await Promise.all([
         fetch('/api/admin/cloud/stats', { credentials: 'include' }),
         fetch('/api/admin/cloud/users?limit=50', { credentials: 'include' }),
-        fetch('/api/admin/cloud/expiry', { credentials: 'include' })
+        fetch('/api/admin/cloud/expiry', { credentials: 'include' }),
       ])
       if (statsRes.ok) setStats(await statsRes.json())
       if (usersRes.ok) setUsers((await usersRes.json()).users || [])
-      if (jobsRes.ok) setJobs(await jobsRes.json())
+      if (jobsRes.ok)  setJobs(await jobsRes.json())
     } catch {
-      setMessage('Could not load cloud data.')
+      toast.error('Could not load cloud data')
     }
-  }, [])
+  }, [toast])
 
   useEffect(() => { load() }, [load])
 
-  const runJob = async (endpoint, mode, dryRun) => {
-    setBusy(`${mode}-${dryRun}`)
-    setMessage(null)
+  const runJob = async (job, dryRun) => {
+    if (!dryRun) {
+      const ok = await dialog.confirm({
+        title: `Run “${job.label}” for real?`,
+        description: 'This job deletes data. Run it as a dry run first if you are unsure.',
+        confirmLabel: 'Run job',
+        tone: 'danger',
+      })
+      if (!ok) return
+    }
+    setBusy(`${job.mode}-${dryRun}`)
+    setOutput(null)
     try {
-      const res = await fetch(`/api/admin/cloud/${endpoint}/run`, {
+      const res = await fetch(`/api/admin/cloud/${job.endpoint}/run`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ mode, dryRun })
+        body: JSON.stringify({ mode: job.mode, dryRun }),
       })
-      const data = await res.json()
-      setMessage(res.ok
-        ? `${mode}${dryRun ? ' (dry run)' : ''}: ${JSON.stringify(data.result)}`
-        : (data.message || 'Job failed'))
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.message || 'Job failed')
+      setOutput({ job: `${job.label}${dryRun ? ' (dry run)' : ''}`, result: JSON.stringify(data.result, null, 2) })
+      toast.success(`${job.label} finished`, dryRun ? 'Dry run — nothing was deleted.' : undefined)
       await load()
+    } catch (error) {
+      toast.error(`${job.label} failed`, error.message)
     } finally {
       setBusy(null)
     }
   }
 
-  const setQuota = async (user) => {
-    const gb = window.prompt(`Storage for ${user.username} in GB:`, String(Math.round(user.quotaBytes / 1024 ** 3)))
-    if (gb === null) return
-    const value = Number(gb)
-    if (!Number.isFinite(value) || value < 0) return
-
-    await fetch(`/api/admin/cloud/users/${user.id}/quota`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({ quotaBytes: Math.round(value * 1024 ** 3) })
+  const setQuota = async user => {
+    const values = await dialog.prompt({
+      title: `Storage quota for ${user.username}`,
+      description: `Currently using ${formatBytes(user.usedBytes)} of ${formatBytes(user.quotaBytes)}.`,
+      confirmLabel: 'Save quota',
+      fields: [{
+        name: 'gb', label: 'Quota in GB', type: 'number', required: true,
+        defaultValue: String(Math.round(user.quotaBytes / 1024 ** 3)),
+        hint: 'Set 0 to block new uploads without banning the account.',
+      }],
     })
-    await load()
+    if (!values) return
+    const value = Number(values.gb)
+    if (!Number.isFinite(value) || value < 0) {
+      toast.error('Invalid quota', 'Enter a number of gigabytes, zero or more.')
+      return
+    }
+    try {
+      const res = await fetch(`/api/admin/cloud/users/${user.id}/quota`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ quotaBytes: Math.round(value * 1024 ** 3) }),
+      })
+      if (!res.ok) throw new Error('Request rejected')
+      toast.success(`Quota for ${user.username} set to ${value} GB`)
+      await load()
+    } catch (error) {
+      toast.error('Could not change the quota', error.message)
+    }
   }
 
   const toggleBan = async (user, banned) => {
@@ -90,223 +131,194 @@ export default function CloudPanel() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ banned, reason: banned ? (banReason || null) : null })
+        body: JSON.stringify({ banned, reason: banned ? (banReason || null) : null }),
       })
-      const data = await res.json()
-      if (!res.ok) setMessage(data.message || 'Could not change the ban')
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.message || 'Could not change the ban')
+      toast.success(banned ? `Cloud disabled for ${user.username}` : `Cloud restored for ${user.username}`)
       setBanTarget(null)
       setBanReason('')
       await load()
+    } catch (error) {
+      toast.error('Ban not applied', error.message)
     } finally {
       setBusy(null)
     }
   }
 
+  const filteredUsers = users.filter(user =>
+    !query.trim() || user.username?.toLowerCase().includes(query.trim().toLowerCase()))
+
+  const expiryLive = jobs?.expiry && !jobs.expiry.dryRun
+
   return (
-    <div className="space-y-6">
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Stat
-          label="Stored"
-          value={stats ? formatBytes(stats.blobs.physicalBytes) : '—'}
-          hint={stats ? `${stats.blobs.count} blobs` : null}
-        />
-        <Stat
-          label="Billed to users"
-          value={stats ? formatBytes(stats.users.billedBytes) : '—'}
-          hint={stats ? `${stats.users.withData} accounts` : null}
-        />
-        <Stat
-          label="Dedup factor"
-          value={stats && stats.dedupFactor ? `${stats.dedupFactor}x` : '—'}
-          hint="billed / actually stored"
-          tone={stats && stats.dedupFactor > 1.5 ? 'good' : 'default'}
-        />
-        <Stat
-          label="GC queue"
-          value={stats ? stats.gcQueue : '—'}
-          hint={stats ? `${stats.blobs.orphanCount} unreferenced` : null}
-          tone={stats && stats.gcQueue > 1000 ? 'warn' : 'default'}
-        />
-      </div>
-
-      <div className="grid gap-4 sm:grid-cols-3">
-        <Stat label="Active instances" value={stats ? stats.instances.active : '—'} />
-        <Stat label="In the trash" value={stats ? stats.instances.trashed : '—'} />
-        <Stat
-          label="Never pulled elsewhere"
-          value={stats ? stats.instances.neverPulledElsewhere : '—'}
-          hint="these run into the 15 day rule"
-          tone={stats && stats.instances.neverPulledElsewhere > 0 ? 'warn' : 'default'}
-        />
-      </div>
-
-      <div className="rounded-2xl border border-white/5 bg-surface/50 p-6">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h3 className="text-lg font-bold text-white">Jobs</h3>
-            <p className="text-sm text-gray-500">
-              {jobs && jobs.expiry
-                ? `Expiry after ${jobs.expiry.policy.expiryDays} days · dry run ${jobs.expiry.dryRun ? 'ON' : 'OFF'}`
-                : 'Loading...'}
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {[
-              ['gc', 'gc', 'Garbage collection'],
-              ['gc', 'reconcile', 'Reconcile refcounts'],
-              ['expiry', 'retention', 'Retention'],
-              ['expiry', 'expiry', '15 day rule']
-            ].map(([endpoint, mode, label]) => (
-              <div key={mode} className="flex overflow-hidden rounded-lg border border-white/10">
-                <span className="bg-black/30 px-3 py-1.5 text-xs text-gray-400">{label}</span>
-                <button
-                  type="button"
-                  disabled={busy !== null}
-                  onClick={() => runJob(endpoint, mode, true)}
-                  className="border-l border-white/10 px-3 py-1.5 text-xs text-gray-300 transition hover:bg-white/5 disabled:opacity-40"
-                >
-                  dry
-                </button>
-                <button
-                  type="button"
-                  disabled={busy !== null}
-                  onClick={() => runJob(endpoint, mode, false)}
-                  className="border-l border-white/10 px-3 py-1.5 text-xs text-amber-300 transition hover:bg-amber-500/10 disabled:opacity-40"
-                >
-                  run
-                </button>
-              </div>
-            ))}
-          </div>
+    <div className="flex flex-col gap-6">
+      <section>
+        <GroupHeading hint={stats ? `${stats.blobs.count} blobs stored` : 'Loading…'}>Storage</GroupHeading>
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <StatTile
+            icon={HardDrive} label="Physically stored" color="#e27602" loading={!stats}
+            value={stats ? formatBytes(stats.blobs.physicalBytes) : '—'}
+            hint={stats ? `${stats.blobs.orphanCount} unreferenced` : null}
+          />
+          <StatTile
+            icon={UsersIcon} label="Billed to users" color="#3b82f6" loading={!stats}
+            value={stats ? formatBytes(stats.users.billedBytes) : '—'}
+            hint={stats ? `${stats.users.withData} accounts with data` : null}
+          />
+          <StatTile
+            icon={Layers} label="Dedup factor" color="#10b981" loading={!stats}
+            value={stats?.dedupFactor ? `${stats.dedupFactor}x` : '—'}
+            hint="Billed divided by actually stored"
+          />
+          <StatTile
+            icon={Trash2} label="GC queue" color={stats && stats.gcQueue > 1000 ? '#f59e0b' : '#8b5cf6'} loading={!stats}
+            value={stats ? stats.gcQueue : '—'}
+            hint="Blobs waiting to be collected"
+          />
         </div>
+      </section>
 
-        {jobs && jobs.expiry && !jobs.expiry.dryRun && (
-          <p className="mt-4 rounded-lg bg-red-500/10 p-3 text-xs text-red-200">
+      <section>
+        <GroupHeading>Instances</GroupHeading>
+        <div className="grid gap-4 sm:grid-cols-3">
+          <StatTile icon={Database} label="Active"       value={stats ? stats.instances.active : '—'}  color="#10b981" loading={!stats} hint="Instances in normal use" />
+          <StatTile icon={Archive}  label="In the trash" value={stats ? stats.instances.trashed : '—'} color="#8b5cf6" loading={!stats} hint="Deleted, still recoverable" />
+          <StatTile
+            icon={TriangleAlert} label="Never pulled elsewhere" loading={!stats}
+            value={stats ? stats.instances.neverPulledElsewhere : '—'}
+            color={stats && stats.instances.neverPulledElsewhere > 0 ? '#f59e0b' : '#3f3f3f'}
+            hint="These run into the 15 day rule"
+          />
+        </div>
+      </section>
+
+      <Panel
+        title="Maintenance jobs"
+        description={jobs?.expiry
+          ? `Expiry after ${jobs.expiry.policy.expiryDays} days · dry run ${jobs.expiry.dryRun ? 'ON' : 'OFF'}`
+          : 'Loading job configuration…'}
+        actions={<Button icon={RefreshCw} onClick={load}>Reload</Button>}
+      >
+        {expiryLive && (
+          <p className="mb-4 flex items-start gap-2 rounded-xl border border-red-500/20 bg-red-500/[0.08] p-3.5 text-xs leading-relaxed text-red-300">
+            <TriangleAlert className="mt-px h-4 w-4 shrink-0" />
             The expiry job is live. It permanently removes cloud instances that no second PC ever pulled.
           </p>
         )}
 
-        {message && (
-          <pre className="mt-4 max-h-40 overflow-auto rounded-lg bg-black/40 p-3 text-[11px] text-gray-400">{message}</pre>
-        )}
-      </div>
-
-      <div className="rounded-2xl border border-white/5 bg-surface/50 p-6">
-        <h3 className="mb-4 text-lg font-bold text-white">Accounts by storage</h3>
-
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead className="text-xs uppercase tracking-wider text-gray-500">
-              <tr>
-                <th className="pb-2">User</th>
-                <th className="pb-2">Used</th>
-                <th className="pb-2">Instances</th>
-                <th className="pb-2">Last activity</th>
-                <th className="pb-2 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-white/5">
-              {users.map((user) => {
-                const percent = user.quotaBytes > 0
-                  ? Math.round((user.usedBytes / user.quotaBytes) * 100)
-                  : 0
-                return (
-                  <tr key={user.id} className={user.cloudBanned ? 'bg-red-500/[0.04]' : ''}>
-                    <td className="py-2.5">
-                      <span className="font-medium text-white">{user.username}</span>
-                      {user.cloudBanned && (
-                        <span
-                          title={user.cloudBanReason || 'Cloud disabled'}
-                          className="ml-2 rounded bg-red-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-red-300"
-                        >
-                          CLOUD BANNED
-                        </span>
-                      )}
-                    </td>
-                    <td className="py-2.5 text-gray-300">
-                      {formatBytes(user.usedBytes)}
-                      <span className={percent > 90 ? 'ml-1 text-red-400' : 'ml-1 text-gray-600'}>
-                        ({percent}%)
-                      </span>
-                    </td>
-                    <td className="py-2.5 text-gray-400">{user.instanceCount} / {user.maxInstances}</td>
-                    <td className="py-2.5 text-xs text-gray-500">
-                      {user.lastActivity ? new Date(user.lastActivity).toLocaleDateString() : '—'}
-                    </td>
-                    <td className="py-2.5 text-right">
-                      <button
-                        type="button"
-                        onClick={() => setQuota(user)}
-                        className="rounded px-2 py-1 text-xs text-gray-400 transition hover:bg-white/5 hover:text-white"
-                      >
-                        Quota
-                      </button>
-                      {user.cloudBanned ? (
-                        <button
-                          type="button"
-                          disabled={busy === `ban-${user.id}`}
-                          onClick={() => toggleBan(user, false)}
-                          className="rounded px-2 py-1 text-xs text-green-400 transition hover:bg-green-500/10 disabled:opacity-40"
-                        >
-                          Unban
-                        </button>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => { setBanTarget(user); setBanReason('') }}
-                          className="rounded px-2 py-1 text-xs text-red-400 transition hover:bg-red-500/10"
-                        >
-                          Ban
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                )
-              })}
-              {users.length === 0 && (
-                <tr><td colSpan={5} className="py-6 text-center text-gray-500">No accounts with cloud data yet.</td></tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {banTarget && (
-        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/70 p-4">
-          <div className="w-full max-w-md rounded-2xl border border-white/10 bg-[#161616] p-6">
-            <h3 className="text-lg font-bold text-white">Disable Lux Cloud for {banTarget.username}?</h3>
-            <p className="mt-2 text-sm text-gray-400">
-              All devices are signed out immediately and the account can no longer use cloud sync.
-              Existing cloud data is kept, and local instances on their PCs are not touched.
-            </p>
-
-            <input
-              value={banReason}
-              onChange={(e) => setBanReason(e.target.value)}
-              placeholder="Reason (shown to the user)"
-              className="mt-4 w-full rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-sm text-white outline-none focus:border-primary"
-            />
-
-            <div className="mt-5 flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setBanTarget(null)}
-                className="rounded-lg px-3 py-2 text-sm text-gray-400 hover:text-white"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                disabled={busy === `ban-${banTarget.id}`}
-                onClick={() => toggleBan(banTarget, true)}
-                className="rounded-lg bg-red-500 px-4 py-2 text-sm font-bold text-white transition hover:bg-red-400 disabled:opacity-50"
-              >
-                Disable cloud
-              </button>
+        <div className="grid gap-3 sm:grid-cols-2">
+          {JOBS.map(job => (
+            <div key={job.mode} className="flex flex-col gap-3 rounded-xl border border-white/[0.06] bg-white/[0.02] p-4">
+              <div>
+                <p className="text-sm font-bold text-white">{job.label}</p>
+                <p className="mt-0.5 text-xs leading-relaxed text-white/[0.34]">{job.hint}</p>
+              </div>
+              <div className="flex gap-2">
+                <Button size="sm" variant="ghost" disabled={busy !== null} onClick={() => runJob(job, true)}>
+                  Dry run
+                </Button>
+                <Button size="sm" variant="danger" icon={Play} disabled={busy !== null} onClick={() => runJob(job, false)}>
+                  Run for real
+                </Button>
+              </div>
             </div>
-          </div>
+          ))}
         </div>
-      )}
+
+        {output && (
+          <div className="mt-4 overflow-hidden rounded-xl border border-white/[0.06] bg-black/40">
+            <p className="border-b border-white/[0.06] px-3.5 py-2 text-[11px] font-bold uppercase tracking-[0.12em] text-white/35">
+              {output.job}
+            </p>
+            <pre className="max-h-52 overflow-auto p-3.5 text-[11px] leading-relaxed text-white/50">{output.result}</pre>
+          </div>
+        )}
+      </Panel>
+
+      <Panel
+        title="Accounts by storage"
+        description="The 50 accounts using the most cloud storage."
+        actions={<SearchField value={query} onChange={setQuery} placeholder="Username…" />}
+      >
+        {filteredUsers.length === 0 ? (
+          <EmptyState
+            icon={HardDrive}
+            title={users.length === 0 ? 'No cloud data yet' : 'No match'}
+            message={users.length === 0 ? 'Accounts appear here once they sync something to Lux Cloud.' : 'Try a different username.'}
+          />
+        ) : (
+          <Table columns={USER_COLUMNS}>
+            {filteredUsers.map(user => {
+              const percent = user.quotaBytes > 0 ? Math.round((user.usedBytes / user.quotaBytes) * 100) : 0
+              return (
+                <Row key={user.id} className={user.cloudBanned ? 'bg-red-500/[0.04]' : ''}>
+                  <Cell>
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold text-white">{user.username}</span>
+                      {user.cloudBanned && <Badge tone="danger">Cloud banned</Badge>}
+                    </div>
+                    {user.cloudBanned && user.cloudBanReason && (
+                      <p className="mt-0.5 text-[11px] text-white/30">{user.cloudBanReason}</p>
+                    )}
+                  </Cell>
+                  <Cell>
+                    <div className="flex items-center gap-2.5">
+                      <span className="w-20 shrink-0 tabular-nums text-white/70">{formatBytes(user.usedBytes)}</span>
+                      <span className="h-1.5 w-20 overflow-hidden rounded-full bg-white/[0.07]">
+                        <span
+                          className={`block h-full rounded-full ${percent > 90 ? 'bg-red-500' : percent > 70 ? 'bg-amber-500' : 'bg-primary'}`}
+                          style={{ width: `${Math.min(percent, 100)}%` }}
+                        />
+                      </span>
+                      <span className={`text-[11px] tabular-nums ${percent > 90 ? 'text-red-400' : 'text-white/30'}`}>{percent}%</span>
+                    </div>
+                  </Cell>
+                  <Cell><span className="tabular-nums text-white/50">{user.instanceCount} / {user.maxInstances}</span></Cell>
+                  <Cell><span className="text-xs text-white/30">{user.lastActivity ? new Date(user.lastActivity).toLocaleDateString() : '—'}</span></Cell>
+                  <Cell align="right">
+                    <div className="flex justify-end gap-2">
+                      <Button size="sm" variant="ghost" onClick={() => setQuota(user)}>Quota</Button>
+                      {user.cloudBanned ? (
+                        <Button size="sm" variant="success" icon={UserCheck} disabled={busy === `ban-${user.id}`} onClick={() => toggleBan(user, false)}>
+                          Unban
+                        </Button>
+                      ) : (
+                        <Button size="sm" variant="danger" icon={Ban} onClick={() => { setBanTarget(user); setBanReason('') }}>
+                          Ban
+                        </Button>
+                      )}
+                    </div>
+                  </Cell>
+                </Row>
+              )
+            })}
+          </Table>
+        )}
+      </Panel>
+
+      <Modal
+        open={!!banTarget}
+        onClose={() => setBanTarget(null)}
+        title={`Disable Lux Cloud for ${banTarget?.username}?`}
+        description="All devices are signed out immediately and the account can no longer use cloud sync. Existing cloud data is kept, and local instances on their PCs are not touched."
+        footer={(
+          <>
+            <Button size="lg" variant="ghost" onClick={() => setBanTarget(null)}>Cancel</Button>
+            <Button
+              size="lg" variant="solid" icon={Ban}
+              disabled={busy === `ban-${banTarget?.id}`}
+              onClick={() => toggleBan(banTarget, true)}
+            >
+              Disable cloud
+            </Button>
+          </>
+        )}
+      >
+        <Field label="Reason" hint="Shown to the user when they try to sync.">
+          <TextInput value={banReason} onChange={setBanReason} placeholder="Why is cloud access being disabled?" />
+        </Field>
+      </Modal>
     </div>
   )
 }

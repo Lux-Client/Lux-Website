@@ -126,10 +126,14 @@ const io = new Server(server, {
 
 const PORT = process.env.PORT || 3001;
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
+const createAdminAuth = require('./middleware/adminAuth');
+
 if (!ADMIN_PASSWORD) {
     console.error('[CRITICAL] ADMIN_PASSWORD environment variable is NOT SET. Server will not start for security reasons.');
     process.exit(1);
 }
+
+const adminAuth = createAdminAuth(ADMIN_PASSWORD);
 
 const NEWS_FILE = path.join(DATA_DIR, 'news.json');
 const ANALYTICS_FILE = path.join(DATA_DIR, 'analytics.json');
@@ -186,10 +190,16 @@ let isMaintenanceMode = false;
 
 // --- MAINTENANCE MIDDLEWARE ---
 app.use((req, res, next) => {
+    // The unlock endpoints have to stay reachable while maintenance is on,
+    // otherwise there is no way in to switch it back off. All three are rate
+    // limited and reveal nothing beyond success or failure.
     const isMaintenancePath = req.path === '/maintenance'
         || req.path === '/api/admin/maintenance/auth'
         || req.path === '/api/admin/maintenance/toggle'
-        || req.path === '/api/admin/maintenance/status';
+        || req.path === '/api/admin/maintenance/status'
+        || req.path === '/api/login'
+        || req.path === '/api/admin/session'
+        || req.path === '/api/admin/lock';
     const isAdminPagePath = req.path === '/admin';
     const isAdminApiPath = req.path.startsWith('/api/admin/') || req.path === '/api/user';
     const isAdminBypassRoute = (isAdminPagePath || isAdminApiPath) && !!req.session?.adminBypass;
@@ -211,22 +221,22 @@ app.use((req, res, next) => {
     next();
 });
 
-app.post('/api/admin/maintenance/auth', (req, res) => {
-    if (req.body.password === ADMIN_PASSWORD) {
-        req.session.adminBypass = true;
+app.post('/api/admin/maintenance/auth', adminAuth.adminAuthLimiter, (req, res) => {
+    if (adminAuth.submitsPassword(req)) {
+        adminAuth.unlock(req);
         return res.json({ success: true });
     }
     return res.status(401).json({ error: 'Invalid password' });
 });
 
-app.post('/api/admin/maintenance/toggle', (req, res) => {
-    const hasAdminPassword = req.body.password === ADMIN_PASSWORD;
-    const hasAdminBypass = !!req.session?.adminBypass;
-    const isSessionAdmin = req.isAuthenticated() && req.user?.role === 'admin';
+app.post('/api/admin/maintenance/toggle', adminAuth.adminAuthLimiter, (req, res) => {
+    const hasAdminBypass = adminAuth.isUnlocked(req);
+    const isSessionAdmin = adminAuth.isSessionAdmin(req);
+    const hasAdminPassword = !hasAdminBypass && !isSessionAdmin && adminAuth.submitsPassword(req);
 
     if (hasAdminPassword || hasAdminBypass || isSessionAdmin) {
         if (hasAdminPassword || isSessionAdmin) {
-            req.session.adminBypass = true;
+            adminAuth.unlock(req);
         }
         isMaintenanceMode = !isMaintenanceMode;
         console.log(`[Maintenance] Mode is now ${isMaintenanceMode ? 'ON' : 'OFF'}`);
@@ -420,10 +430,12 @@ io.on('connection', (socket) => {
         }
     });
 
-    socket.on('admin-subscribe', (password) => {
+    // The unlock happens over HTTP and is remembered in the session, so the
+    // password itself never has to be pushed through the socket.
+    socket.on('admin-subscribe', () => {
         const socketUser = socket.request.user;
         const isSocketAdmin = socketUser && socketUser.role === 'admin';
-        if (password === ADMIN_PASSWORD || isSocketAdmin) {
+        if (socket.request.session?.adminBypass || isSocketAdmin) {
             socket.join('admin');
             socket.emit('init-stats', {
                 live: getLiveStats(),
@@ -1273,27 +1285,22 @@ app.post('/api/admin/users/:id/:action', ensureAdmin, async (req, res) => {
     }
 });
 
-app.post('/api/admin/reset-stats', (req, res) => {
-    const isSessionAdmin = req.isAuthenticated() && req.user?.role === 'admin';
-    if (req.body.password === ADMIN_PASSWORD || isSessionAdmin) {
-        stats = {
-            downloads: { mod: {}, resourcepack: {}, shader: {}, modpack: {} },
-            launchesPerDay: {},
-            clientVersions: {},
-            uniqueMachineCount: 0,
-            uniqueMachines: {},
-            software: { client: {}, server: {} },
-            gameVersions: { client: {}, server: {} }
-        };
-        saveAnalytics();
-        io.to('admin').emit('init-stats', {
-            live: getLiveStats(),
-            persistent: stats
-        });
-        res.json({ success: true });
-    } else {
-        res.status(401).json({ error: 'Unauthorized' });
-    }
+app.post('/api/admin/reset-stats', adminAuth.adminAuthLimiter, adminAuth.adminOrPassword, (req, res) => {
+    stats = {
+        downloads: { mod: {}, resourcepack: {}, shader: {}, modpack: {} },
+        launchesPerDay: {},
+        clientVersions: {},
+        uniqueMachineCount: 0,
+        uniqueMachines: {},
+        software: { client: {}, server: {} },
+        gameVersions: { client: {}, server: {} }
+    };
+    saveAnalytics();
+    io.to('admin').emit('init-stats', {
+        live: getLiveStats(),
+        persistent: stats
+    });
+    res.json({ success: true });
 });
 
 app.get('/api/admin/extensions/all', ensureAdmin, async (req, res) => {
@@ -1536,13 +1543,13 @@ app.post('/api/admin/extensions/:id/:action', ensureAdmin, async (req, res) => {
     }
 });
 
-app.post('/api/upload', (req, res) => {
+app.post('/api/upload', adminAuth.adminAuthLimiter, (req, res) => {
     upload.single('image')(req, res, (err) => {
         if (err) return res.status(500).json({ success: false, error: err.message });
 
-        const { password } = req.body;
-        const isSessionAdmin = req.isAuthenticated() && req.user?.role === 'admin';
-        if (password !== ADMIN_PASSWORD && !isSessionAdmin) {
+        // Checked after multer so a multipart body is parsed, but the file is
+        // removed again below when the caller turns out not to be an admin.
+        if (!adminAuth.isSessionAdmin(req) && !adminAuth.isUnlocked(req) && !adminAuth.submitsPassword(req)) {
             if (req.file) {
                 const fs = require('fs');
                 try { fs.unlinkSync(req.file.path); } catch (e) { }
@@ -1565,28 +1572,36 @@ app.get('/news.json', (req, res) => {
     res.json(getNews());
 });
 
-app.post('/api/login', (req, res) => {
-    const { password } = req.body;
-    if (password === ADMIN_PASSWORD) {
-        res.json({ success: true, token: 'logged-in' });
-    } else {
-        res.status(401).json({ success: false, error: 'Invalid password' });
+// Unlocking stores a flag on the server session. The browser gets no copy of
+// the password to keep, so an XSS anywhere on the site cannot lift it out of
+// localStorage the way it could before.
+app.post('/api/login', adminAuth.adminAuthLimiter, (req, res) => {
+    if (adminAuth.submitsPassword(req)) {
+        adminAuth.unlock(req);
+        return res.json({ success: true });
     }
+    return res.status(401).json({ success: false, error: 'Invalid password' });
+});
+
+app.get('/api/admin/session', (req, res) => {
+    res.json({
+        unlocked: adminAuth.isUnlocked(req),
+        role: req.user?.role || null,
+    });
+});
+
+app.post('/api/admin/lock', (req, res) => {
+    if (req.session) req.session.adminBypass = false;
+    res.json({ success: true });
 });
 
 app.get('/api/news', (req, res) => {
     res.json(getNews());
 });
 
-app.post('/api/news', (req, res) => {
-    const { news, password } = req.body;
-    const isSessionAdmin = req.isAuthenticated() && req.user?.role === 'admin';
-    console.log(`[News] POST /api/news received. Items: ${news ? news.length : 'null'}, Password provided: ${!!password}, SessionAdmin: ${isSessionAdmin}`);
-
-    if (password !== ADMIN_PASSWORD && !isSessionAdmin) {
-        console.warn(`[News] Unauthorized! Password mismatch and no session admin.`);
-        return res.status(401).json({ success: false, error: 'Unauthorized' });
-    }
+app.post('/api/news', adminAuth.adminAuthLimiter, adminAuth.adminOrPassword, (req, res) => {
+    const { news } = req.body;
+    console.log(`[News] POST /api/news received. Items: ${news ? news.length : 'null'}`);
 
     try {
         saveNews(news);
@@ -1798,8 +1813,7 @@ if (!fs.existsSync(NEWS_FILE)) {
 const getNews = () => JSON.parse(fs.readFileSync(NEWS_FILE, 'utf8'));
 const saveNews = (data) => fs.writeFileSync(NEWS_FILE, JSON.stringify(data, null, 2));
 
-app.post('/api/analytics', (req, res) => {
-    if (req.body.password !== ADMIN_PASSWORD) return res.status(401).json({ error: 'Unauthorized' });
+app.post('/api/analytics', adminAuth.adminAuthLimiter, adminAuth.adminOrPassword, (req, res) => {
     res.json({
         live: getLiveStats(),
         persistent: stats

@@ -12,7 +12,8 @@
         "test:load": "node tests/load.phase11.test.js",
         "db:init": "node db_init.js",
         "db:migrate:maria-to-pg": "node migrate-mariadb-to-postgres.js",
-        "test:cloud": "node tests/deviceAuth.phase1.test.js && node tests/cloudInstances.phase2.test.js && node tests/cloudBlobs.phase3.test.js && node tests/manifestSchema.phase4.test.js && node tests/cloudSync.phase5.test.js && node tests/cloudSync.phase6.test.js && node tests/cloudSync.phase7.test.js && node tests/cloudSync.phase8.test.js && node tests/cloudSync.phase10.test.js && node tests/security.phase11.test.js && node tests/pairing.phase12.test.js && node tests/storageHealing.test.js"
+        "test:cloud": "node tests/deviceAuth.phase1.test.js && node tests/cloudInstances.phase2.test.js && node tests/cloudBlobs.phase3.test.js && node tests/manifestSchema.phase4.test.js && node tests/cloudSync.phase5.test.js && node tests/cloudSync.phase6.test.js && node tests/cloudSync.phase7.test.js && node tests/cloudSync.phase8.test.js && node tests/cloudSync.phase10.test.js && node tests/security.phase11.test.js && node tests/pairing.phase12.test.js && node tests/storageHealing.test.js && node tests/adminAuth.test.js",
+        "test:security": "node tests/adminAuth.test.js"
     },
     "devDependencies": {
         "concurrently": "^9.0.0",

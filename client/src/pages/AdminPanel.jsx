@@ -57,6 +57,7 @@ function AdminPanelInner() {
   const [passwordVerified, setPasswordVerified] = useState(false)
   const [unlockError,      setUnlockError]      = useState('')
   const [unlockBusy,       setUnlockBusy]       = useState(false)
+  const [sessionChecked,   setSessionChecked]   = useState(false)
   const [socketStatus,     setSocketStatus]     = useState('offline')
 
   const [statsData, setStatsData] = useState(EMPTY_STATS)
@@ -82,8 +83,6 @@ function AdminPanelInner() {
   const canView        = isSessionAdmin || passwordVerified
   const canTools       = isSessionAdmin || passwordVerified
 
-  const adminPassword = () => (passwordVerified ? localStorage.getItem('admin_password') : undefined)
-
   // ─── Requests ──────────────────────────────────────────────────────────────
 
   /* One place where a failed admin action turns into a visible toast — the old
@@ -103,24 +102,27 @@ function AdminPanelInner() {
     }
   }, [toast])
 
-  const verifyPassword = useCallback(async (value, persist = true) => {
+  /* The password is sent once. The server remembers the unlock on the session,
+     so it never has to be held in the browser or replayed on later requests. */
+  const verifyPassword = useCallback(async value => {
     setUnlockError('')
     setUnlockBusy(true)
     try {
       const res  = await fetch('/api/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
         body: JSON.stringify({ password: value }),
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok || !data.success) {
-        setUnlockError(data.error || 'Invalid password')
-        if (persist) localStorage.removeItem('admin_password')
+        setUnlockError(data.error || (res.status === 429
+          ? 'Too many attempts. Try again later.'
+          : 'Invalid password'))
         return false
       }
       setPasswordVerified(true)
-      setPassword(value)
-      if (persist) localStorage.setItem('admin_password', value)
+      setPassword('')
       return true
     } catch {
       setUnlockError('Could not reach the server')
@@ -136,8 +138,7 @@ function AdminPanelInner() {
   }, [])
 
   const loadCodes = useCallback(async () => {
-    const pw  = adminPassword()
-    const res = await fetch(pw ? `/api/codes/list?password=${encodeURIComponent(pw)}` : '/api/codes/list')
+    const res  = await fetch('/api/codes/list', { credentials: 'same-origin' })
     const data = res.ok ? await res.json().catch(() => ({})) : {}
     setCodes(Array.isArray(data.codes) ? data.codes : [])
   }, [passwordVerified])
@@ -173,9 +174,14 @@ function AdminPanelInner() {
   // ─── Effects ───────────────────────────────────────────────────────────────
 
   useEffect(() => {
-    const saved = localStorage.getItem('admin_password')
-    if (saved) verifyPassword(saved, false)
-  }, [verifyPassword])
+    let active = true
+    fetch('/api/admin/session', { credentials: 'same-origin' })
+      .then(res => res.ok ? res.json() : {})
+      .then(data => { if (active && data.unlocked) setPasswordVerified(true) })
+      .catch(() => {})
+      .finally(() => { if (active) setSessionChecked(true) })
+    return () => { active = false }
+  }, [])
 
   useEffect(() => {
     if (!canTools) return
@@ -183,16 +189,13 @@ function AdminPanelInner() {
     setSocketStatus('connecting')
     socket.on('connect', () => {
       setSocketStatus('connected')
-      socket.emit('admin-subscribe', passwordVerified ? (localStorage.getItem('admin_password') || '') : '')
+      socket.emit('admin-subscribe')
     })
     socket.on('disconnect',    () => setSocketStatus('offline'))
     socket.on('connect_error', () => setSocketStatus('error'))
     socket.on('error', () => {
       setSocketStatus('error')
-      if (!isSessionAdmin) {
-        setPasswordVerified(false)
-        localStorage.removeItem('admin_password')
-      }
+      if (!isSessionAdmin) setPasswordVerified(false)
     })
     const handle = payload => {
       const live       = payload.live || payload || {}
@@ -309,9 +312,7 @@ function AdminPanelInner() {
       if (newsFile) {
         const body = new FormData()
         body.append('image', newsFile)
-        const pw = adminPassword()
-        if (pw) body.append('password', pw)
-        const res  = await fetch('/api/admin/news/upload-image', { method: 'POST', body })
+        const res  = await fetch('/api/admin/news/upload-image', { method: 'POST', credentials: 'same-origin', body })
         const data = await res.json().catch(() => ({}))
         if (!data.success) throw new Error(data.error || 'Image upload failed')
         image = data.url
@@ -320,7 +321,8 @@ function AdminPanelInner() {
       const res  = await fetch('/api/news', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ news: next, password: adminPassword() }),
+        credentials: 'same-origin',
+        body: JSON.stringify({ news: next }),
       })
       if (!res.ok) {
         const data = await res.json().catch(() => ({}))
@@ -350,7 +352,8 @@ function AdminPanelInner() {
     const res  = await request('/api/news', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ news: next, password: adminPassword() }),
+      credentials: 'same-origin',
+      body: JSON.stringify({ news: next }),
     }, { success: 'Post deleted', failure: 'Could not delete the post' })
     if (res) setNews(next)
   }
@@ -370,7 +373,7 @@ function AdminPanelInner() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'same-origin',
-      body: JSON.stringify({ password: adminPassword() }),
+      body: JSON.stringify({}),
     }, { success: enabling ? 'Maintenance mode enabled' : 'Maintenance mode disabled', failure: 'Could not change maintenance mode' })
     if (data) setMaintenanceMode(!!data.isMaintenanceMode)
   }
@@ -386,7 +389,8 @@ function AdminPanelInner() {
     await request('/api/admin/reset-stats', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ password: adminPassword() }),
+      credentials: 'same-origin',
+      body: JSON.stringify({}),
     }, { success: 'Analytics reset', failure: 'Could not reset analytics' })
   }
 
@@ -398,10 +402,9 @@ function AdminPanelInner() {
       tone: 'danger',
     })
     if (!ok) return
-    const pw = adminPassword()
     const done = await request(
-      pw ? `/api/codes/${code}?password=${encodeURIComponent(pw)}` : `/api/codes/${code}`,
-      { method: 'DELETE' },
+      `/api/codes/${code}`,
+      { method: 'DELETE', credentials: 'same-origin' },
       { success: 'Code deleted', failure: 'Could not delete the code' },
     )
     if (done) loadCodes()
@@ -493,17 +496,17 @@ function AdminPanelInner() {
     if (done) loadModerationData()
   }
 
-  const forgetPassword = () => {
-    localStorage.removeItem('admin_password')
+  const forgetPassword = async () => {
+    await fetch('/api/admin/lock', { method: 'POST', credentials: 'same-origin' }).catch(() => {})
     setPasswordVerified(false)
     setPassword('')
     setSocketStatus('offline')
-    toast.info('Master password forgotten on this device')
+    toast.info('Session locked again')
   }
 
   // ─── Render ────────────────────────────────────────────────────────────────
 
-  if (auth.loading) {
+  if (auth.loading || !sessionChecked) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#080808]">
         <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary/20 border-t-primary" />

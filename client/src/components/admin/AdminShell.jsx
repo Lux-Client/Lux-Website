@@ -88,7 +88,7 @@ function SidebarBody({ groups, active, onSelect, role, passwordVerified, onForge
             onClick={onForgetPassword}
             className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold text-white/35 transition-colors hover:bg-white/[0.04] hover:text-white"
           >
-            <Lock className="h-3.5 w-3.5" /> Forget password
+            <Lock className="h-3.5 w-3.5" /> Lock session
           </button>
         )}
         {logoutUrl && (

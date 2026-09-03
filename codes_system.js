@@ -100,7 +100,13 @@ async function sanitizeIcon(iconValue) {
     }
 }
 
+const createAdminAuth = require('./middleware/adminAuth');
+
 module.exports = function (app, ADMIN_PASSWORD, pool) {
+    // Same rules as the rest of the admin surface: never from the query string,
+    // constant-time compare, and a rate limit on the guessable path.
+    const adminAuth = createAdminAuth(ADMIN_PASSWORD);
+
     console.log('[CodesSystem] Initializing routes...');
 
     setInterval(() => cleanupOldCodes(pool), 60 * 60 * 1000);
@@ -260,13 +266,8 @@ module.exports = function (app, ADMIN_PASSWORD, pool) {
         }
     });
 
-    app.get('/api/codes/list', (req, res) => {
+    app.get('/api/codes/list', adminAuth.adminAuthLimiter, adminAuth.adminOrPassword, (req, res) => {
         try {
-            const clientPass = req.query.password;
-            const isSessionAdmin = req.isAuthenticated && req.isAuthenticated() && req.user?.role === 'admin';
-            if (clientPass !== ADMIN_PASSWORD && !isSessionAdmin) {
-                return res.status(401).json({ success: false, error: 'Unauthorized' });
-            }
             if (!fs.existsSync(CODES_DIR)) {
                 return res.json({ success: true, codes: [] });
             }
@@ -319,13 +320,8 @@ module.exports = function (app, ADMIN_PASSWORD, pool) {
     app.get('/api/codes/:code', handleGetCode);
     app.get('/api/modpack/:code', handleGetCode);
 
-    app.delete('/api/codes/:code', (req, res) => {
+    app.delete('/api/codes/:code', adminAuth.adminAuthLimiter, adminAuth.adminOrPassword, (req, res) => {
         try {
-            const clientPass = req.query.password;
-            const isSessionAdmin = req.isAuthenticated && req.isAuthenticated() && req.user?.role === 'admin';
-            if (clientPass !== ADMIN_PASSWORD && !isSessionAdmin) {
-                return res.status(401).json({ success: false, error: 'Unauthorized' });
-            }
             const { code } = req.params;
             const filePath = path.join(CODES_DIR, `${code}.json`);
 

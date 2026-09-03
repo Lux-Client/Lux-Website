@@ -30,6 +30,42 @@ if (!DATA_DIR_EXISTED) {
     console.warn('[Storage] and uploads, avatars and analytics are lost on each redeploy.');
 }
 
+// Pointing DATA_DIR at a path is not the same as making that path persistent --
+// without a volume mounted there it is just a folder inside the container image.
+// The marker below is rewritten on every boot, so if it comes back on the next
+// start the storage really did survive, and the log can say so instead of
+// leaving it to guesswork.
+const STORAGE_MARKER = path.join(DATA_DIR, '.storage-marker.json');
+let storageMarker = null;
+try {
+    storageMarker = JSON.parse(fs.readFileSync(STORAGE_MARKER, 'utf8'));
+} catch (e) { /* first boot ever, or the directory is not persistent */ }
+
+let uploadCount = 0;
+try { uploadCount = fs.readdirSync(UPLOAD_DIR).length; } catch (e) { /* unreadable, reported below */ }
+
+if (storageMarker && storageMarker.firstBootAt) {
+    console.log(`[Storage] Persistence OK - volume first seen ${storageMarker.firstBootAt}, this is boot #${(storageMarker.bootCount || 0) + 1}`);
+} else {
+    console.warn('[Storage] WARNING: no marker from an earlier boot was found in DATA_DIR.');
+    console.warn('[Storage] This is either the very first start, or DATA_DIR is NOT on a persistent volume.');
+    console.warn(`[Storage] If this repeats after every deployment, mount a volume at ${DATA_DIR}`);
+    console.warn('[Storage] (Coolify: Storages -> Add -> Destination Path). Setting DATA_DIR alone does nothing.');
+}
+console.log(`[Storage] ${uploadCount} file(s) currently in UPLOAD_DIR`);
+
+try {
+    fs.writeFileSync(STORAGE_MARKER, JSON.stringify({
+        firstBootAt: (storageMarker && storageMarker.firstBootAt) || new Date().toISOString(),
+        lastBootAt: new Date().toISOString(),
+        bootCount: ((storageMarker && storageMarker.bootCount) || 0) + 1,
+        uploadDir: UPLOAD_DIR
+    }, null, 2));
+} catch (err) {
+    console.error(`[Storage] ERROR: cannot write to ${DATA_DIR} (${err.message}).`);
+    console.error('[Storage] Avatar and extension uploads will fail until this path is writable.');
+}
+
 // --- LOGGING TO latest.log ---
 const logFile = path.join(DATA_DIR, 'latest.log');
 const logStream = fs.createWriteStream(logFile, { flags: 'a' });

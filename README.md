@@ -75,6 +75,37 @@ Lux Client is a cutting-edge Minecraft launcher and platform. Its Website is the
 
 ---
 
+## Deployment: persistent storage
+
+Uploaded avatars, extension files, `analytics.json`, `news.json` and the Lux Cloud
+blobs are stored on disk under `DATA_DIR` (default `/app/data`). Containers get a
+fresh filesystem on every deploy, so that path **needs a persistent volume mounted
+on it**. Setting the `DATA_DIR` variable alone does not do this — it only names a
+directory; without a volume it is a folder inside the container image and each
+redeploy starts empty, which looks exactly like "the server deleted all profile
+pictures".
+
+- **Coolify** — open the application, go to **Storages → Add**, and set
+  *Destination Path* to the same value as `DATA_DIR` (e.g. `/app/data`), then
+  redeploy. Note that `docker-compose.yml` is only used if the application's build
+  pack is *Docker Compose*; with the *Dockerfile* build pack its volume definition
+  is ignored and the mount has to be added here.
+- **docker compose** — already covered by the `lux_data` volume in
+  `docker-compose.yml`.
+
+The server reports the result on every boot:
+
+```
+[Storage] DATA_DIR   = /app/data
+[Storage] Persistence OK - volume first seen 2025-09-03T07:51:02.691Z, this is boot #7
+[Storage] 42 file(s) currently in UPLOAD_DIR
+```
+
+If instead the log says `no marker from an earlier boot was found in DATA_DIR`
+after **every** deployment, the volume is not mounted and data is still being lost.
+
+---
+
 ## Platform Usage
 
 - **Plugin Gallery:** Visit the homepage to browse or search for plugins, extensions, resourcepacks, or shaders.

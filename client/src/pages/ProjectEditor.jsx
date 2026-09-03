@@ -134,7 +134,7 @@ export default function ProjectEditor({ type: fixedType }) {
       } else if (isEdit) {
         setMsg({ text: 'Project updated!', ok: true })
       } else {
-        navigate(`/extensions/${data.extensionId}/edit`)
+        navigate(`/developer/projects/${data.extensionId}/edit`)
       }
     } finally {
       setSubmitting(false)
@@ -237,8 +237,8 @@ export default function ProjectEditor({ type: fixedType }) {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
         >
-          <Link to={isEdit ? `/extensions/${project?.identifier || id}` : '/dashboard'} className="mb-5 flex w-fit items-center gap-1.5 text-xs font-semibold text-white/40 transition-colors hover:text-white">
-            <ChevronLeft className="h-3.5 w-3.5" /> {isEdit ? 'Back to project' : 'Back to dashboard'}
+          <Link to={isEdit ? `/extensions/${project?.identifier || id}` : '/developer/home'} className="mb-5 flex w-fit items-center gap-1.5 text-xs font-semibold text-white/40 transition-colors hover:text-white">
+            <ChevronLeft className="h-3.5 w-3.5" /> {isEdit ? 'Back to project' : 'Back to developer area'}
           </Link>
 
           <div className="rounded-2xl border border-white/6 bg-[#0f0f0f]">

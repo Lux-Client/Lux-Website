@@ -99,6 +99,9 @@ export default function Navbar({ onDownload }) {
 
             {auth.loggedIn ? (
               <div className="flex items-center gap-2 border-l border-white/8 pl-3">
+                <Link to="/developer/home" className="rounded-lg px-2 py-1.5 text-sm font-medium text-white/40 transition-colors hover:bg-white/6 hover:text-white">
+                  Developer
+                </Link>
                 <Link to="/dashboard" className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm font-medium text-white/70 transition-colors hover:bg-white/6 hover:text-white">
                   <img
                     src={fixPath(auth.user?.avatar || auth.user?.avatar_url)}
@@ -199,6 +202,9 @@ export default function Navbar({ onDownload }) {
                     <Link to="/dashboard" className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold text-white/70 hover:bg-white/5 hover:text-white">
                       <img src={fixPath(auth.user?.avatar || auth.user?.avatar_url)} alt="" className="h-7 w-7 rounded-full border border-primary/30" />
                       {auth.user?.username}
+                    </Link>
+                    <Link to="/developer/home" className="rounded-xl px-3 py-2.5 text-sm font-semibold text-white/50 hover:bg-white/5 hover:text-white">
+                      Developer area
                     </Link>
                     <a href={auth.logoutUrl} className="rounded-xl px-3 py-2.5 text-sm font-medium text-red-400/60 hover:bg-white/5 hover:text-red-400">Logout</a>
                   </>

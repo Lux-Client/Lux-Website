@@ -2,31 +2,13 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import {
-  Camera, Save, Trash2, Plus, Image, ChevronRight, ExternalLink,
-  AlertTriangle, CheckCircle2, Clock, XCircle, RefreshCw, User, FileText,
+  Camera, Save, Trash2, ChevronRight, ExternalLink,
+  AlertTriangle, CheckCircle2, Code2, User,
 } from 'lucide-react'
 import PageShell from '../components/PageShell'
 import useAuth, { fixPath } from '../hooks/useAuth'
 
 // ── helpers ─────────────────────────────────────────────────────────────────
-
-const STATUS = {
-  approved:        { label: 'Approved',        bg: 'bg-emerald-500/10', text: 'text-emerald-400', icon: CheckCircle2 },
-  pending:         { label: 'Pending',          bg: 'bg-amber-500/10',   text: 'text-amber-400',   icon: Clock        },
-  rejected:        { label: 'Rejected',         bg: 'bg-red-500/10',     text: 'text-red-400',     icon: XCircle      },
-  action_required: { label: 'Action Required',  bg: 'bg-blue-500/10',    text: 'text-blue-400',    icon: AlertTriangle},
-}
-
-function StatusBadge({ status }) {
-  const s = STATUS[status] || STATUS.pending
-  const Icon = s.icon
-  return (
-    <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.08em] ${s.bg} ${s.text}`}>
-      <Icon className="h-2.5 w-2.5" />
-      {s.label}
-    </span>
-  )
-}
 
 function Field({ label, hint, children }) {
   return (
@@ -52,9 +34,6 @@ export default function Profile() {
   const [avatarFile,      setAvatarFile]      = useState(null)
   const [avatarPreview,   setAvatarPreview]   = useState(null)
 
-  const [projects,        setProjects]        = useState([])
-  const [loadingProjects, setLoadingProjects] = useState(false)
-
   // Populate profile form from auth
   useEffect(() => {
     if (!auth.user) return
@@ -70,18 +49,6 @@ export default function Profile() {
   useEffect(() => {
     return () => { if (avatarPreview) URL.revokeObjectURL(avatarPreview) }
   }, [avatarPreview])
-
-  // Load projects
-  const loadProjects = async () => {
-    setLoadingProjects(true)
-    try {
-      const res   = await fetch('/api/user/extensions')
-      const items = res.ok ? (await res.json().catch(() => [])) : []
-      setProjects(Array.isArray(items) ? items : [])
-    } finally { setLoadingProjects(false) }
-  }
-
-  useEffect(() => { if (auth.loggedIn) loadProjects() }, [auth.loggedIn])
 
   // ── handlers ─────────────────────────────────────────────────────────────
 
@@ -108,15 +75,6 @@ export default function Profile() {
     } else {
       setProfileMsg({ text: data.error || 'Failed to save profile.', ok: false })
     }
-  }
-
-  const deleteProject = async project => {
-    const expected = `${auth.user?.username}/${project.identifier}`
-    if (window.prompt(`Type "${expected}" to confirm deletion`) !== expected) return
-    const res  = await fetch(`/api/extensions/${project.id}`, { method: 'DELETE' })
-    const data = await res.json().catch(() => ({}))
-    setProfileMsg({ text: res.ok && data.success ? 'Deleted.' : data.error || 'Deletion failed.', ok: res.ok && !!data.success })
-    if (res.ok) loadProjects()
   }
 
   const deleteAccount = async () => {
@@ -260,97 +218,26 @@ export default function Profile() {
             </div>
           </div>
 
-          {/* ── Projects grid ── */}
-          <div className="rounded-2xl border border-white/6 bg-[#0f0f0f]">
-            <div className="flex items-center justify-between gap-3 border-b border-white/5 px-6 py-5">
+          {/* ── Developer area pointer ── */}
+          <Link
+            to="/developer/home"
+            className="group flex flex-col gap-4 rounded-2xl border border-white/6 bg-[#0f0f0f] p-5 transition-all hover:border-primary/25 sm:flex-row sm:items-center sm:justify-between"
+          >
+            <div className="flex items-center gap-3.5">
+              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                <Code2 className="h-5 w-5" />
+              </span>
               <div>
-                <h2 className="text-base font-bold text-white">My Projects</h2>
-                <p className="mt-0.5 text-xs text-white/30">{projects.length} project{projects.length !== 1 ? 's' : ''} uploaded</p>
-              </div>
-              <div className="flex items-center gap-2">
-                <Link to="/dashboard" className="flex items-center gap-1.5 rounded-xl bg-primary px-3.5 py-2 text-xs font-bold text-black shadow-glow-sm transition hover:bg-primary-light">
-                  <Plus className="h-3.5 w-3.5" /> New Project
-                </Link>
-                <button onClick={loadProjects} className="flex h-8 w-8 items-center justify-center rounded-xl border border-white/8 text-white/30 transition-colors hover:bg-white/6 hover:text-white">
-                  <RefreshCw className="h-3.5 w-3.5" />
-                </button>
+                <h2 className="text-base font-bold text-white">Your projects</h2>
+                <p className="mt-0.5 text-xs leading-relaxed text-white/35">
+                  Uploads, downloads and review status now live in the developer area.
+                </p>
               </div>
             </div>
-
-            <div className="p-5">
-              {loadingProjects ? (
-                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                  {[...Array(4)].map((_, i) => <div key={i} className="h-48 animate-pulse rounded-xl bg-white/4" />)}
-                </div>
-              ) : projects.length === 0 ? (
-                <div className="flex flex-col items-center gap-3 py-14 text-center">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/4">
-                    <FileText className="h-5 w-5 text-white/15" />
-                  </div>
-                  <p className="text-sm text-white/30">No uploads yet.</p>
-                  <Link to="/dashboard" className="rounded-xl bg-primary/10 border border-primary/15 px-4 py-2 text-xs font-bold text-primary transition-colors hover:bg-primary hover:text-black">
-                    Submit your first project
-                  </Link>
-                </div>
-              ) : (
-                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                  {projects.map(project => (
-                    <div
-                      key={project.id}
-                      className="flex flex-col overflow-hidden rounded-xl border border-white/5 bg-white/[0.02] transition-all hover:border-white/10"
-                    >
-                      {/* Banner */}
-                      <div className="aspect-[16/9] overflow-hidden bg-white/4">
-                        {project.banner_path ? (
-                          <img
-                            src={fixPath(project.banner_path)}
-                            alt={project.name}
-                            className="h-full w-full object-cover"
-                            onError={e => { e.currentTarget.style.display = 'none' }}
-                          />
-                        ) : (
-                          <div className="flex h-full items-center justify-center">
-                            <Image className="h-6 w-6 text-white/10" />
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Info */}
-                      <div className="flex flex-1 flex-col p-3.5">
-                        <div className="mb-1 flex items-start justify-between gap-2">
-                          <p className="truncate text-sm font-semibold text-white leading-tight">{project.name}</p>
-                          <StatusBadge status={project.status} />
-                        </div>
-                        <p className="mb-3 line-clamp-2 flex-1 text-xs leading-relaxed text-white/30">
-                          {project.summary || project.description || 'No description'}
-                        </p>
-                        <div className="flex flex-wrap gap-1.5">
-                          <Link
-                            to={`/extensions/${project.id}/edit`}
-                            className="flex items-center gap-1 rounded-lg bg-primary/10 border border-primary/15 px-2.5 py-1.5 text-[11px] font-bold text-primary transition-colors hover:bg-primary hover:text-black hover:border-primary"
-                          >
-                            <FileText className="h-3 w-3" /> Edit
-                          </Link>
-                          <Link
-                            to={`/extensions/${project.identifier || project.id}`}
-                            className="flex items-center gap-1 rounded-lg border border-white/8 bg-white/4 px-2.5 py-1.5 text-[11px] font-semibold text-white/50 transition-colors hover:text-white"
-                          >
-                            <ExternalLink className="h-3 w-3" /> View
-                          </Link>
-                          <button
-                            onClick={() => deleteProject(project)}
-                            className="flex items-center gap-1 rounded-lg border border-red-500/10 bg-red-500/6 px-2.5 py-1.5 text-[11px] font-semibold text-red-400/60 transition-colors hover:bg-red-500/12 hover:text-red-400"
-                          >
-                            <Trash2 className="h-3 w-3" />
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
+            <span className="flex items-center gap-1.5 self-start rounded-xl border border-white/8 bg-white/4 px-3.5 py-2 text-xs font-bold text-white/60 transition-colors group-hover:border-primary/25 group-hover:bg-primary/10 group-hover:text-primary sm:self-auto">
+              Open developer area <ChevronRight className="h-3.5 w-3.5" />
+            </span>
+          </Link>
 
         </motion.div>
       </main>

@@ -1,4 +1,4 @@
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
+import { BrowserRouter, Navigate, Route, Routes, useParams } from 'react-router-dom'
 import ScrollManager from './components/ScrollManager'
 import AdminPanel from './pages/AdminPanel'
 import AnalyticsOptOut from './pages/AnalyticsOptOut'
@@ -6,6 +6,7 @@ import AuthorizeDevice from './pages/AuthorizeDevice'
 import LinkDevice from './pages/LinkDevice'
 import Changelog from './pages/Changelog'
 import Dashboard from './pages/Dashboard'
+import DeveloperHome from './pages/DeveloperHome'
 import DeveloperProfile from './pages/DeveloperProfile'
 import Docs from './pages/Docs'
 import DocsExtension from './pages/DocsExtension'
@@ -20,6 +21,13 @@ import Privacy from './pages/Privacy'
 import Profile from './pages/Profile'
 import ProjectEditor from './pages/ProjectEditor'
 
+// Publishing moved under /developer, but the old URLs are in bookmarks, emails
+// and older builds of the launcher, so they keep working as redirects.
+function RedirectToEditor() {
+  const { id } = useParams()
+  return <Navigate to={`/developer/projects/${id}/edit`} replace />
+}
+
 export default function App() {
   return (
     <BrowserRouter>
@@ -27,11 +35,21 @@ export default function App() {
       <Routes>
         <Route path="/" element={<LandingPage />} />
         <Route path="/extensions" element={<Extensions />} />
-        <Route path="/extensions/create" element={<ProjectEditor type="extension" />} />
-        <Route path="/themes/create" element={<ProjectEditor type="theme" />} />
-        <Route path="/extensions/:id/edit" element={<ProjectEditor />} />
         <Route path="/extensions/:id" element={<ExtensionDetail />} />
         <Route path="/dashboard" element={<Dashboard />} />
+
+        {/* Developer area */}
+        <Route path="/developer" element={<Navigate to="/developer/home" replace />} />
+        <Route path="/developer/home" element={<DeveloperHome />} />
+        <Route path="/developer/projects/new/extension" element={<ProjectEditor type="extension" />} />
+        <Route path="/developer/projects/new/theme" element={<ProjectEditor type="theme" />} />
+        <Route path="/developer/projects/:id/edit" element={<ProjectEditor />} />
+
+        {/* Legacy publishing URLs */}
+        <Route path="/extensions/create" element={<Navigate to="/developer/projects/new/extension" replace />} />
+        <Route path="/themes/create" element={<Navigate to="/developer/projects/new/theme" replace />} />
+        <Route path="/extensions/:id/edit" element={<RedirectToEditor />} />
+
         <Route path="/u/:username" element={<DeveloperProfile />} />
         <Route path="/profile" element={<Profile />} />
         <Route path="/admin" element={<AdminPanel />} />

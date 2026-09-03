@@ -1,155 +1,66 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Bar, Doughnut } from 'react-chartjs-2'
+import { motion } from 'framer-motion'
 import {
-  ArcElement, BarElement, CategoryScale,
-  Chart as ChartJS, Legend, LinearScale, Tooltip,
-} from 'chart.js'
-import { motion, AnimatePresence } from 'framer-motion'
-import {
-  Puzzle, Download, CheckCircle2, Clock, Bell, BellOff,
-  ChevronRight, ExternalLink, User, Settings, LogOut,
-  TrendingUp, Package, Check, Plus, X, Palette,
+  Bell, BellOff, BookOpen, Check, ChevronRight, Cloud, Code2,
+  LogOut, Package, Puzzle, Settings, Shield, User,
 } from 'lucide-react'
 import PageShell from '../components/PageShell'
-import useAuth, { fixPath } from '../hooks/useAuth'
 import CloudSection from '../components/CloudSection'
+import useAuth, { fixPath } from '../hooks/useAuth'
 
-ChartJS.register(CategoryScale, LinearScale, BarElement, ArcElement, Tooltip, Legend)
+/* The account home. Everything that belongs to the person using Lux Client —
+   their cloud instances, their notifications, their settings. Publishing an
+   extension is a different job with different numbers, so that lives on
+   /developer/home and is reached from the card below. */
 
-const CHART_BASE = {
-  responsive: true,
-  maintainAspectRatio: false,
-  plugins: { legend: { display: false } },
-  scales: {
-    x: { ticks: { color: '#3a3a3a' }, grid: { display: false } },
-    y: { ticks: { color: '#3a3a3a' }, grid: { color: 'rgba(255,255,255,0.04)' }, beginAtZero: true },
-  },
-}
-const DONUT_BASE = {
-  responsive: true,
-  maintainAspectRatio: false,
-  plugins: {
-    legend: {
-      position: 'bottom',
-      labels: { color: '#555', boxWidth: 10, padding: 14, font: { size: 11 } },
-    },
-  },
-  cutout: '68%',
-}
-
-const STATUS_COLOR = {
-  approved:        { bg: 'bg-emerald-500/10', text: 'text-emerald-400', border: 'border-emerald-500/15', dot: 'bg-emerald-500' },
-  pending:         { bg: 'bg-amber-500/10',   text: 'text-amber-400',   border: 'border-amber-500/15',   dot: 'bg-amber-500' },
-  rejected:        { bg: 'bg-red-500/10',     text: 'text-red-400',     border: 'border-red-500/15',     dot: 'bg-red-500' },
-  action_required: { bg: 'bg-blue-500/10',    text: 'text-blue-400',    border: 'border-blue-500/15',    dot: 'bg-blue-500' },
-}
-
-function StatusBadge({ status }) {
-  const s = STATUS_COLOR[status] || STATUS_COLOR.pending
-  return (
-    <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.1em] ${s.bg} ${s.text} ${s.border}`}>
-      <span className={`h-1.5 w-1.5 rounded-full ${s.dot}`} />
-      {status?.replace('_', ' ')}
-    </span>
-  )
-}
-
-function StatCard({ icon: Icon, label, value, color = '#e27602', loading = false }) {
-  return (
-    <div className="flex items-center gap-4 rounded-2xl border border-white/6 bg-[#0f0f0f] p-5">
-      <div
-        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl"
-        style={{ backgroundColor: color + '15', color }}
-      >
-        <Icon className="h-4 w-4" />
-      </div>
-      <div>
-        <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-white/30">{label}</p>
-        {loading
-          ? <div className="mt-1 h-7 w-12 animate-pulse rounded-lg bg-white/8" />
-          : <p className="mt-0.5 text-2xl font-black text-white tabular-nums">{value}</p>
-        }
-      </div>
-    </div>
-  )
-}
-
-function EmptyChart({ message }) {
-  return (
-    <div className="flex h-full flex-col items-center justify-center gap-2 text-center">
-      <TrendingUp className="h-6 w-6 text-white/10" />
-      <p className="text-xs text-white/25">{message}</p>
-    </div>
-  )
-}
-
-const stagger = {
-  hidden: {},
-  show: { transition: { staggerChildren: 0.06 } },
-}
+const stagger = { hidden: {}, show: { transition: { staggerChildren: 0.06 } } }
 const fadeUp = {
   hidden: { opacity: 0, y: 14 },
   show:   { opacity: 1, y: 0, transition: { duration: 0.45, ease: [0.22, 1, 0.36, 1] } },
 }
 
+function QuickLink({ to, href, icon: Icon, title, hint }) {
+  const inner = (
+    <>
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/4 text-white/40 transition-colors group-hover:bg-primary/10 group-hover:text-primary">
+        <Icon className="h-4 w-4" />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-sm font-semibold text-white">{title}</span>
+        <span className="block truncate text-xs text-white/30">{hint}</span>
+      </span>
+      <ChevronRight className="h-4 w-4 shrink-0 text-white/15 transition-colors group-hover:text-white/40" />
+    </>
+  )
+  const className = 'group flex items-center gap-3 rounded-xl border border-white/5 bg-white/[0.02] p-3 transition-all hover:border-white/12 hover:bg-white/[0.04]'
+  return href
+    ? <a href={href} className={className}>{inner}</a>
+    : <Link to={to} className={className}>{inner}</Link>
+}
+
 export default function Dashboard() {
   const auth = useAuth()
-  const [extensions,     setExtensions]     = useState([])
-  const [notifications,  setNotifications]  = useState([])
-  const [dataLoading,    setDataLoading]    = useState(true)
-  const [error,          setError]          = useState('')
-  const [newProjectOpen, setNewProjectOpen] = useState(false)
+  const [notifications, setNotifications] = useState([])
+  const [projectCount,  setProjectCount]  = useState(null)
+  const [dataLoading,   setDataLoading]   = useState(true)
 
   useEffect(() => {
     if (!auth.loggedIn) return
     setDataLoading(true)
     Promise.all([
-      fetch('/api/user/extensions').then(r => r.ok ? r.json() : []),
       fetch('/api/user/notifications').then(r => r.ok ? r.json() : []),
+      fetch('/api/user/extensions').then(r => r.ok ? r.json() : []),
     ])
-      .then(([exts, notifs]) => {
-        setExtensions(Array.isArray(exts)   ? exts   : [])
+      .then(([notifs, projects]) => {
         setNotifications(Array.isArray(notifs) ? notifs : [])
+        setProjectCount(Array.isArray(projects) ? projects.length : 0)
       })
-      .catch(e => setError(e.message))
+      .catch(() => setProjectCount(0))
       .finally(() => setDataLoading(false))
   }, [auth.loggedIn])
 
-  const stats = useMemo(() => {
-    const counts = { approved: 0, pending: 0, rejected: 0, action_required: 0 }
-    extensions.forEach(e => { if (counts[e.status] !== undefined) counts[e.status]++ })
-    return {
-      total:     extensions.length,
-      downloads: extensions.reduce((s, e) => s + Number(e.downloads || 0), 0),
-      approved:  counts.approved,
-      pending:   counts.pending,
-      counts,
-    }
-  }, [extensions])
-
-  const downloadsChart = useMemo(() => {
-    const top = [...extensions].sort((a, b) => Number(b.downloads || 0) - Number(a.downloads || 0)).slice(0, 8)
-    return {
-      labels: top.map(e => e.name),
-      datasets: [{
-        label: 'Downloads',
-        data: top.map(e => Number(e.downloads || 0)),
-        backgroundColor: 'rgba(226,118,2,0.7)',
-        borderRadius: 6,
-        borderSkipped: false,
-      }],
-    }
-  }, [extensions])
-
-  const statusChart = useMemo(() => ({
-    labels: ['Approved', 'Pending', 'Rejected', 'Action Req.'],
-    datasets: [{
-      data: [stats.counts.approved, stats.counts.pending, stats.counts.rejected, stats.counts.action_required],
-      backgroundColor: ['#10b981', '#f59e0b', '#ef4444', '#3b82f6'],
-      borderWidth: 0,
-    }],
-  }), [stats.counts])
+  const unreadCount = useMemo(() => notifications.filter(n => !n.is_read).length, [notifications])
 
   const markNotification = async id => {
     await fetch(`/api/notifications/read/${id}`, { method: 'POST' })
@@ -160,17 +71,13 @@ export default function Dashboard() {
     setNotifications(items => items.map(n => ({ ...n, is_read: true })))
   }
 
-  const unreadCount = notifications.filter(n => !n.is_read).length
-
   // ── Loading ──
   if (auth.loading) {
     return (
       <PageShell>
-        <div className="mx-auto max-w-7xl px-5 pt-28 pb-24 lg:px-10">
+        <div className="mx-auto max-w-7xl px-5 pb-24 pt-28 lg:px-10">
           <div className="mb-6 h-24 animate-pulse rounded-2xl bg-white/4" />
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            {[...Array(4)].map((_, i) => <div key={i} className="h-20 animate-pulse rounded-2xl bg-white/4" />)}
-          </div>
+          <div className="h-80 animate-pulse rounded-2xl bg-white/4" />
         </div>
       </PageShell>
     )
@@ -184,16 +91,15 @@ export default function Dashboard() {
           <div className="mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/10 text-primary">
             <User className="h-7 w-7" />
           </div>
-          <h1 className="text-3xl font-black text-white md:text-4xl">Sign in to your dashboard</h1>
+          <h1 className="text-3xl font-black text-white md:text-4xl">Sign in to your account</h1>
           <p className="mt-3 max-w-md text-base text-white/40">
-            Track your extension performance, review notifications, and manage your uploads.
+            See your cloud instances, connected PCs and notifications in one place.
           </p>
           <a
             href={auth.loginUrl}
             className="mt-8 flex items-center gap-2 rounded-xl bg-primary px-7 py-3.5 text-sm font-bold text-black shadow-glow-sm transition hover:bg-primary-light"
           >
-            Continue with Google
-            <ChevronRight className="h-4 w-4" />
+            Continue with Google <ChevronRight className="h-4 w-4" />
           </a>
         </div>
       </PageShell>
@@ -205,7 +111,7 @@ export default function Dashboard() {
       <main className="mx-auto max-w-7xl px-5 pb-24 pt-24 lg:px-10">
         <motion.div variants={stagger} initial="hidden" animate="show" className="flex flex-col gap-6">
 
-          {/* ── User header ── */}
+          {/* ── Account header ── */}
           <motion.div variants={fadeUp} className="flex flex-col gap-4 rounded-2xl border border-white/6 bg-[#0f0f0f] p-5 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-4">
               <div className="relative shrink-0">
@@ -228,19 +134,13 @@ export default function Dashboard() {
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <button
-                onClick={() => setNewProjectOpen(true)}
-                className="flex items-center gap-1.5 rounded-xl bg-primary px-3.5 py-2 text-xs font-bold text-black shadow-glow-sm transition hover:bg-primary-light"
-              >
-                <Plus className="h-3.5 w-3.5" /> New Project
-              </button>
               {auth.user?.role === 'admin' && (
                 <Link to="/admin" className="flex items-center gap-1.5 rounded-xl border border-primary/20 bg-primary/8 px-3.5 py-2 text-xs font-semibold text-primary transition-colors hover:bg-primary/15">
-                  Admin Panel <ChevronRight className="h-3.5 w-3.5" />
+                  <Shield className="h-3.5 w-3.5" /> Admin panel
                 </Link>
               )}
               <Link to="/profile" className="flex items-center gap-1.5 rounded-xl border border-white/8 bg-white/4 px-3.5 py-2 text-xs font-semibold text-white/60 transition-colors hover:bg-white/8 hover:text-white">
-                <Settings className="h-3.5 w-3.5" /> Profile
+                <Settings className="h-3.5 w-3.5" /> Settings
               </Link>
               <a href={auth.logoutUrl} className="flex items-center gap-1.5 rounded-xl border border-white/8 bg-white/4 px-3.5 py-2 text-xs font-semibold text-white/40 transition-colors hover:text-red-400">
                 <LogOut className="h-3.5 w-3.5" /> Logout
@@ -248,137 +148,54 @@ export default function Dashboard() {
             </div>
           </motion.div>
 
-          {error && (
-            <motion.div variants={fadeUp} className="rounded-xl border border-red-500/15 bg-red-500/8 px-4 py-3 text-sm text-red-400">
-              {error}
-            </motion.div>
-          )}
-
-          {/* ── Stat cards ── */}
-          <motion.div variants={fadeUp} className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <StatCard icon={Package}       label="Projects"   value={stats.total}                    loading={dataLoading} color="#e27602" />
-            <StatCard icon={Download}      label="Downloads"  value={stats.downloads.toLocaleString()} loading={dataLoading} color="#3b82f6" />
-            <StatCard icon={CheckCircle2}  label="Approved"   value={stats.approved}                 loading={dataLoading} color="#10b981" />
-            <StatCard icon={Clock}         label="Pending"    value={stats.pending}                  loading={dataLoading} color="#f59e0b" />
-          </motion.div>
-
-          {/* ── Main 2-col layout ── */}
           <div className="grid gap-5 xl:grid-cols-[1fr_340px]">
 
-            {/* ── Left: charts + projects ── */}
+            {/* ── Left: cloud ── */}
             <motion.div variants={fadeUp} className="flex flex-col gap-5">
-
               <CloudSection />
 
-              {/* Charts */}
-              {extensions.length > 0 && (
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="rounded-2xl border border-white/6 bg-[#0f0f0f] p-5">
-                    <p className="mb-4 text-sm font-bold text-white">Downloads by project</p>
-                    <div className="h-52">
-                      <Bar data={downloadsChart} options={CHART_BASE} />
-                    </div>
-                  </div>
-                  <div className="rounded-2xl border border-white/6 bg-[#0f0f0f] p-5">
-                    <p className="mb-4 text-sm font-bold text-white">Status overview</p>
-                    <div className="h-52">
-                      <Doughnut data={statusChart} options={DONUT_BASE} />
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Projects list */}
-              <div className="rounded-2xl border border-white/6 bg-[#0f0f0f]">
-                <div className="flex items-center justify-between gap-3 border-b border-white/5 px-5 py-4">
+              {/* Developer entry point */}
+              <Link
+                to="/developer/home"
+                className="group flex flex-col gap-4 rounded-2xl border border-white/6 bg-[#0f0f0f] p-5 transition-all hover:border-primary/25 sm:flex-row sm:items-center sm:justify-between"
+              >
+                <div className="flex items-center gap-3.5">
+                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                    <Code2 className="h-5 w-5" />
+                  </span>
                   <div>
-                    <h2 className="text-sm font-bold text-white">Your Projects</h2>
-                    <p className="text-xs text-white/30">{stats.total} project{stats.total !== 1 ? 's' : ''} uploaded</p>
+                    <h2 className="text-sm font-bold text-white">Developer area</h2>
+                    <p className="mt-0.5 text-xs leading-relaxed text-white/35">
+                      {projectCount === null
+                        ? 'Publish extensions and themes, and track their downloads.'
+                        : projectCount === 0
+                          ? 'Publish your first extension or theme for Lux Client.'
+                          : `${projectCount} project${projectCount === 1 ? '' : 's'} · downloads, review status and uploads.`}
+                    </p>
                   </div>
-                  <Link
-                    to="/profile"
-                    className="flex items-center gap-1.5 rounded-xl border border-white/8 bg-white/4 px-3.5 py-2 text-xs font-semibold text-white/50 transition-colors hover:text-white"
-                  >
-                    <Puzzle className="h-3.5 w-3.5" /> Manage
-                  </Link>
                 </div>
+                <span className="flex items-center gap-1.5 self-start rounded-xl border border-white/8 bg-white/4 px-3.5 py-2 text-xs font-bold text-white/60 transition-colors group-hover:border-primary/25 group-hover:bg-primary/10 group-hover:text-primary sm:self-auto">
+                  {projectCount ? 'Open' : 'Get started'} <ChevronRight className="h-3.5 w-3.5" />
+                </span>
+              </Link>
 
-                <div className="p-4">
-                  {dataLoading ? (
-                    <div className="flex flex-col gap-3">
-                      {[...Array(3)].map((_, i) => <div key={i} className="h-16 animate-pulse rounded-xl bg-white/4" />)}
-                    </div>
-                  ) : extensions.length === 0 ? (
-                    <div className="flex flex-col items-center gap-3 py-12 text-center">
-                      <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/4">
-                        <Puzzle className="h-5 w-5 text-white/15" />
-                      </div>
-                      <p className="text-sm text-white/30">No projects yet</p>
-                      <Link to="/profile" className="rounded-xl bg-primary/10 border border-primary/15 px-4 py-2 text-xs font-bold text-primary transition-colors hover:bg-primary hover:text-black">
-                        Upload your first extension
-                      </Link>
-                    </div>
-                  ) : (
-                    <div className="flex flex-col gap-2.5">
-                      {extensions.map(ext => (
-                        <div key={ext.id} className="group flex items-center gap-3 rounded-xl border border-white/5 bg-white/[0.02] p-3 transition-colors hover:border-white/10">
-                          {/* Banner thumbnail */}
-                          <div className="h-12 w-16 shrink-0 overflow-hidden rounded-lg bg-white/4">
-                            {ext.banner_path ? (
-                              <img
-                                src={fixPath(ext.banner_path)}
-                                alt={ext.name}
-                                className="h-full w-full object-cover"
-                                onError={e => { e.currentTarget.style.display = 'none' }}
-                              />
-                            ) : (
-                              <div className="flex h-full items-center justify-center">
-                                <Puzzle className="h-4 w-4 text-white/10" />
-                              </div>
-                            )}
-                          </div>
-
-                          {/* Info */}
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-center gap-2">
-                              <p className="truncate text-sm font-semibold text-white">{ext.name}</p>
-                              <StatusBadge status={ext.status} />
-                            </div>
-                            <div className="mt-1 flex items-center gap-2 text-xs text-white/25">
-                              <Download className="h-3 w-3" />
-                              {Number(ext.downloads || 0).toLocaleString()}
-                              <span className="text-white/10">·</span>
-                              <span className="capitalize">{ext.type || 'extension'}</span>
-                            </div>
-                          </div>
-
-                          {/* Actions */}
-                          <div className="flex shrink-0 items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-                            <Link
-                              to={`/extensions/${ext.identifier || ext.id}`}
-                              className="flex h-8 w-8 items-center justify-center rounded-lg text-white/30 hover:bg-white/8 hover:text-white"
-                              title="View"
-                            >
-                              <ExternalLink className="h-3.5 w-3.5" />
-                            </Link>
-                            <Link
-                              to={`/extensions/${ext.id}/edit`}
-                              className="flex h-8 w-8 items-center justify-center rounded-lg text-white/30 hover:bg-white/8 hover:text-white"
-                              title="Edit"
-                            >
-                              <Settings className="h-3.5 w-3.5" />
-                            </Link>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
+              {/* Quick links */}
+              <div className="rounded-2xl border border-white/6 bg-[#0f0f0f]">
+                <div className="border-b border-white/5 px-5 py-4">
+                  <h2 className="text-sm font-bold text-white">Shortcuts</h2>
+                  <p className="text-xs text-white/30">The pages you probably came for</p>
+                </div>
+                <div className="grid gap-2.5 p-4 sm:grid-cols-2">
+                  <QuickLink to="/extensions" icon={Puzzle}   title="Browse extensions" hint="Mods, themes, shaders and packs" />
+                  <QuickLink to="/modpack"    icon={Package}  title="Modpack editor"    hint="Build and share a modpack code" />
+                  <QuickLink to="/docs"       icon={BookOpen} title="Documentation"     hint="Guides for launcher and cloud" />
+                  <QuickLink to="/profile"    icon={User}     title="Public profile"    hint="Avatar, bio and visibility" />
                 </div>
               </div>
             </motion.div>
 
             {/* ── Right: notifications ── */}
-            <motion.div variants={fadeUp} className="rounded-2xl border border-white/6 bg-[#0f0f0f]">
+            <motion.div variants={fadeUp} className="self-start rounded-2xl border border-white/6 bg-[#0f0f0f]">
               <div className="flex items-center justify-between gap-3 border-b border-white/5 px-5 py-4">
                 <div className="flex items-center gap-2">
                   <Bell className="h-4 w-4 text-white/40" />
@@ -399,7 +216,7 @@ export default function Dashboard() {
                 )}
               </div>
 
-              <div className="max-h-[520px] overflow-y-auto p-3">
+              <div className="max-h-[620px] overflow-y-auto p-3">
                 {dataLoading ? (
                   <div className="flex flex-col gap-2 p-2">
                     {[...Array(4)].map((_, i) => <div key={i} className="h-16 animate-pulse rounded-xl bg-white/4" />)}
@@ -422,7 +239,7 @@ export default function Dashboard() {
                         }`}
                       >
                         <div className="flex items-start gap-2.5">
-                          <div className="mt-0.5 flex-1 min-w-0">
+                          <div className="mt-0.5 min-w-0 flex-1">
                             <p className="mb-0.5 text-[10px] font-bold uppercase tracking-widest text-white/25">
                               {n.type || 'info'}
                             </p>
@@ -439,73 +256,21 @@ export default function Dashboard() {
                   </div>
                 )}
               </div>
-            </motion.div>
 
+              <div className="border-t border-white/5 p-3">
+                <a
+                  href="https://pluginhub.de/discord.html"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-center gap-2 rounded-xl border border-white/8 bg-white/4 py-2.5 text-xs font-semibold text-white/50 transition-colors hover:bg-white/8 hover:text-white"
+                >
+                  <Cloud className="h-3.5 w-3.5" /> Get support on Discord
+                </a>
+              </div>
+            </motion.div>
           </div>
         </motion.div>
       </main>
-
-      <NewProjectModal isOpen={newProjectOpen} onClose={() => setNewProjectOpen(false)} />
     </PageShell>
-  )
-}
-
-function NewProjectModal({ isOpen, onClose }) {
-  return (
-    <AnimatePresence>
-      {isOpen && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
-          <motion.div
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            transition={{ duration: 0.2 }}
-            className="absolute inset-0 bg-black/75 backdrop-blur-md"
-            onClick={onClose}
-          />
-          <motion.div
-            initial={{ opacity: 0, scale: 0.96, y: 20 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.96, y: 10 }}
-            transition={{ type: 'spring', damping: 28, stiffness: 320 }}
-            className="relative z-10 w-full max-w-md rounded-2xl border border-white/8 bg-[#0f0f0f] shadow-[0_40px_120px_rgba(0,0,0,0.8)]"
-          >
-            <div className="flex items-center justify-between border-b border-white/6 px-6 py-5">
-              <h3 className="text-lg font-bold text-white">New Project</h3>
-              <button onClick={onClose} className="flex h-8 w-8 items-center justify-center rounded-lg text-white/30 transition-colors hover:bg-white/6 hover:text-white">
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-            <div className="flex flex-col gap-3 p-5">
-              <p className="text-sm text-white/40">What would you like to submit?</p>
-              <Link
-                to="/extensions/create"
-                className="group flex items-center gap-3 rounded-xl border border-white/6 bg-white/[0.02] p-4 transition-all hover:border-primary/30 hover:bg-primary/5"
-              >
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                  <Puzzle className="h-4.5 w-4.5" />
-                </div>
-                <div className="flex-1">
-                  <div className="text-sm font-semibold text-white">Extension</div>
-                  <div className="text-xs text-white/30">Adds new functionality to Lux Client</div>
-                </div>
-                <ChevronRight className="h-4 w-4 text-white/15 transition-colors group-hover:text-primary" />
-              </Link>
-              <Link
-                to="/themes/create"
-                className="group flex items-center gap-3 rounded-xl border border-white/6 bg-white/[0.02] p-4 transition-all hover:border-primary/30 hover:bg-primary/5"
-              >
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                  <Palette className="h-4.5 w-4.5" />
-                </div>
-                <div className="flex-1">
-                  <div className="text-sm font-semibold text-white">Theme</div>
-                  <div className="text-xs text-white/30">Customizes the look and feel of Lux Client</div>
-                </div>
-                <ChevronRight className="h-4 w-4 text-white/15 transition-colors group-hover:text-primary" />
-              </Link>
-            </div>
-          </motion.div>
-        </div>
-      )}
-    </AnimatePresence>
   )
 }

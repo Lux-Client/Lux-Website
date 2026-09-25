@@ -29,6 +29,7 @@ const {
     serializeInstance
 } = require('../cloudInstances');
 const { purgeCloudData } = require('../cloudAccount');
+const { accessibleInstance } = require('../cloudShare');
 
 const avatarUpload = require('multer')({
     storage: require('multer').memoryStorage(),
@@ -367,8 +368,11 @@ router.get('/instances/:uuid/head', ensureDeviceAuth, async (req, res) => {
     }
 
     try {
+        const access = await accessibleInstance(req.cloudUserId, String(req.params.uuid));
+        if (!access) return cloudError(res, 404, 'not_found', 'Instance not found');
+
         const [rows] = await pool.query(
-            `SELECT i.id, i.current_revision, i.updated_at, i.last_touched_at,
+            `SELECT i.id, i.user_id, i.current_revision, i.updated_at, i.last_touched_at,
                     i.last_foreign_pull_at, i.created_at,
                     r.manifest_blob AS manifest_hash,
                     s.session_uuid, s.started_at,
@@ -378,14 +382,15 @@ router.get('/instances/:uuid/head', ensureDeviceAuth, async (req, res) => {
                LEFT JOIN cloud_sessions s ON s.instance_id = i.id AND s.ended_at IS NULL
                     AND s.last_heartbeat_at > NOW() - INTERVAL '${SESSION_STALE_MINUTES} minutes'
                LEFT JOIN client_devices d ON d.id = s.device_id
-              WHERE i.user_id = ? AND i.instance_uuid = ? AND i.status = ?
+              WHERE i.id = ? AND i.status = ?
               ORDER BY s.started_at DESC
               LIMIT 1`,
-            [req.cloudUserId, String(req.params.uuid), 'active']
+            [access.id, 'active']
         );
 
         const row = rows[0];
         if (!row) return cloudError(res, 404, 'not_found', 'Instance not found');
+        const isMemberView = access.access === 'member';
 
         const [playtimeRows] = await pool.query(
             'SELECT COALESCE(SUM(total_ms), 0) AS total_ms FROM cloud_instance_playtime WHERE instance_id = ?',
@@ -398,7 +403,8 @@ router.get('/instances/:uuid/head', ensureDeviceAuth, async (req, res) => {
 
         return res.json({
             revision: Number(row.current_revision),
-            manifestHash: row.manifest_hash || null,
+            manifestHash: isMemberView ? null : (row.manifest_hash || null),
+            access: isMemberView ? 'member' : 'owner',
             updatedAt: new Date(row.updated_at).getTime(),
             playtimeTotalMs: Number(playtimeRows[0] ? playtimeRows[0].total_ms : 0),
             activeSession: row.session_uuid

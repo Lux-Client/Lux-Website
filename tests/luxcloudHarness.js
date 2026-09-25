@@ -128,6 +128,7 @@ class Harness {
         app.use('/api/cloud', require(path.join(SITE, 'routes', 'cloud.js')));
         app.use('/api/cloud', require(path.join(SITE, 'routes', 'cloudBlobs.js')));
         app.use('/api/cloud', require(path.join(SITE, 'routes', 'cloudSync.js')));
+        app.use('/api/cloud', require(path.join(SITE, 'routes', 'cloudShare.js')));
         app.use('/api/admin/cloud', require(path.join(SITE, 'routes', 'adminCloud.js')));
 
         this.server = app.listen(0);

@@ -1744,6 +1744,7 @@ if (LUXCLOUD_ACTIVE) {
     app.use('/api/cloud', require('./routes/cloud'));
     app.use('/api/cloud', require('./routes/cloudBlobs'));
     app.use('/api/cloud', require('./routes/cloudSync'));
+    app.use('/api/cloud', require('./routes/cloudShare'));
     app.use('/api/admin/cloud', require('./routes/adminCloud'));
 } else {
     app.use(['/api/cloud', '/auth/device', '/api/auth/device'], (req, res) => {

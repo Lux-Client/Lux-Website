@@ -23,6 +23,16 @@ const {
     isReferencedByUser,
     registerBlob
 } = require('../cloudBlobs');
+const {
+    accessibleInstance,
+    blobsOfEntries,
+    filterManifestForMember,
+    hasMembers,
+    mergeMemberManifest,
+    permissionViolations,
+    recordAuthors,
+    serializeForViewer
+} = require('../cloudShare');
 
 const router = express.Router();
 
@@ -37,13 +47,15 @@ function quotaPayload(quota, extra = {}) {
     };
 }
 
-async function requireInstance(req, res, { executor = pool } = {}) {
+async function requireInstance(req, res, { executor = pool, allowMember = false } = {}) {
     if (!INSTANCE_UUID_RE.test(String(req.params.uuid))) {
         cloudError(res, 404, 'not_found', 'Instance not found');
         return null;
     }
 
-    const instance = await ownedInstance(req.cloudUserId, String(req.params.uuid), { executor });
+    const instance = allowMember
+        ? await accessibleInstance(req.cloudUserId, String(req.params.uuid), { executor })
+        : await ownedInstance(req.cloudUserId, String(req.params.uuid), { executor });
     if (!instance) {
         cloudError(res, 404, 'not_found', 'Instance not found');
         return null;
@@ -87,10 +99,10 @@ router.post('/instances/:uuid/negotiate', ensureDeviceAuth, async (req, res) => 
     }
 
     try {
-        await ensureCloudSettingsRow(req.cloudUserId);
-
-        const instance = await requireInstance(req, res);
+        const instance = await requireInstance(req, res, { allowMember: true });
         if (!instance) return null;
+        const ownerId = instance.owner_id || req.cloudUserId;
+        await ensureCloudSettingsRow(ownerId);
 
         const hashes = [...wanted.keys()];
         const known = [];
@@ -108,7 +120,7 @@ router.post('/instances/:uuid/negotiate', ensureDeviceAuth, async (req, res) => 
         const present = VERIFY_NEGOTIATE ? await filterStoredBlobs(known) : new Set(known);
         const missing = hashes.filter((hash) => !present.has(hash));
 
-        const quota = await readQuota(req.cloudUserId);
+        const quota = await readQuota(ownerId);
         const projected = Number(body.projectedBytes);
         const instanceBytes = Number(instance.logical_bytes || 0);
         const nextUsed = Number.isSafeInteger(projected) && projected >= 0
@@ -117,6 +129,11 @@ router.post('/instances/:uuid/negotiate', ensureDeviceAuth, async (req, res) => 
         const wouldExceed = quota.quotaBytes > 0 && nextUsed > quota.quotaBytes;
 
         if (wouldExceed) {
+            if (instance.access === 'member') {
+                return cloudError(res, 413, 'quota_exceeded', 'The host of this instance is out of cloud storage', {
+                    details: { neededBytes: nextUsed - quota.quotaBytes }
+                });
+            }
             return cloudError(res, 413, 'quota_exceeded', 'Not enough cloud storage', {
                 details: quotaPayload(quota, {
                     neededBytes: nextUsed - quota.quotaBytes,
@@ -137,7 +154,8 @@ router.post('/instances/:uuid/negotiate', ensureDeviceAuth, async (req, res) => 
             missing,
             known: hashes.filter((hash) => present.has(hash)),
             missingBytes: missing.reduce((sum, hash) => sum + (wanted.get(hash) || 0), 0),
-            quota: quotaPayload(quota, { wouldExceed: false })
+            // Die Quota des Hosts geht ein Mitglied nichts an.
+            quota: instance.access === 'member' ? null : quotaPayload(quota, { wouldExceed: false })
         });
     } catch (err) {
         console.error('[LuxCloud] POST /negotiate failed:', err);
@@ -160,6 +178,15 @@ async function claimForeignBlobs(hashes, userId, deviceId, executor = pool) {
             [userId, ...batch]
         );
         const usable = new Set(owned.map((row) => row.hash));
+
+        // Ein Manifest listet die Hashes ALLER Dateien einer Instanz. Wer es per Hash an
+        // sich ziehen koennte, kaeme so an fremde private Dateien -- Manifeste gibt es
+        // deshalb nur ueber GET /manifest, mit Zugriffspruefung und Filter.
+        const [manifestRows] = await executor.query(
+            `SELECT DISTINCT manifest_blob AS hash FROM cloud_revisions WHERE manifest_blob IN (${placeholders})`,
+            batch
+        );
+        for (const row of manifestRows) usable.add(row.hash);
 
         for (const hash of batch) {
             if (usable.has(hash)) continue;
@@ -192,42 +219,47 @@ async function assertBlobsUsable(hashes, userId, executor) {
 
 router.post('/instances/:uuid/commit', ensureDeviceAuth, async (req, res) => {
     const body = req.body || {};
-    const manifest = body.manifest;
+    const submitted = body.manifest;
     const parentRevision = Number(body.parentRevision);
 
     if (!Number.isSafeInteger(parentRevision) || parentRevision < 0) {
         return cloudError(res, 400, 'invalid_request', 'parentRevision must be a non-negative integer');
     }
+    if (!INSTANCE_UUID_RE.test(String(req.params.uuid))) {
+        return cloudError(res, 404, 'not_found', 'Instance not found');
+    }
 
-    const validation = validateManifest(manifest);
-    if (!validation.valid) {
+    const submittedValidation = validateManifest(submitted);
+    if (!submittedValidation.valid) {
         return cloudError(res, 422, 'invalid_manifest', 'Manifest failed validation', {
-            details: { issues: validation.issues.slice(0, 50) }
+            details: { issues: submittedValidation.issues.slice(0, 50) }
         });
     }
-    if (String(manifest.instanceId) !== String(req.params.uuid)) {
+    if (String(submitted.instanceId) !== String(req.params.uuid)) {
         return cloudError(res, 422, 'invalid_manifest', 'Manifest does not belong to this instance');
     }
 
-    const serialized = Buffer.from(JSON.stringify(manifest), 'utf8');
-    const manifestHash = crypto.createHash('sha256').update(serialized).digest('hex');
-
-    if (serialized.length > MAX_BLOB_BYTES) {
-        return cloudError(res, 413, 'blob_too_large', 'Manifest is too large');
-    }
-
     let storagePut = false;
+    let manifestHash = null;
     const connection = await pool.getConnection();
 
     try {
         await connection.beginTransaction();
-        await ensureCloudSettingsRow(req.cloudUserId, connection);
 
+        const access = await accessibleInstance(req.cloudUserId, String(req.params.uuid), { executor: connection });
+        if (!access) {
+            await connection.rollback();
+            return cloudError(res, 404, 'not_found', 'Instance not found');
+        }
+        const isMemberCommit = access.access === 'member';
+        const ownerId = access.owner_id;
+        await ensureCloudSettingsRow(ownerId, connection);
+
+        // Sperre erst nach der Zugriffspruefung, und dann ueber die ID: gleichzeitige
+        // Commits von Host und Mitglied laufen so sauber hintereinander.
         const [lockRows] = await connection.query(
-            `SELECT ${INSTANCE_COLUMNS} FROM cloud_instances i
-              WHERE i.user_id = ? AND i.instance_uuid = ? AND i.status = ?
-              FOR UPDATE`,
-            [req.cloudUserId, String(req.params.uuid), 'active']
+            `SELECT ${INSTANCE_COLUMNS} FROM cloud_instances i WHERE i.id = ? AND i.status = ? FOR UPDATE`,
+            [access.id, 'active']
         );
         if (lockRows.length === 0) {
             await connection.rollback();
@@ -241,13 +273,84 @@ router.post('/instances/:uuid/commit', ensureDeviceAuth, async (req, res) => {
             return cloudError(res, 409, 'revision_conflict', 'The cloud has a newer revision', {
                 details: {
                     currentRevision,
-                    currentManifestHash: instance.manifest_hash || null
+                    // Ein Mitglied bekommt den Hash des vollstaendigen Manifests nie zu sehen.
+                    currentManifestHash: isMemberCommit ? null : (instance.manifest_hash || null)
                 }
             });
         }
 
+        const collaborative = isMemberCommit || await hasMembers(instance.id, connection);
+
+        let parentManifest = null;
+        if (currentRevision > 0 && collaborative && instance.manifest_hash) {
+            try {
+                parentManifest = JSON.parse((await readManifestBlob(instance.manifest_hash)).toString('utf8'));
+            } catch (err) {
+                if (isMemberCommit) {
+                    await connection.rollback();
+                    return manifestReadFailure(res, instance.manifest_hash, err);
+                }
+                parentManifest = null;
+            }
+        }
+
+        let manifest = submitted;
+        let validation = submittedValidation;
+        let checkedBlobs = submittedValidation.stats.blobHashes;
+        let keptBlobs = [];
+
+        if (isMemberCommit) {
+            // Erst die Rechte: was der Host diesem Mitglied nicht erlaubt hat, kommt nicht
+            // in die Cloud -- nicht still verworfen, sondern mit einer klaren Absage, damit
+            // der Launcher dem Mitglied sagen kann, woran es liegt.
+            const denied = permissionViolations(parentManifest, submitted, access.permissions);
+            if (denied) {
+                await connection.rollback();
+                return cloudError(res, 403, 'permission_denied',
+                    'The host has not allowed you to make some of these changes', {
+                        details: { denied }
+                    });
+            }
+
+            const merged = mergeMemberManifest(parentManifest, submitted);
+            manifest = merged.manifest;
+            validation = validateManifest(manifest);
+            if (!validation.valid) {
+                await connection.rollback();
+                return cloudError(res, 422, 'invalid_manifest', 'Manifest failed validation', {
+                    details: { issues: validation.issues.slice(0, 50) }
+                });
+            }
+
+            // Was der Host schon in der Instanz hat, darf ein Mitglied weiterverwenden; neu
+            // ist nur, was das Mitglied selbst beitraegt -- und nur das wird ihm zugerechnet.
+            const parentStats = parentManifest ? validateManifest(parentManifest).stats : null;
+            const inInstance = new Set((parentStats && parentStats.blobHashes) || []);
+            checkedBlobs = blobsOfEntries(merged.contributed).filter((hash) => !inInstance.has(hash));
+            keptBlobs = validation.stats.blobHashes.filter((hash) => inInstance.has(hash));
+        }
+
+        // Den Namen einer gemeinsamen Instanz aendert nur ein ausdrueckliches Umbenennen
+        // (PATCH /name), nicht der Stand, den irgendein PC gerade hochlaedt.
+        if (collaborative && instance.name && manifest.name !== instance.name) {
+            manifest = { ...manifest, name: instance.name };
+            validation = validateManifest(manifest);
+        }
+
+        const serialized = Buffer.from(JSON.stringify(manifest), 'utf8');
+        manifestHash = crypto.createHash('sha256').update(serialized).digest('hex');
+
+        if (serialized.length > MAX_BLOB_BYTES) {
+            await connection.rollback();
+            return cloudError(res, 413, 'blob_too_large', 'Manifest is too large');
+        }
+
         const blobHashes = validation.stats.blobHashes;
-        const { missing, forbidden, actualBytes } = await assertBlobsUsable(blobHashes, req.cloudUserId, connection);
+        const usable = await assertBlobsUsable(checkedBlobs, req.cloudUserId, connection);
+        const missing = [...usable.missing];
+        for (const hash of keptBlobs) {
+            if (!await getBlob(hash, connection)) missing.push(hash);
+        }
 
         if (missing.length > 0) {
             await connection.rollback();
@@ -255,16 +358,23 @@ router.post('/instances/:uuid/commit', ensureDeviceAuth, async (req, res) => {
                 details: { missing: missing.slice(0, 50), missingCount: missing.length }
             });
         }
-        if (forbidden.length > 0) {
+        if (usable.forbidden.length > 0) {
             await connection.rollback();
             return cloudError(res, 403, 'forbidden', 'Manifest references blobs that do not belong to you', {
-                details: { forbiddenCount: forbidden.length }
+                details: { forbiddenCount: usable.forbidden.length }
             });
         }
 
+        let actualBytes = 0;
+        for (const hash of blobHashes) {
+            const blob = await getBlob(hash, connection);
+            actualBytes += blob ? Number(blob.size) || 0 : 0;
+        }
+
+        // Der Speicher gehoert dem Host, auch wenn ein Mitglied committet.
         const [quotaRows] = await connection.query(
             'SELECT quota_bytes, used_bytes FROM user_cloud_settings WHERE user_id = ? FOR UPDATE',
-            [req.cloudUserId]
+            [ownerId]
         );
         const quotaBytes = Number(quotaRows[0] ? quotaRows[0].quota_bytes : 0);
         const usedBytes = Number(quotaRows[0] ? quotaRows[0].used_bytes : 0);
@@ -273,14 +383,17 @@ router.post('/instances/:uuid/commit', ensureDeviceAuth, async (req, res) => {
 
         if (quotaBytes > 0 && nextUsed > quotaBytes) {
             await connection.rollback();
-            return cloudError(res, 413, 'quota_exceeded', 'Not enough cloud storage', {
-                details: {
-                    usedBytes,
-                    quotaBytes,
-                    availableBytes: Math.max(quotaBytes - usedBytes, 0),
-                    neededBytes: nextUsed - quotaBytes
-                }
-            });
+            return cloudError(res, 413, 'quota_exceeded',
+                isMemberCommit ? 'The host of this instance is out of cloud storage' : 'Not enough cloud storage', {
+                    details: isMemberCommit
+                        ? { neededBytes: nextUsed - quotaBytes }
+                        : {
+                            usedBytes,
+                            quotaBytes,
+                            availableBytes: Math.max(quotaBytes - usedBytes, 0),
+                            neededBytes: nextUsed - quotaBytes
+                        }
+                });
         }
 
         const manifestKey = blobKey(manifestHash);
@@ -344,11 +457,30 @@ router.post('/instances/:uuid/commit', ensureDeviceAuth, async (req, res) => {
             ]
         );
 
-        await recalcUsedBytes(req.cloudUserId, connection);
-        const quota = await readQuota(req.cloudUserId, connection);
-        const updated = await ownedInstance(req.cloudUserId, String(req.params.uuid), { executor: connection });
+        if (collaborative) {
+            await recordAuthors({
+                instanceId: instance.id,
+                parentManifest,
+                manifest,
+                userId: req.cloudUserId,
+                revision,
+                executor: connection
+            });
+        }
+
+        await recalcUsedBytes(ownerId, connection);
+        const quota = await readQuota(ownerId, connection);
+        const updated = await accessibleInstance(req.cloudUserId, String(req.params.uuid), { executor: connection });
 
         await connection.commit();
+
+        if (isMemberCommit) {
+            return res.status(201).json({
+                revision,
+                manifestHash: null,
+                instance: serializeForViewer(updated)
+            });
+        }
 
         return res.status(201).json({
             revision,
@@ -422,8 +554,9 @@ function manifestReadFailure(res, hash, err) {
 
 router.get('/instances/:uuid/manifest', ensureDeviceAuth, async (req, res) => {
     try {
-        const instance = await requireInstance(req, res);
+        const instance = await requireInstance(req, res, { allowMember: true });
         if (!instance) return null;
+        const isMemberView = instance.access === 'member';
 
         const raw = String(req.query.revision || 'latest');
         let revision;
@@ -465,13 +598,24 @@ router.get('/instances/:uuid/manifest', ensureDeviceAuth, async (req, res) => {
             await markForeignActivity(instance, req.device.id);
         }
 
+        if (isMemberView) {
+            manifest = filterManifestForMember(manifest);
+            // Genau diese Dateien darf das Mitglied herunterladen -- und keine anderen.
+            const readable = blobsOfEntries(manifest.entries);
+            if (manifest.icon && typeof manifest.icon.blob === 'string') readable.push(manifest.icon.blob);
+            for (const hash of readable) {
+                await claimUpload(hash, req.cloudUserId, req.device.id);
+            }
+        }
+
         return res.json({
             revision: Number(row.revision),
             parentRevision: row.parent_revision === null ? null : Number(row.parent_revision),
-            manifestHash: row.manifest_blob,
-            entryCount: Number(row.entry_count),
-            logicalBytes: Number(row.logical_bytes),
-            hasWorlds: Boolean(row.has_worlds),
+            manifestHash: isMemberView ? null : row.manifest_blob,
+            access: instance.access || 'owner',
+            entryCount: isMemberView ? manifest.entries.length : Number(row.entry_count),
+            logicalBytes: isMemberView ? null : Number(row.logical_bytes),
+            hasWorlds: isMemberView ? false : Boolean(row.has_worlds),
             createdAt: row.created_at,
             manifest
         });
@@ -657,7 +801,7 @@ async function playtimeBreakdown(instanceId, executor = pool) {
 
 router.get('/instances/:uuid/playtime', ensureDeviceAuth, async (req, res) => {
     try {
-        const instance = await requireInstance(req, res);
+        const instance = await requireInstance(req, res, { allowMember: true });
         if (!instance) return null;
 
         const breakdown = await playtimeBreakdown(instance.id);
@@ -763,7 +907,7 @@ router.put('/instances/:uuid/playtime', ensureDeviceAuth, async (req, res) => {
 
 router.post('/instances/:uuid/session', ensureDeviceAuth, async (req, res) => {
     try {
-        const instance = await requireInstance(req, res);
+        const instance = await requireInstance(req, res, { allowMember: true });
         if (!instance) return null;
 
         await pool.query(
@@ -811,12 +955,15 @@ router.post('/instances/:uuid/session', ensureDeviceAuth, async (req, res) => {
     }
 });
 
+// Eine Session gehoert dem Geraet, das sie gestartet hat -- auch wenn es ein Mitglied ist
+// und nicht der Eigentuemer der Instanz. Das Geraet selbst ist durch ensureDeviceAuth
+// schon an dieses Konto gebunden.
 async function ownedSession(sessionUuid, userId, deviceId) {
     const [rows] = await pool.query(
         `SELECT s.id, s.instance_id, s.ended_at
            FROM cloud_sessions s
-           JOIN cloud_instances i ON i.id = s.instance_id
-          WHERE s.session_uuid = ? AND i.user_id = ? AND s.device_id = ?`,
+           JOIN client_devices d ON d.id = s.device_id
+          WHERE s.session_uuid = ? AND d.user_id = ? AND s.device_id = ?`,
         [sessionUuid, userId, deviceId]
     );
     return rows[0] || null;

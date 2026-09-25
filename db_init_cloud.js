@@ -192,6 +192,40 @@ const createCloudTables = async (connection) => {
     await connection.query('CREATE INDEX IF NOT EXISTS idx_device_pairing_expiry ON device_pairing_codes(expires_at)');
     console.log('[Database] device_pairing_codes table checked/created.');
 
+    // Zusammenarbeit: weitere Lux-Konten, die an einer Instanz mitarbeiten duerfen. Der
+    // Eigentuemer (cloud_instances.user_id) steht hier nie drin.
+    await connection.query(`
+        CREATE TABLE IF NOT EXISTS cloud_instance_members (
+            instance_id INTEGER NOT NULL REFERENCES cloud_instances(id) ON DELETE CASCADE,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            role VARCHAR(16) NOT NULL DEFAULT 'editor' CHECK (role IN ('editor')),
+            invited_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            PRIMARY KEY (instance_id, user_id)
+        )
+    `);
+    await connection.query('CREATE INDEX IF NOT EXISTS idx_cloud_instance_members_user ON cloud_instance_members(user_id)');
+    // Was ein Mitglied darf, stellt der Host pro Person ein (siehe cloudShare.js).
+    await connection.query('ALTER TABLE cloud_instance_members ADD COLUMN IF NOT EXISTS can_add_content BOOLEAN NOT NULL DEFAULT TRUE');
+    await connection.query('ALTER TABLE cloud_instance_members ADD COLUMN IF NOT EXISTS can_remove_content BOOLEAN NOT NULL DEFAULT FALSE');
+    await connection.query('ALTER TABLE cloud_instance_members ADD COLUMN IF NOT EXISTS can_edit_config BOOLEAN NOT NULL DEFAULT TRUE');
+    await connection.query('ALTER TABLE cloud_instance_members ADD COLUMN IF NOT EXISTS can_rename BOOLEAN NOT NULL DEFAULT FALSE');
+    await connection.query('ALTER TABLE cloud_instance_members ADD COLUMN IF NOT EXISTS can_manage_members BOOLEAN NOT NULL DEFAULT FALSE');
+    console.log('[Database] cloud_instance_members table checked/created.');
+
+    // Wer eine Datei (Mod, Pack, Shader, Config) zuletzt hinzugefuegt oder geaendert hat.
+    await connection.query(`
+        CREATE TABLE IF NOT EXISTS cloud_entry_authors (
+            instance_id INTEGER NOT NULL REFERENCES cloud_instances(id) ON DELETE CASCADE,
+            path VARCHAR(512) NOT NULL,
+            user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            revision INTEGER NOT NULL,
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            PRIMARY KEY (instance_id, path)
+        )
+    `);
+    console.log('[Database] cloud_entry_authors table checked/created.');
+
     await connection.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS cloud_banned BOOLEAN NOT NULL DEFAULT FALSE');
     await connection.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS cloud_ban_reason TEXT');
     await connection.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS cloud_banned_at TIMESTAMPTZ');

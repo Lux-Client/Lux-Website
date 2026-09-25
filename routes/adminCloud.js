@@ -102,17 +102,28 @@ router.get('/stats', ensureAdmin, async (req, res) => {
 
 router.get('/users', ensureAdmin, async (req, res) => {
     const limit = Math.min(Math.max(Number(req.query.limit) || 25, 1), 100);
+    // Ohne Suche nur die groessten Konten; mit Suche jedes Konto, das je die Cloud benutzt hat.
+    const search = typeof req.query.q === 'string' ? req.query.q.trim().slice(0, 64).toLowerCase() : '';
 
     try {
+        const params = [];
+        let where = '';
+        if (search) {
+            where = 'WHERE LOWER(u.username) LIKE ?';
+            params.push(`%${search.replace(/[\\%_]/g, (ch) => `\\${ch}`)}%`);
+        }
+        params.push(limit);
+
         const [rows] = await pool.query(
             `SELECT u.id, u.username, u.email,
                     s.used_bytes, s.quota_bytes, s.max_instances,
                     u.cloud_banned, u.cloud_ban_reason
                FROM user_cloud_settings s
                JOIN users u ON u.id = s.user_id
+              ${where}
               ORDER BY s.used_bytes DESC
               LIMIT ?`,
-            [limit]
+            params
         );
 
         const ids = rows.map((row) => row.id);
@@ -263,12 +274,31 @@ router.get('/instances', ensureAdmin, async (req, res) => {
 
     try {
         const [rows] = await pool.query(
-            `SELECT id, instance_uuid, name, mc_version, loader, current_revision, logical_bytes,
-                    status, created_at, last_touched_at, last_foreign_pull_at, trashed_at
-               FROM cloud_instances WHERE user_id = ? ORDER BY last_touched_at DESC`,
+            `SELECT i.id, i.instance_uuid, i.name, i.mc_version, i.loader, i.loader_version,
+                    i.current_revision, i.logical_bytes, i.status, i.created_at, i.last_touched_at,
+                    i.last_foreign_pull_at, i.trashed_at,
+                    (SELECT COUNT(*) FROM cloud_revisions r WHERE r.instance_id = i.id) AS revision_count
+               FROM cloud_instances i WHERE i.user_id = ? ORDER BY i.last_touched_at DESC`,
             [userId]
         );
-        return res.json({ instances: rows });
+        return res.json({
+            instances: rows.map((row) => ({
+                id: Number(row.id),
+                instanceUuid: row.instance_uuid,
+                name: row.name,
+                mcVersion: row.mc_version,
+                loader: row.loader,
+                loaderVersion: row.loader_version,
+                revision: Number(row.current_revision || 0),
+                revisionCount: Number(row.revision_count || 0),
+                logicalBytes: Number(row.logical_bytes || 0),
+                status: row.status,
+                createdAt: row.created_at,
+                lastTouchedAt: row.last_touched_at,
+                lastForeignPullAt: row.last_foreign_pull_at,
+                trashedAt: row.trashed_at
+            }))
+        });
     } catch (err) {
         console.error('[LuxCloud] GET /api/admin/cloud/instances failed:', err);
         return res.status(500).json({ error: 'server_error', message: 'Could not list instances' });
@@ -281,26 +311,53 @@ router.delete('/instances/:id', ensureAdmin, async (req, res) => {
         return res.status(400).json({ error: 'invalid_request', message: 'Bad instance id' });
     }
 
+    const { removeRefsForRevision } = require('../cloudBlobs');
+    const { recalcUsedBytes } = require('../cloudInstances');
+
+    // Alles oder nichts: ein Abbruch zwischen Referenzen und Instanz liess sonst Zaehler
+    // zurueck, die auf Revisionen zeigen, die es nicht mehr gibt.
+    const connection = await pool.getConnection();
     try {
-        const [rows] = await pool.query('SELECT id, user_id, name FROM cloud_instances WHERE id = ?', [instanceId]);
+        await connection.beginTransaction();
+
+        const [rows] = await connection.query(
+            'SELECT id, user_id, name, instance_uuid FROM cloud_instances WHERE id = ? FOR UPDATE',
+            [instanceId]
+        );
         const instance = rows[0];
-        if (!instance) return res.status(404).json({ error: 'not_found', message: 'Instance not found' });
-
-        const { removeRefsForRevision } = require('../cloudBlobs');
-        const { recalcUsedBytes } = require('../cloudInstances');
-
-        const [revisions] = await pool.query('SELECT id FROM cloud_revisions WHERE instance_id = ?', [instanceId]);
-        for (const revision of revisions) {
-            await removeRefsForRevision(revision.id);
+        if (!instance) {
+            await connection.rollback();
+            return res.status(404).json({ error: 'not_found', message: 'Instance not found' });
         }
-        await pool.query('DELETE FROM cloud_instances WHERE id = ?', [instanceId]);
-        await recalcUsedBytes(instance.user_id);
 
-        await logAdminAction(req, 'cloud_instance_delete', 'cloud_instance', instanceId, instance.name);
-        return res.json({ ok: true, revisionsRemoved: revisions.length });
+        const [revisions] = await connection.query('SELECT id FROM cloud_revisions WHERE instance_id = ?', [instanceId]);
+        let blobsQueued = 0;
+        for (const revision of revisions) {
+            const removed = await removeRefsForRevision(revision.id, connection);
+            blobsQueued += removed.queued || 0;
+        }
+        await connection.query('DELETE FROM cloud_instances WHERE id = ?', [instanceId]);
+        await recalcUsedBytes(instance.user_id, connection);
+        await connection.query(
+            'INSERT INTO notifications (user_id, message, type) VALUES (?, ?, ?)',
+            [
+                instance.user_id,
+                `The cloud copy of "${instance.name}" was permanently deleted by an administrator. Your local instance is not affected.`,
+                'info'
+            ]
+        );
+
+        await connection.commit();
+
+        await logAdminAction(req, 'cloud_instance_delete', 'cloud_instance', instanceId,
+            JSON.stringify({ name: instance.name, userId: instance.user_id, uuid: instance.instance_uuid, revisions: revisions.length }));
+        return res.json({ ok: true, revisionsRemoved: revisions.length, blobsQueued });
     } catch (err) {
+        await connection.rollback().catch(() => {});
         console.error('[LuxCloud] DELETE /api/admin/cloud/instances/:id failed:', err);
         return res.status(500).json({ error: 'server_error', message: 'Could not delete the instance' });
+    } finally {
+        connection.release();
     }
 });
 

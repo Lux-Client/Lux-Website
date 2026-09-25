@@ -333,6 +333,44 @@ async function main() {
     );
     h.check('die Instanz bleibt auf Revision 3', Number(afterQuota[0].current_revision) === 3, afterQuota[0]);
 
+    h.section('10) Ein Blob, den ein anderes Konto schon hochgeladen hat');
+
+    // Derselbe Inhalt (etwa eine verbreitete Mod) liegt schon von Konto B auf dem Server.
+    // negotiate meldet ihn deshalb als bekannt, der Client laedt ihn nicht hoch -- und der
+    // Commit darf ihn dann nicht als fremd ablehnen.
+    const userC = await h.createUser({ googleId: 'g-c', username: 'thirduser' });
+    const C = (await h.authorizeDevice({
+        user: { id: userC, username: 'thirduser', role: 'user', banned: false },
+        deviceUuid: 'dev-cccc-0001'
+    })).accessToken;
+    const UUID_C = 'inst-shared-mod-0001';
+
+    await h.request({
+        method: 'POST',
+        url: '/api/cloud/instances',
+        token: C,
+        body: { instanceUuid: UUID_C, name: 'Shared', mcVersion: '1.21.11', loader: 'fabric' }
+    });
+
+    res = await h.request({
+        method: 'POST',
+        url: `/api/cloud/instances/${UUID_C}/negotiate`,
+        token: C,
+        body: { blobs: [{ hash: fremdHash, size: fremd.length }] }
+    });
+    h.check('der fremde Blob gilt als vorhanden', res.status === 200 && res.body.missing.length === 0, res.body);
+
+    res = await h.request({
+        method: 'POST',
+        url: `/api/cloud/instances/${UUID_C}/commit`,
+        token: C,
+        body: {
+            manifest: manifestFor(UUID_C, [fileEntry('mods/shared.jar', fremd, fremdHash)], { name: 'Shared' }),
+            parentRevision: 0
+        }
+    });
+    h.check('und der Commit nimmt ihn an', res.status === 201 && res.body.revision === 1, res.body);
+
     h.finish();
 }
 

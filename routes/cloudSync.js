@@ -17,6 +17,7 @@ const {
 } = require('../cloudInstances');
 const {
     addRefs,
+    claimUpload,
     getBlob,
     hasFreshClaim,
     isReferencedByUser,
@@ -124,6 +125,14 @@ router.post('/instances/:uuid/negotiate', ensureDeviceAuth, async (req, res) => 
             });
         }
 
+        // "Liegt schon auf dem Server" hiess bisher auch: liegt fuer IRGENDWEN dort. Der
+        // Client lud solche Blobs deshalb nicht hoch, und der Commit lehnte sie danach als
+        // fremd ab ("blobs that do not belong to you") -- etwa eine Mod, die ein anderes
+        // Konto schon hochgeladen hat, oder ein eigener Blob, dessen Anspruch abgelaufen
+        // ist. PUT /blobs vergibt fuer vorhandene Blobs ohnehin einen Anspruch; hier
+        // geschieht dasselbe, bevor der Client entscheidet, was er hochlaedt.
+        await claimForeignBlobs([...present], req.cloudUserId, req.device.id);
+
         return res.json({
             missing,
             known: hashes.filter((hash) => present.has(hash)),
@@ -135,6 +144,29 @@ router.post('/instances/:uuid/negotiate', ensureDeviceAuth, async (req, res) => 
         return cloudError(res, 500, 'server_error', 'Could not negotiate upload');
     }
 });
+
+async function claimForeignBlobs(hashes, userId, deviceId, executor = pool) {
+    for (let i = 0; i < hashes.length; i += 500) {
+        const batch = hashes.slice(i, i + 500);
+        if (batch.length === 0) continue;
+        const placeholders = batch.map(() => '?').join(', ');
+
+        const [owned] = await executor.query(
+            `SELECT DISTINCT br.blob_hash AS hash
+               FROM blob_refs br
+               JOIN cloud_revisions r ON r.id = br.revision_id
+               JOIN cloud_instances i ON i.id = r.instance_id
+              WHERE i.user_id = ? AND br.blob_hash IN (${placeholders})`,
+            [userId, ...batch]
+        );
+        const usable = new Set(owned.map((row) => row.hash));
+
+        for (const hash of batch) {
+            if (usable.has(hash)) continue;
+            await claimUpload(hash, userId, deviceId, executor);
+        }
+    }
+}
 
 async function assertBlobsUsable(hashes, userId, executor) {
     const missing = [];

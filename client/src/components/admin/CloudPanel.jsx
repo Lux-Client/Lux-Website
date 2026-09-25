@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import {
-  Archive, Ban, Database, HardDrive, Layers, Play, RefreshCw,
+  Archive, Ban, Database, FolderOpen, HardDrive, Layers, Play, RefreshCw,
   Trash2, TriangleAlert, UserCheck, Users as UsersIcon,
 } from 'lucide-react'
 import {
@@ -8,6 +8,7 @@ import {
   Panel, Row, SearchField, StatTile, Table, TextInput,
 } from './ui'
 import { useDialog, useToast } from './feedback'
+import CloudUserInstances from './CloudUserInstances'
 
 function formatBytes(bytes) {
   if (!bytes) return '0 B'
@@ -43,6 +44,8 @@ export default function CloudPanel() {
   const [query,     setQuery]     = useState('')
   const [banTarget, setBanTarget] = useState(null)
   const [banReason, setBanReason] = useState('')
+  const [instancesTarget, setInstancesTarget] = useState(null)
+  const [searchResults, setSearchResults] = useState(null)
 
   const load = useCallback(async () => {
     try {
@@ -60,6 +63,24 @@ export default function CloudPanel() {
   }, [toast])
 
   useEffect(() => { load() }, [load])
+
+  // Die Liste oben zeigt nur die 50 groessten Konten. Mit Suche fragt der Server alle ab,
+  // damit sich jedes Konto oeffnen laesst.
+  const searchUsers = useCallback(async term => {
+    if (!term) { setSearchResults(null); return }
+    try {
+      const res = await fetch(`/api/admin/cloud/users?limit=100&q=${encodeURIComponent(term)}`, { credentials: 'include' })
+      if (res.ok) setSearchResults((await res.json()).users || [])
+    } catch {
+      // Die lokale Filterung bleibt als Rueckfall stehen.
+    }
+  }, [])
+
+  useEffect(() => {
+    const term = query.trim()
+    const timer = setTimeout(() => searchUsers(term), 250)
+    return () => clearTimeout(timer)
+  }, [query, searchUsers])
 
   const runJob = async (job, dryRun) => {
     if (!dryRun) {
@@ -146,8 +167,10 @@ export default function CloudPanel() {
     }
   }
 
-  const filteredUsers = users.filter(user =>
-    !query.trim() || user.username?.toLowerCase().includes(query.trim().toLowerCase()))
+  const filteredUsers = searchResults && query.trim()
+    ? searchResults
+    : users.filter(user =>
+      !query.trim() || user.username?.toLowerCase().includes(query.trim().toLowerCase()))
 
   const expiryLive = jobs?.expiry && !jobs.expiry.dryRun
 
@@ -238,7 +261,7 @@ export default function CloudPanel() {
 
       <Panel
         title="Accounts by storage"
-        description="The 50 accounts using the most cloud storage."
+        description="The 50 accounts using the most cloud storage. Search to find any account."
         actions={<SearchField value={query} onChange={setQuery} placeholder="Username…" />}
       >
         {filteredUsers.length === 0 ? (
@@ -278,6 +301,7 @@ export default function CloudPanel() {
                   <Cell><span className="text-xs text-white/30">{user.lastActivity ? new Date(user.lastActivity).toLocaleDateString() : '—'}</span></Cell>
                   <Cell align="right">
                     <div className="flex justify-end gap-2">
+                      <Button size="sm" variant="ghost" icon={FolderOpen} onClick={() => setInstancesTarget(user)}>Instances</Button>
                       <Button size="sm" variant="ghost" onClick={() => setQuota(user)}>Quota</Button>
                       {user.cloudBanned ? (
                         <Button size="sm" variant="success" icon={UserCheck} disabled={busy === `ban-${user.id}`} onClick={() => toggleBan(user, false)}>
@@ -296,6 +320,12 @@ export default function CloudPanel() {
           </Table>
         )}
       </Panel>
+
+      <CloudUserInstances
+        user={instancesTarget}
+        onClose={() => setInstancesTarget(null)}
+        onChanged={() => { load(); searchUsers(query.trim()) }}
+      />
 
       <Modal
         open={!!banTarget}

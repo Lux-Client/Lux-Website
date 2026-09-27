@@ -100,6 +100,63 @@ async function sanitizeIcon(iconValue) {
     }
 }
 
+// Codes are generated from [A-Za-z0-9]{8}. Anything else never names a real code and
+// must not reach path.join (a decoded "../" in the URL would otherwise leave CODES_DIR).
+const CODE_PATTERN = /^[A-Za-z0-9]{8}$/;
+
+function isValidCode(code) {
+    return typeof code === 'string' && CODE_PATTERN.test(code);
+}
+
+function readCodeFile(code) {
+    if (!isValidCode(code)) return null;
+    const filePath = path.join(CODES_DIR, `${code}.json`);
+    if (!fs.existsSync(filePath)) return null;
+    return JSON.parse(fs.readFileSync(filePath, 'utf8'));
+}
+
+function previewContentItem(item) {
+    if (typeof item === 'string') {
+        return { projectId: item, versionId: null, title: item, icon: null, fileName: item };
+    }
+    const source = item || {};
+    return {
+        projectId: typeof source.projectId === 'string' ? source.projectId : null,
+        versionId: typeof source.versionId === 'string' ? source.versionId : null,
+        title: String(source.title || source.fileName || source.projectId || 'Unknown'),
+        icon: typeof source.icon === 'string' && /^https:\/\//.test(source.icon) ? source.icon : null,
+        fileName: typeof source.fileName === 'string' ? source.fileName : null
+    };
+}
+
+// Public, read-only view of a code for the website preview page (/code/:code).
+// Leaves out who created it and the raw options.txt -- only whether settings are included.
+function buildCodePreview(data) {
+    return {
+        code: data.code,
+        name: data.name || 'Exported Modpack',
+        version: data.version || null,
+        loader: data.loader || null,
+        icon: data.icon || null,
+        created: data.created || null,
+        expires: data.expires || null,
+        uses: data.uses || 0,
+        hasSettings: Boolean(data.keybinds),
+        mods: (Array.isArray(data.mods) ? data.mods : []).map(previewContentItem),
+        resourcePacks: (Array.isArray(data.resourcePacks) ? data.resourcePacks : []).map(previewContentItem),
+        shaders: (Array.isArray(data.shaders) ? data.shaders : []).map(previewContentItem)
+    };
+}
+
+function readCodePreview(code) {
+    try {
+        const data = readCodeFile(code);
+        return data ? buildCodePreview(data) : null;
+    } catch (e) {
+        return null;
+    }
+}
+
 const createAdminAuth = require('./middleware/adminAuth');
 
 module.exports = function (app, ADMIN_PASSWORD, pool) {
@@ -299,9 +356,31 @@ module.exports = function (app, ADMIN_PASSWORD, pool) {
         }
     });
 
+    // Read-only preview for the website: does not count as a use.
+    app.get('/api/modpack/:code/preview', (req, res) => {
+        try {
+            const { code } = req.params;
+            if (!isValidCode(code)) {
+                return res.status(400).json({ success: false, error: 'Invalid code format' });
+            }
+            const preview = readCodePreview(code);
+            if (!preview) {
+                return res.status(404).json({ success: false, error: 'Code not found' });
+            }
+            res.setHeader('Cache-Control', 'no-store');
+            res.json({ success: true, data: preview });
+        } catch (error) {
+            console.error('[CodesSystem] Preview error:', error);
+            res.status(500).json({ success: false, error: 'Failed to load code' });
+        }
+    });
+
     function handleGetCode(req, res) {
         try {
             const { code } = req.params;
+            if (!isValidCode(code)) {
+                return res.status(404).json({ success: false, error: 'Code not found' });
+            }
             const filePath = path.join(CODES_DIR, `${code}.json`);
 
             if (fs.existsSync(filePath)) {
@@ -339,3 +418,6 @@ module.exports = function (app, ADMIN_PASSWORD, pool) {
         }
     });
 };
+
+module.exports.readCodePreview = readCodePreview;
+module.exports.isValidCode = isValidCode;

@@ -5,6 +5,7 @@ import AnalyticsOptOut from './pages/AnalyticsOptOut'
 import AuthorizeDevice from './pages/AuthorizeDevice'
 import LinkDevice from './pages/LinkDevice'
 import Changelog from './pages/Changelog'
+import CodePreview from './pages/CodePreview'
 import Dashboard from './pages/Dashboard'
 import DeveloperHome from './pages/DeveloperHome'
 import DeveloperProfile from './pages/DeveloperProfile'
@@ -58,6 +59,8 @@ export default function App() {
         <Route path="/docs/extension" element={<DocsExtension />} />
         <Route path="/changelog" element={<Changelog />} />
         <Route path="/modpack" element={<ModpackEditor />} />
+        <Route path="/code" element={<CodePreview />} />
+        <Route path="/code/:code" element={<CodePreview />} />
         <Route path="/privacy" element={<Privacy />} />
         <Route path="/imprint" element={<Imprint />} />
         <Route path="/maintenance" element={<Maintenance />} />

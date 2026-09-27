@@ -1915,6 +1915,44 @@ app.get('/extensions/:identifier', async (req, res, next) => {
     }
 });
 
+// Link previews for shared modpack codes (/code/:code), same idea as the extension pages above.
+app.get('/code/:code', (req, res, next) => {
+    try {
+        const template = getIndexHtmlTemplate();
+        if (!template) return next();
+
+        const preview = codesSystem.readCodePreview(req.params.code);
+        if (!preview) return next();
+
+        const contentCount = preview.mods.length + preview.resourcePacks.length + preview.shaders.length;
+        const title = `${preview.name} — Lux Client Modpack`;
+        const parts = [
+            [preview.loader, preview.version].filter(Boolean).join(' '),
+            `${preview.mods.length} mods`,
+            `${preview.resourcePacks.length} resource packs`,
+            `${preview.shaders.length} shaders`
+        ].filter(Boolean);
+        const description = contentCount > 0
+            ? `${parts.join(' · ')}. Preview everything inside and install it with one click in Lux Client.`
+            : 'Preview this shared modpack and install it with one click in Lux Client.';
+        const url = `https://lux.pluginhub.de/code/${encodeURIComponent(preview.code)}`;
+
+        const html = template
+            .replace(/<title>.*?<\/title>/, `<title>${escapeHtmlAttr(title)}</title>`)
+            .replace(/<meta name="description" content=".*?"\s*\/>/, `<meta name="description" content="${escapeHtmlAttr(description)}" />`)
+            .replace(/<meta property="og:title" content=".*?"\s*\/>/, `<meta property="og:title" content="${escapeHtmlAttr(title)}" />`)
+            .replace(/<meta property="og:description" content=".*?"\s*\/>/, `<meta property="og:description" content="${escapeHtmlAttr(description)}" />`)
+            .replace(/<meta property="og:url" content=".*?"\s*\/>/, `<meta property="og:url" content="${escapeHtmlAttr(url)}" />`)
+            .replace('</head>', '  <meta name="robots" content="noindex, nofollow" />\n</head>');
+
+        res.setHeader('Cache-Control', 'no-cache, must-revalidate');
+        res.send(html);
+    } catch (err) {
+        console.error('[OG Meta] Failed to render modpack code meta tags:', err);
+        next();
+    }
+});
+
 // SPA catch-all: serve React app for all non-API GET routes
 app.get('*', (req, res) => {
     res.sendFile(path.join(clientDistPath, 'index.html'));

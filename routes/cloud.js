@@ -30,6 +30,14 @@ const {
 } = require('../cloudInstances');
 const { purgeCloudData } = require('../cloudAccount');
 const { accessibleInstance } = require('../cloudShare');
+const {
+    MAX_BACKGROUND_BYTES,
+    clearBackground,
+    detectFormat,
+    loadBackgroundRow,
+    saveBackground,
+    serializeBackground
+} = require('../cloudBackground');
 
 const avatarUpload = require('multer')({
     storage: require('multer').memoryStorage(),
@@ -49,6 +57,25 @@ const avatarUploadSingle = (req, res, next) => {
             400,
             tooLarge ? 'too_large' : 'invalid_request',
             tooLarge ? 'The picture may be at most 4 MB' : (err.message || 'The image could not be read')
+        );
+    });
+};
+
+const backgroundUpload = require('multer')({
+    storage: require('multer').memoryStorage(),
+    limits: { fileSize: MAX_BACKGROUND_BYTES, files: 1 }
+});
+
+const backgroundUploadSingle = (req, res, next) => {
+    backgroundUpload.single('background')(req, res, (err) => {
+        if (!err) return next();
+        const tooLarge = err.code === 'LIMIT_FILE_SIZE';
+        const limitMb = Math.round(MAX_BACKGROUND_BYTES / (1024 * 1024));
+        return cloudError(
+            res,
+            tooLarge ? 413 : 400,
+            tooLarge ? 'too_large' : 'invalid_request',
+            tooLarge ? `The background may be at most ${limitMb} MB` : (err.message || 'The file could not be read')
         );
     });
 };
@@ -114,6 +141,7 @@ router.get('/me', ensureDeviceAuth, async (req, res) => {
                 platform: req.device.platform
             },
             settings: serializeSettings(settings),
+            background: serializeBackground(settings),
             quota: {
                 usedBytes: Number(settings.used_bytes || 0),
                 quotaBytes: Number(settings.quota_bytes || 0),
@@ -259,6 +287,87 @@ router.post('/me/avatar', ensureCloudUser, avatarUploadSingle, async (req, res) 
     } catch (err) {
         console.error('[LuxCloud] POST /me/avatar failed:', err);
         return cloudError(res, 500, 'server_error', 'Could not save the picture');
+    }
+});
+
+router.get('/me/background', ensureCloudUser, async (req, res) => {
+    try {
+        await ensureCloudSettingsRow(req.cloudUserId);
+        return res.json({ background: serializeBackground(await loadBackgroundRow(req.cloudUserId)) });
+    } catch (err) {
+        console.error('[LuxCloud] GET /me/background failed:', err);
+        return cloudError(res, 500, 'server_error', 'Could not load the background');
+    }
+});
+
+router.get('/me/background/file', ensureCloudUser, async (req, res) => {
+    try {
+        const row = await loadBackgroundRow(req.cloudUserId);
+        const background = serializeBackground(row);
+        if (!background) {
+            return cloudError(res, 404, 'not_found', 'No background is stored for this account');
+        }
+
+        const etag = `"${background.hash}"`;
+        res.set('ETag', etag);
+        res.set('Cache-Control', 'private, no-cache');
+        res.set('X-Content-Type-Options', 'nosniff');
+        if (req.get('If-None-Match') === etag) {
+            return res.status(304).end();
+        }
+
+        let object;
+        try {
+            object = await getStorage().get(row.background_key);
+        } catch (err) {
+            if (err && (err.code === 'ENOENT' || err.name === 'NoSuchKey')) {
+                return cloudError(res, 404, 'not_found', 'The stored background is missing');
+            }
+            throw err;
+        }
+
+        res.set('Content-Type', background.mime);
+        if (object.size) res.set('Content-Length', String(object.size));
+        object.stream.on('error', (err) => {
+            console.error('[LuxCloud] Background stream failed:', err);
+            res.destroy(err);
+        });
+        return object.stream.pipe(res);
+    } catch (err) {
+        console.error('[LuxCloud] GET /me/background/file failed:', err);
+        return cloudError(res, 500, 'server_error', 'Could not load the background');
+    }
+});
+
+router.put('/me/background', ensureCloudUser, backgroundUploadSingle, async (req, res) => {
+    try {
+        if (!req.file || !req.file.buffer || req.file.buffer.length === 0) {
+            return cloudError(res, 400, 'invalid_request', 'No file received');
+        }
+
+        const format = detectFormat(req.file.buffer);
+        if (!format) {
+            return cloudError(res, 400, 'unsupported_type',
+                'Only PNG, JPEG, GIF, WebP, MP4 and WebM backgrounds are supported');
+        }
+
+        await ensureCloudSettingsRow(req.cloudUserId);
+        const background = await saveBackground(req.cloudUserId, req.file.buffer, format);
+        return res.json({ ok: true, background });
+    } catch (err) {
+        console.error('[LuxCloud] PUT /me/background failed:', err);
+        return cloudError(res, 500, 'server_error', 'Could not save the background');
+    }
+});
+
+router.delete('/me/background', ensureCloudUser, async (req, res) => {
+    try {
+        await ensureCloudSettingsRow(req.cloudUserId);
+        await clearBackground(req.cloudUserId);
+        return res.json({ ok: true, background: null });
+    } catch (err) {
+        console.error('[LuxCloud] DELETE /me/background failed:', err);
+        return cloudError(res, 500, 'server_error', 'Could not remove the background');
     }
 });
 

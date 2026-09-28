@@ -1,8 +1,9 @@
 const pool = require('./database');
+const { clearBackground } = require('./cloudBackground');
 const { removeRefsForRevision } = require('./cloudBlobs');
 
 async function purgeCloudData(userId, executor = pool) {
-    const result = { instances: 0, revisions: 0, blobRefsRemoved: 0, blobsQueued: 0 };
+    const result = { instances: 0, revisions: 0, blobRefsRemoved: 0, blobsQueued: 0, backgroundRemoved: false };
 
     const [instances] = await executor.query(
         'SELECT id FROM cloud_instances WHERE user_id = ?',
@@ -31,6 +32,8 @@ async function purgeCloudData(userId, executor = pool) {
         'UPDATE user_cloud_settings SET used_bytes = 0, updated_at = NOW() WHERE user_id = ?',
         [userId]
     );
+
+    result.backgroundRemoved = await clearBackground(userId, executor);
 
     return result;
 }

@@ -29,10 +29,16 @@ function cleanupOldCodes(pool) {
                 const stats = fs.statSync(filePath);
                 const data = JSON.parse(fs.readFileSync(filePath, 'utf8'));
 
-                // Guests (Website) = 5 days, Accounts (Launcher) = 7 days
+                // Guests (Website) = 5 days, Accounts (Launcher) = 7 days.
+                // Admins can override that per code (fixed date or never, see parseExpiry).
                 const expiry = data.owner_uuid ? SEVEN_DAYS_MS : FIVE_DAYS_MS;
+                const expired = data.expiryMode === 'never'
+                    ? false
+                    : data.expiryMode === 'custom'
+                        ? Number(data.expires) > 0 && now > Number(data.expires)
+                        : now - stats.mtimeMs > expiry;
 
-                if (now - stats.mtimeMs > expiry) {
+                if (expired) {
                     fs.unlinkSync(filePath);
                     if (pool) {
                         try {
@@ -108,11 +114,77 @@ function isValidCode(code) {
     return typeof code === 'string' && CODE_PATTERN.test(code);
 }
 
+function codeFilePath(code) {
+    return path.join(CODES_DIR, `${code}.json`);
+}
+
+// A code with an admin-set expiry date is gone the moment that date passes, not only
+// once the hourly cleanup has run.
+function isExpired(data) {
+    return Boolean(data && data.expiryMode === 'custom' && Number(data.expires) > 0 && Date.now() > Number(data.expires));
+}
+
 function readCodeFile(code) {
     if (!isValidCode(code)) return null;
-    const filePath = path.join(CODES_DIR, `${code}.json`);
+    const filePath = codeFilePath(code);
     if (!fs.existsSync(filePath)) return null;
-    return JSON.parse(fs.readFileSync(filePath, 'utf8'));
+    const data = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+    return isExpired(data) ? null : data;
+}
+
+function writeCodeFile(code, data) {
+    const filePath = codeFilePath(code);
+    const temp = `${filePath}.tmp`;
+    fs.writeFileSync(temp, JSON.stringify(data, null, 2));
+    fs.renameSync(temp, filePath);
+}
+
+const MAX_EXPIRY_DAYS = 365;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+// Only admins may pick how long a code lives: a number of days (1-365) or 'never'.
+// Returns null for "not given", { error } for an invalid value.
+function parseExpiry(value) {
+    if (value === undefined || value === null || value === '') return null;
+    if (value === 'never') return { expiryMode: 'never', expires: null };
+    const days = Number(value);
+    if (!Number.isInteger(days) || days < 1 || days > MAX_EXPIRY_DAYS) {
+        return { error: `Expiry must be 'never' or a whole number of days between 1 and ${MAX_EXPIRY_DAYS}.` };
+    }
+    return { expiryMode: 'custom', expires: Date.now() + days * DAY_MS };
+}
+
+function contentFromBody(body) {
+    const list = (value) => (Array.isArray(value) ? value : []);
+    return {
+        mods: list(body.mods),
+        resourcePacks: list(body.resourcePacks),
+        shaders: list(body.shaders)
+    };
+}
+
+function liveInfo(data) {
+    return {
+        live: Boolean(data.live),
+        revision: Number(data.revision) || 1,
+        updated: data.updated || data.created || null,
+        expiryMode: data.expiryMode || 'default'
+    };
+}
+
+// What a launcher that installed a live code needs to bring itself up to date.
+// No owner data, no options.txt (players keep their own settings after the first import).
+function buildLivePayload(data) {
+    return {
+        code: data.code,
+        name: data.name || 'Exported Modpack',
+        version: data.version || null,
+        loader: data.loader || null,
+        mods: Array.isArray(data.mods) ? data.mods : [],
+        resourcePacks: Array.isArray(data.resourcePacks) ? data.resourcePacks : [],
+        shaders: Array.isArray(data.shaders) ? data.shaders : [],
+        ...liveInfo(data)
+    };
 }
 
 function previewContentItem(item) {
@@ -141,6 +213,9 @@ function buildCodePreview(data) {
         created: data.created || null,
         expires: data.expires || null,
         uses: data.uses || 0,
+        live: Boolean(data.live),
+        revision: Number(data.revision) || 1,
+        updated: data.updated || data.created || null,
         hasSettings: Boolean(data.keybinds),
         mods: (Array.isArray(data.mods) ? data.mods : []).map(previewContentItem),
         resourcePacks: (Array.isArray(data.resourcePacks) ? data.resourcePacks : []).map(previewContentItem),
@@ -158,6 +233,35 @@ function readCodePreview(code) {
 }
 
 const createAdminAuth = require('./middleware/adminAuth');
+const { ensureDeviceAuth } = require('./middleware/deviceAuth');
+
+// Who is calling: the launcher sends its Lux account token (Bearer), the website has its
+// session. Both are optional -- without them a code is created exactly as before.
+function optionalCodeUser(req, res, next) {
+    const header = req.headers.authorization || '';
+    if (header.startsWith('Bearer ')) {
+        return ensureDeviceAuth(req, res, next);
+    }
+    if (typeof req.isAuthenticated === 'function' && req.isAuthenticated() && req.user && !req.user.banned) {
+        req.cloudUser = req.user;
+        req.cloudUserId = req.user.id;
+    }
+    return next();
+}
+
+function isCodeAdmin(req) {
+    return Boolean(req.cloudUser && req.cloudUser.role === 'admin');
+}
+
+function requireCodeAdmin(req, res, next) {
+    if (!req.cloudUser) {
+        return res.status(401).json({ success: false, error: 'Sign in with your Lux account first.' });
+    }
+    if (!isCodeAdmin(req)) {
+        return res.status(403).json({ success: false, error: 'Only admins can manage live codes.' });
+    }
+    return next();
+}
 
 module.exports = function (app, ADMIN_PASSWORD, pool) {
     // Same rules as the rest of the admin surface: never from the query string,
@@ -172,6 +276,14 @@ module.exports = function (app, ADMIN_PASSWORD, pool) {
     async function handleSave(req, res) {
         try {
             const { name, mods, resourcePacks, shaders, instanceVersion, instanceLoader, keybinds, ownerUuid, icon } = req.body;
+            const wantsLive = req.body.live === true;
+            const expiry = parseExpiry(req.body.expiry);
+            if ((wantsLive || expiry) && !isCodeAdmin(req)) {
+                return res.status(403).json({ success: false, error: 'Only admins can create live codes or change how long a code lasts.' });
+            }
+            if (expiry && expiry.error) {
+                return res.status(400).json({ success: false, error: expiry.error });
+            }
             let ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
             if (ip) {
                 // x-forwarded-for can contain multiple comma-separated IPs. We only want the first one (the original client).
@@ -199,6 +311,7 @@ module.exports = function (app, ADMIN_PASSWORD, pool) {
             const expiryDays = ownerUuid ? 7 : 5;
             const safeIcon = await sanitizeIcon(icon);
 
+            const now = Date.now();
             const data = {
                 code,
                 name: name || 'Exported Modpack',
@@ -209,30 +322,125 @@ module.exports = function (app, ADMIN_PASSWORD, pool) {
                 shaders: shaders || [],
                 keybinds: keybinds || null,
                 icon: safeIcon,
-                created: Date.now(),
-                expires: Date.now() + (expiryDays * 24 * 60 * 60 * 1000),
+                created: now,
+                updated: now,
+                expires: expiry ? expiry.expires : now + (expiryDays * DAY_MS),
+                expiryMode: expiry ? expiry.expiryMode : 'default',
+                live: wantsLive,
+                revision: 1,
                 uses: 0,
                 owner_uuid: ownerUuid || null,
+                owner_user_id: req.cloudUser ? req.cloudUser.id : null,
                 owner_ip: ip
             };
 
-            const filePath = path.join(CODES_DIR, `${code}.json`);
-            fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
+            writeCodeFile(code, data);
 
             if (pool) {
                 await pool.query('INSERT INTO modpack_codes (code, owner_uuid, owner_ip) VALUES (?, ?, ?)', [code, ownerUuid || null, ip]);
             }
 
-            console.log(`[CodesSystem] Saved modpack ${code} (${name}) for ${ownerUuid || ip}`);
-            res.json({ success: true, code });
+            console.log(`[CodesSystem] Saved modpack ${code} (${name}) for ${ownerUuid || ip}${wantsLive ? ' [live]' : ''}`);
+            res.json({ success: true, code, ...liveInfo(data), expires: data.expires });
         } catch (error) {
             console.error('[CodesSystem] Save error:', error);
             res.status(500).json({ success: false, error: error.message });
         }
     }
 
-    app.post('/api/codes/save', handleSave);
-    app.post('/api/modpack/save', handleSave);
+    app.post('/api/codes/save', optionalCodeUser, handleSave);
+    app.post('/api/modpack/save', optionalCodeUser, handleSave);
+
+    // Lets the launcher decide whether to show the admin options at all.
+    app.get('/api/modpack/admin/status', optionalCodeUser, (req, res) => {
+        res.json({ success: true, isAdmin: isCodeAdmin(req) });
+    });
+
+    // Replaces what a live code installs. The code itself stays the same, launchers that
+    // installed it pick the new revision up on their next start.
+    app.put('/api/modpack/:code/content', optionalCodeUser, requireCodeAdmin, async (req, res) => {
+        try {
+            const { code } = req.params;
+            const data = readCodeFile(code);
+            if (!data) {
+                return res.status(404).json({ success: false, error: 'Code not found' });
+            }
+            if (!data.live) {
+                return res.status(409).json({ success: false, error: 'This code is not a live code.' });
+            }
+
+            const body = req.body || {};
+            Object.assign(data, contentFromBody(body));
+            if (typeof body.name === 'string' && body.name.trim()) data.name = body.name.trim().slice(0, 100);
+            if (body.instanceVersion) data.version = body.instanceVersion;
+            if (body.instanceLoader) data.loader = body.instanceLoader;
+            if (Object.prototype.hasOwnProperty.call(body, 'keybinds')) data.keybinds = body.keybinds || null;
+            if (body.icon) {
+                const safeIcon = await sanitizeIcon(body.icon);
+                if (safeIcon) data.icon = safeIcon;
+            }
+            data.revision = (Number(data.revision) || 1) + 1;
+            data.updated = Date.now();
+
+            writeCodeFile(code, data);
+            console.log(`[CodesSystem] Live code ${code} updated to revision ${data.revision} by ${req.cloudUser.username || req.cloudUser.id}`);
+            res.json({ success: true, code, ...liveInfo(data), expires: data.expires });
+        } catch (error) {
+            console.error('[CodesSystem] Live update error:', error);
+            res.status(500).json({ success: false, error: 'Failed to update code' });
+        }
+    });
+
+    // Turn live mode on/off and set how long the code lasts ('never' or 1-365 days).
+    app.patch('/api/modpack/:code/settings', optionalCodeUser, requireCodeAdmin, (req, res) => {
+        try {
+            const { code } = req.params;
+            const data = readCodeFile(code);
+            if (!data) {
+                return res.status(404).json({ success: false, error: 'Code not found' });
+            }
+
+            const body = req.body || {};
+            const expiry = parseExpiry(body.expiry);
+            if (expiry && expiry.error) {
+                return res.status(400).json({ success: false, error: expiry.error });
+            }
+            if (expiry) {
+                data.expiryMode = expiry.expiryMode;
+                data.expires = expiry.expires;
+            }
+            if (typeof body.live === 'boolean') {
+                data.live = body.live;
+                data.revision = Number(data.revision) || 1;
+            }
+
+            writeCodeFile(code, data);
+            res.json({ success: true, code, ...liveInfo(data), expires: data.expires });
+        } catch (error) {
+            console.error('[CodesSystem] Settings error:', error);
+            res.status(500).json({ success: false, error: 'Failed to update code' });
+        }
+    });
+
+    // Polled by launchers before starting an instance installed from a live code.
+    // Does not count as a use.
+    app.get('/api/modpack/:code/live', (req, res) => {
+        try {
+            const { code } = req.params;
+            if (!isValidCode(code)) {
+                return res.status(400).json({ success: false, error: 'Invalid code format' });
+            }
+            const data = readCodeFile(code);
+            if (!data) {
+                return res.status(404).json({ success: false, error: 'Code not found' });
+            }
+            res.setHeader('Cache-Control', 'no-store');
+            res.json({ success: true, data: buildLivePayload(data) });
+        } catch (error) {
+            console.error('[CodesSystem] Live check error:', error);
+            res.status(500).json({ success: false, error: 'Failed to load code' });
+        }
+    });
 
     app.get('/api/modpack/my-codes', async (req, res) => {
         try {
@@ -271,7 +479,8 @@ module.exports = function (app, ADMIN_PASSWORD, pool) {
                             created: content.created,
                             expires: content.expires,
                             uses: content.uses || 0,
-                            hasIcon: !!content.icon
+                            hasIcon: !!content.icon,
+                            ...liveInfo(content)
                         });
                     } catch (e) {
                         console.error(`[CodesSystem-Debug] âŒ JSON Parse Error for code ${row.code}:`, e.message);
@@ -342,7 +551,8 @@ module.exports = function (app, ADMIN_PASSWORD, pool) {
                         expires: content.expires,
                         owner_uuid: content.owner_uuid,
                         owner_ip: content.owner_ip,
-                        hasIcon: !!content.icon
+                        hasIcon: !!content.icon,
+                        ...liveInfo(content)
                     };
                 } catch (e) {
                     return null;
@@ -381,14 +591,13 @@ module.exports = function (app, ADMIN_PASSWORD, pool) {
             if (!isValidCode(code)) {
                 return res.status(404).json({ success: false, error: 'Code not found' });
             }
-            const filePath = path.join(CODES_DIR, `${code}.json`);
+            const data = readCodeFile(code);
 
-            if (fs.existsSync(filePath)) {
-                const data = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+            if (data) {
                 data.uses = (data.uses || 0) + 1;
-                fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
+                writeCodeFile(code, data);
 
-                res.json({ success: true, data });
+                res.json({ success: true, data: { ...data, ...liveInfo(data) } });
             } else {
                 res.status(404).json({ success: false, error: 'Code not found' });
             }

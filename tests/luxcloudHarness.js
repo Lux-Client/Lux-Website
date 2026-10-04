@@ -130,6 +130,7 @@ class Harness {
         app.use('/api/cloud', require(path.join(SITE, 'routes', 'cloudSync.js')));
         app.use('/api/cloud', require(path.join(SITE, 'routes', 'cloudShare.js')));
         app.use('/api/admin/cloud', require(path.join(SITE, 'routes', 'adminCloud.js')));
+        if (typeof options.mount === 'function') options.mount(app);
 
         this.server = app.listen(0);
         await new Promise((r) => this.server.once('listening', r));

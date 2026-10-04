@@ -44,7 +44,10 @@ export default function CodesView({ codes, onRefresh, onDelete }) {
             return (
               <Row key={code.code}>
                 <Cell><span className="font-mono text-sm font-black tracking-wider text-primary">{code.code}</span></Cell>
-                <Cell><span className="text-white/80">{code.name || '—'}</span></Cell>
+                <Cell>
+                  <span className="text-white/80">{code.name || '—'}</span>
+                  {code.live && <Badge tone="success" className="ml-2">Live · rev {code.revision || 1}</Badge>}
+                </Cell>
                 <Cell>
                   <span className="text-xs text-white/50">
                     {code.version || '?'} <span className="text-white/20">·</span> {code.loader || '?'}

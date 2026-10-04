@@ -280,8 +280,16 @@ function CodePreviewPage({ code }) {
               </div>
               <div className="mt-6 flex items-center gap-2 text-sm text-gray-400">
                 <Clock className="h-4 w-4 shrink-0" />
-                <span>Created {formatDate(pack.created)} · expires {formatDate(pack.expires)}</span>
+                <span>
+                  Created {formatDate(pack.created)} · {pack.expires ? `expires ${formatDate(pack.expires)}` : 'never expires'}
+                </span>
               </div>
+              {pack.live && (
+                <p className="mt-3 text-sm text-gray-400">
+                  Live modpack: installs from this code update automatically when the pack changes
+                  (last update {formatDate(pack.updated)}).
+                </p>
+              )}
             </aside>
           </div>
         </section>

@@ -124,6 +124,10 @@ on every server.
 - **Mod sign-in** works like a Minecraft server: `POST /api/lux/auth/start` → the mod calls
   Mojang `joinServer` → `POST /api/lux/auth/finish` checks Mojang `hasJoined` and returns a
   30-day token. Nobody can change another player's cosmetics.
+- **Cosmetics & emotes** – the mod also shares its cosmetics (hats, wings, tails, auras …,
+  `cosmetics` in `PUT /api/lux/me/profile`, returned by `/api/lux/players`) and emotes
+  (`POST /api/lux/me/emote`, `GET /api/lux/emotes?uuids=…`, polled about once a second by players
+  nearby; emotes are kept in memory only). Cosmetics are built into the mod, so they need no review.
 - Code: `routes/luxCosmetics.js`, tables in `db_init_lux.js`, test `npm run test:lux`.
 
 ---

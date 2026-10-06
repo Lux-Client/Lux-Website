@@ -82,6 +82,33 @@ async function main() {
         assert.strictEqual(players.body.players[BOB].nameStyle.color, 3);
     });
 
+    await test('cosmetics are shared with other players and checked', async () => {
+        const cosmetics = { head: { id: 'top_hat', color: 0x112233 }, wings: { id: 'angel_wings', rainbow: true }, bogus: { id: 'x' } };
+        const res = await h.request({ method: 'PUT', url: '/api/lux/me/profile', token: bob, body: { cosmetics } });
+        assert.strictEqual(res.status, 200);
+        assert.deepStrictEqual(res.body.cosmetics, { head: { id: 'top_hat', color: 0x112233 }, wings: { id: 'angel_wings', rainbow: true } });
+        const seen = await h.request({ url: `/api/lux/players?uuids=${BOB}`, token: alice });
+        assert.strictEqual(seen.body.players[BOB].cosmetics.head.id, 'top_hat');
+        const bad = await h.request({ method: 'PUT', url: '/api/lux/me/profile', token: bob, body: { cosmetics: { head: { id: '<script>' } } } });
+        assert.strictEqual(bad.status, 200);
+        assert.ok(bad.body.warnings && /cosmetics/.test(bad.body.warnings[0]));
+        assert.strictEqual(bad.body.cosmetics, null, 'invalid cosmetics are not stored');
+    });
+
+    await test('emotes reach the players around you and can be stopped', async () => {
+        const start = await h.request({ method: 'POST', url: '/api/lux/me/emote', token: alice, body: { emote: 'wave' } });
+        assert.strictEqual(start.status, 200);
+        const seen = await h.request({ url: `/api/lux/emotes?uuids=${ALICE},${BOB}` });
+        assert.strictEqual(seen.body.emotes[ALICE].id, 'wave');
+        assert.ok(seen.body.emotes[ALICE].age >= 0);
+        assert.strictEqual(seen.body.emotes[BOB], undefined);
+        await h.request({ method: 'POST', url: '/api/lux/me/emote', token: alice, body: { emote: null } });
+        const after = await h.request({ url: `/api/lux/emotes?uuids=${ALICE}` });
+        assert.deepStrictEqual(after.body.emotes, {});
+        const anon = await h.request({ method: 'POST', url: '/api/lux/me/emote', body: { emote: 'wave' } });
+        assert.strictEqual(anon.status, 401);
+    });
+
     await test('own picture from the game stays hidden until approved', async () => {
         const up = await h.request({ method: 'PUT', url: '/api/lux/me/cape-image', token: alice, body: await png('#ff00ff'), headers: { 'Content-Type': 'image/png' } });
         assert.strictEqual(up.status, 200, JSON.stringify(up.body));
@@ -97,9 +124,26 @@ async function main() {
         assert.strictEqual(owner.status, 200);
     });
 
-    await test('nobody can wear somebody else\'s unreviewed picture', async () => {
+    await test('nobody can wear somebody else\'s unreviewed picture (the rest of the profile still counts)', async () => {
+        const res = await h.request({
+            method: 'PUT', url: '/api/lux/me/profile', token: bob,
+            body: { cape: { type: 'image', hash: ownHash }, cosmetics: { head: { id: 'crown' } } }
+        });
+        assert.strictEqual(res.status, 200);
+        assert.strictEqual(res.body.cape, null);
+        assert.ok(res.body.warnings && /cape/.test(res.body.warnings[0]));
+        assert.strictEqual(res.body.cosmetics.head.id, 'crown');
+    });
+
+    await test('the same picture uploaded by a second player is theirs too', async () => {
+        const up = await h.request({ method: 'PUT', url: '/api/lux/me/cape-image', token: bob, body: await png('#ff00ff'), headers: { 'Content-Type': 'image/png' } });
+        assert.strictEqual(up.body.hash, ownHash);
         const res = await h.request({ method: 'PUT', url: '/api/lux/me/profile', token: bob, body: { cape: { type: 'image', hash: ownHash } } });
-        assert.strictEqual(res.status, 400);
+        assert.strictEqual(res.body.cape.hash, ownHash);
+        assert.strictEqual(res.body.capeReview, 'pending');
+        const seen = await h.request({ url: `/api/lux/players?uuids=${BOB}`, token: alice });
+        assert.strictEqual(seen.body.players[BOB].cape, null, 'still hidden from others until approved');
+        await h.request({ method: 'PUT', url: '/api/lux/me/profile', token: bob, body: { cape: null } });
     });
 
     await test('rejects files that are not PNG', async () => {

@@ -26,6 +26,10 @@ const MAX_CAPES_PER_USER = 20;
 const MAX_PENDING_PER_USER = 5;
 const PAGE_SIZE = 36;
 const CAPE_STYLES = 7; // built-in animated patterns 0..6 in the mod
+const COSMETIC_SLOTS = ['head', 'ears', 'neck', 'shoulder', 'wings', 'tail', 'aura'];
+const ID_RE = /^[a-z0-9_]{1,32}$/;
+/** An emote is forgotten after this long (looping emotes are stopped by the mod). */
+const EMOTE_MS = 10 * 60 * 1000;
 
 const UUID_RE = /^[0-9a-f]{32}$/;
 const HASH_RE = /^[0-9a-f]{64}$/;
@@ -84,6 +88,8 @@ function createLuxRouter(options = {}) {
     const challenges = new Map();
     /** link code -> { uuid, expires } */
     const linkCodes = new Map();
+    /** uuid -> { id, started } - emotes only live in memory, they are over in seconds */
+    const emotes = new Map();
 
     const router = express.Router();
     const rawPng = express.raw({ type: () => true, limit: MAX_IMAGE_BYTES });
@@ -188,6 +194,12 @@ function createLuxRouter(options = {}) {
         return row;
     }
 
+    async function uploadedBy(hash, uuid) {
+        if (!uuid) return false;
+        const [rows] = await pool.query('SELECT hash FROM lux_image_uploads WHERE hash = ? AND uuid = ?', [hash, uuid]);
+        return rows.length > 0;
+    }
+
     async function approvedHashes(hashes) {
         const list = [...new Set(hashes.filter((h) => HASH_RE.test(h)))];
         if (list.length === 0) return new Set();
@@ -232,7 +244,7 @@ function createLuxRouter(options = {}) {
                 const img = await imageRow(c.hash);
                 if (!img) throw new HttpError(400, 'Picture not found - upload it first.');
                 // Your own picture or an approved one; nobody can wear someone else's unreviewed upload.
-                if (img.status !== 'approved' && img.owner_uuid !== player.uuid) {
+                if (img.status !== 'approved' && img.owner_uuid !== player.uuid && !(await uploadedBy(img.hash, player.uuid))) {
                     throw new HttpError(400, 'This picture has not been approved yet.');
                 }
                 return c.market ? { type: 'image', hash: c.hash, market: Number(c.market) || undefined } : { type: 'image', hash: c.hash };
@@ -264,6 +276,25 @@ function createLuxRouter(options = {}) {
         };
     }
 
+    /** Hats, wings, tails ...: one cosmetic per slot, ids are checked by the mod itself. */
+    function cleanCosmetics(c) {
+        if (c === null || c === undefined) return null;
+        if (typeof c !== 'object' || Array.isArray(c)) throw new HttpError(400, 'Invalid cosmetics.');
+        const out = {};
+        for (const slot of COSMETIC_SLOTS) {
+            const e = c[slot];
+            if (e === undefined || e === null) continue;
+            if (typeof e !== 'object' || typeof e.id !== 'string' || !ID_RE.test(e.id)) {
+                throw new HttpError(400, 'Invalid cosmetic.');
+            }
+            const clean = { id: e.id };
+            if (isInt(e.color, 0, 0xffffff)) clean.color = e.color;
+            if (e.rainbow === true) clean.rainbow = true;
+            out[slot] = clean;
+        }
+        return out;
+    }
+
     /** The mod's own view: includes the review state of its own picture. */
     async function ownProfile(uuid) {
         const [rows] = await pool.query(
@@ -277,7 +308,10 @@ function createLuxRouter(options = {}) {
             const img = await imageRow(cape.hash);
             capeReview = img ? img.status : 'pending';
         }
-        return { uuid: p.uuid, name: p.name, cape, nameStyle: parse(p.name_style), capeReview, linked: p.linked || null };
+        return {
+            uuid: p.uuid, name: p.name, cape, nameStyle: parse(p.name_style),
+            cosmetics: parse(p.cosmetics), capeReview, linked: p.linked || null
+        };
     }
 
     function listing(row) {
@@ -336,20 +370,29 @@ function createLuxRouter(options = {}) {
         const body = req.body || {};
         const fields = [];
         const values = [];
-        if ('cape' in body) {
-            const cape = await cleanCape(body.cape, p);
-            fields.push('cape = ?');
-            values.push(cape ? JSON.stringify(cape) : null);
-        }
-        if ('nameStyle' in body) {
-            const ns = cleanNameStyle(body.nameStyle);
-            fields.push('name_style = ?');
-            values.push(ns ? JSON.stringify(ns) : null);
-        }
+        const warnings = [];
+        // One bad part (e.g. a cape picture that was rejected) must not throw away the rest.
+        const take = async (key, column, clean) => {
+            if (!(key in body)) return;
+            let value = null;
+            try {
+                value = await clean(body[key]);
+            } catch (err) {
+                if (!(err instanceof HttpError)) throw err;
+                warnings.push(`${key}: ${err.message}`);
+            }
+            fields.push(`${column} = ?`);
+            values.push(value ? JSON.stringify(value) : null);
+        };
+        await take('cape', 'cape', (c) => cleanCape(c, p));
+        await take('nameStyle', 'name_style', cleanNameStyle);
+        await take('cosmetics', 'cosmetics', cleanCosmetics);
         fields.push('last_seen = ?');
         values.push(now());
         await pool.query(`UPDATE lux_players SET ${fields.join(', ')} WHERE uuid = ?`, [...values, p.uuid]);
-        res.json(await ownProfile(p.uuid));
+        const profile = await ownProfile(p.uuid);
+        if (warnings.length) profile.warnings = warnings;
+        res.json(profile);
     }));
 
     router.post('/me/ping', wrap(async (req, res) => {
@@ -362,6 +405,10 @@ function createLuxRouter(options = {}) {
     router.put('/me/cape-image', uploadLimiter, rawPng, wrap(async (req, res) => {
         const p = await requireMod(req);
         const img = await storeImage(req.body, { ownerUuid: p.uuid, ownerUserId: p.user_id || null });
+        await pool.query(
+            'INSERT INTO lux_image_uploads (hash, uuid) VALUES (?, ?) ON CONFLICT (hash, uuid) DO NOTHING RETURNING hash',
+            [img.hash, p.uuid]
+        );
         res.json({ hash: img.hash, width: img.width, height: img.height, status: img.status });
     }));
 
@@ -384,18 +431,48 @@ function createLuxRouter(options = {}) {
         const out = {};
         if (uuids.length) {
             const [rows] = await pool.query(
-                `SELECT uuid, name, cape, name_style FROM lux_players WHERE last_seen > ? AND uuid IN (${uuids.map(() => '?').join(',')})`,
+                `SELECT uuid, name, cape, name_style, cosmetics FROM lux_players WHERE last_seen > ? AND uuid IN (${uuids.map(() => '?').join(',')})`,
                 [now() - ONLINE_MS, ...uuids]
             );
             const capes = rows.map((r) => parse(r.cape));
             const approved = await approvedHashes(capes.filter((c) => c && c.type === 'image').map((c) => c.hash));
             rows.forEach((r, i) => {
-                out[r.uuid] = { name: r.name, cape: publicCape(capes[i], approved), nameStyle: parse(r.name_style) };
+                out[r.uuid] = {
+                    name: r.name,
+                    cape: publicCape(capes[i], approved),
+                    nameStyle: parse(r.name_style),
+                    cosmetics: parse(r.cosmetics)
+                };
             });
         }
         res.set('Cache-Control', 'max-age=20');
         res.json({ players: out });
     }));
+
+    // Emotes: start/stop your own, ask for the players around you (polled about once a second).
+    router.post('/me/emote', writeLimiter, wrap(async (req, res) => {
+        const p = await requireMod(req);
+        const id = req.body && req.body.emote;
+        if (id === null || id === undefined) {
+            emotes.delete(p.uuid);
+        } else if (typeof id === 'string' && ID_RE.test(id)) {
+            emotes.set(p.uuid, { id, started: now() });
+        } else {
+            throw new HttpError(400, 'Invalid emote.');
+        }
+        res.json({ ok: true });
+    }));
+
+    router.get('/emotes', (req, res) => {
+        const t = now();
+        const out = {};
+        for (const u of String(req.query.uuids || '').split(',').map(cleanUuid).filter((u) => UUID_RE.test(u)).slice(0, 200)) {
+            const e = emotes.get(u);
+            if (e && t - e.started < EMOTE_MS) out[u] = { id: e.id, age: t - e.started };
+        }
+        res.set('Cache-Control', 'no-store');
+        res.json({ emotes: out });
+    });
 
     // Pictures: approved ones for everybody, others only for the uploader and admins.
     router.get('/images/:file', wrap(async (req, res) => {
@@ -413,7 +490,7 @@ function createLuxRouter(options = {}) {
             }
             if (!allowed) {
                 const p = await modPlayer(req);
-                allowed = p && p.uuid === img.owner_uuid;
+                allowed = p && (p.uuid === img.owner_uuid || (await uploadedBy(img.hash, p.uuid)));
             }
             if (!allowed) throw new HttpError(404, 'Not found.');
             res.set('Cache-Control', 'private, no-store');
@@ -668,6 +745,7 @@ function createLuxRouter(options = {}) {
         const t = now();
         for (const [k, v] of challenges) if (v.expires < t) challenges.delete(k);
         for (const [k, v] of linkCodes) if (v.expires < t) linkCodes.delete(k);
+        for (const [k, v] of emotes) if (t - v.started > EMOTE_MS) emotes.delete(k);
         try {
             await pool.query('DELETE FROM lux_tokens WHERE expires < ?', [t]);
         } catch {

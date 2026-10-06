@@ -16,6 +16,7 @@ async function createLuxTables(connection) {
         )
     `);
     await connection.query('CREATE INDEX IF NOT EXISTS idx_lux_players_user_id ON lux_players(user_id)');
+    await connection.query('ALTER TABLE lux_players ADD COLUMN IF NOT EXISTS cosmetics TEXT');
 
     // Mod sessions. Only the sha256 of the token is stored.
     await connection.query(`
@@ -43,6 +44,14 @@ async function createLuxTables(connection) {
         )
     `);
     await connection.query('CREATE INDEX IF NOT EXISTS idx_lux_cape_images_status ON lux_cape_images(status)');
+    // Everybody who uploaded a picture (the same picture can come from several players).
+    await connection.query(`
+        CREATE TABLE IF NOT EXISTS lux_image_uploads (
+            hash VARCHAR(64) NOT NULL,
+            uuid VARCHAR(32) NOT NULL,
+            PRIMARY KEY (hash, uuid)
+        )
+    `);
 
     // Marketplace listings (uploaded on the website with a website account).
     await connection.query(`

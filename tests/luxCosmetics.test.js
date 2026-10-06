@@ -359,6 +359,37 @@ async function main() {
         h.setSessionUser(null);
     });
 
+    await test('admin prices: change, take off sale, reset - shop and /live see it at once', async () => {
+        h.setSessionUser(uploader);
+        const denied = await h.request({ method: 'PUT', url: '/api/lux/admin/prices', body: { item: 'emote:dance', price: 1 } });
+        assert.strictEqual(denied.status, 403);
+        h.setSessionUser(admin);
+        const list = await h.request({ url: '/api/lux/admin/prices' });
+        assert.strictEqual(list.status, 200);
+        const dance = list.body.items.find((i) => i.item === 'emote:dance');
+        assert.ok(dance && dance.name && dance.category === 'Emotes');
+        const before = await h.request({ method: 'POST', url: '/api/lux/live', token: alice, body: { uuids: [ALICE] } });
+        const set = await h.request({ method: 'PUT', url: '/api/lux/admin/prices', body: { item: 'emote:dance', price: 7 } });
+        assert.strictEqual(set.status, 200, JSON.stringify(set.body));
+        const after = await h.request({ method: 'POST', url: '/api/lux/live', token: alice, body: { uuids: [ALICE] } });
+        assert.ok(after.body.shop > before.body.shop, 'price version goes up');
+        const shopRes = await h.request({ url: '/api/lux/shop', token: alice });
+        assert.strictEqual(shopRes.body.prices['emote:dance'], 7);
+        const free = await h.request({ method: 'PUT', url: '/api/lux/admin/prices', body: { item: 'emote:clap', price: 0 } });
+        assert.strictEqual(free.status, 200);
+        const emoteOk = await h.request({ method: 'POST', url: '/api/lux/me/emote', token: alice, body: { emote: 'clap' } });
+        assert.strictEqual(emoteOk.status, 200, 'price 0 = free for everybody');
+        await h.request({ method: 'PUT', url: '/api/lux/admin/prices', body: { item: 'emote:dance', forSale: false } });
+        const off = await h.request({ method: 'POST', url: '/api/lux/shop/buy', token: alice, body: { item: 'emote:dance' } });
+        assert.strictEqual(off.status, 404, 'not for sale');
+        await h.request({ method: 'PUT', url: '/api/lux/admin/prices', body: { item: 'emote:dance', price: null } });
+        const reset = await h.request({ url: '/api/lux/shop', token: alice });
+        assert.strictEqual(reset.body.prices['emote:dance'], 3000, 'back to the default');
+        const bad = await h.request({ method: 'PUT', url: '/api/lux/admin/prices', body: { item: 'emote:dance', price: -5 } });
+        assert.strictEqual(bad.status, 400);
+        h.setSessionUser(null);
+    });
+
     h.stop();
     if (failures) {
         console.error(`\n${failures} test(s) failed`);

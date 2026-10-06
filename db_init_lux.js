@@ -47,6 +47,16 @@ async function createLuxTables(connection) {
     `);
     await connection.query('CREATE INDEX IF NOT EXISTS idx_lux_credit_log_uuid ON lux_credit_log(uuid)');
 
+    // Shop prices set in the admin panel (override luxShop.js). price NULL = default, -1 = not for sale.
+    await connection.query(`
+        CREATE TABLE IF NOT EXISTS lux_prices (
+            item VARCHAR(48) PRIMARY KEY,
+            price INTEGER,
+            updated_at BIGINT NOT NULL DEFAULT 0,
+            updated_by VARCHAR(100)
+        )
+    `);
+
     // Mod sessions. Only the sha256 of the token is stored.
     await connection.query(`
         CREATE TABLE IF NOT EXISTS lux_tokens (

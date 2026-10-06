@@ -27,7 +27,7 @@ const MAX_CAPES_PER_USER = 20;
 const MAX_PENDING_PER_USER = 5;
 const PAGE_SIZE = 36;
 const CAPE_STYLES = 7; // built-in animated patterns 0..6 in the mod
-const COSMETIC_SLOTS = ['head', 'ears', 'face', 'neck', 'shoulder', 'back', 'wings', 'tail', 'aura'];
+const COSMETIC_SLOTS = ['head', 'ears', 'face', 'neck', 'shoulder', 'head_pet', 'back', 'wings', 'tail', 'aura'];
 /** Custom second line under the name. */
 const LINE_MAX = 32;
 const ID_RE = /^[a-z0-9_]{1,32}$/;
@@ -115,6 +115,27 @@ function createLuxRouter(options = {}) {
         if (rev !== undefined && rev !== null) e.rev = Number(rev);
         live.set(uuid, e);
         missing.delete(uuid);
+    }
+
+    /** Something others see changed outside of the mod (website, admin): raise rev so clients reload right away. */
+    async function bumpRev(uuids) {
+        const list = [...new Set(uuids.filter(Boolean))];
+        if (list.length === 0) return;
+        const t = now();
+        for (const u of list) {
+            const [rows] = await pool.query('SELECT rev FROM lux_players WHERE uuid = ?', [u]);
+            if (!rows[0]) continue;
+            const rev = Math.max(t, Number(rows[0].rev || 0) + 1);
+            await pool.query('UPDATE lux_players SET rev = ? WHERE uuid = ?', [rev, u]);
+            const e = live.get(u);
+            if (e) e.rev = rev;
+        }
+    }
+
+    /** Everybody wearing this picture (approval / rejection changes what others see). */
+    async function bumpWearers(hash) {
+        const [rows] = await pool.query('SELECT uuid FROM lux_players WHERE cape LIKE ?', [`%${hash}%`]);
+        await bumpRev(rows.map((r) => r.uuid));
     }
 
     const router = express.Router();
@@ -258,7 +279,51 @@ function createLuxRouter(options = {}) {
         return new Set(rows.map((r) => r.item));
     }
 
-    const owns = (owned, item) => shop.isFree(item) || owned.has(item);
+    // ------------------------------------------------------------------ prices
+    /* Prices: luxShop.js holds the defaults, admins override them in the panel (lux_prices).
+       Kept in memory and re-read every few seconds; "version" goes up with every change, the
+       mod sees it in /live and reloads the shop right away. */
+    const prices = { overrides: new Map(), version: 0, loadedAt: 0, loading: null };
+    async function loadPrices(force) {
+        if (!force && now() - prices.loadedAt < 10000) return;
+        if (prices.loading) return prices.loading;
+        prices.loading = (async () => {
+            try {
+                const [rows] = await pool.query('SELECT item, price, updated_at FROM lux_prices');
+                const map = new Map();
+                let version = 0;
+                for (const r of rows) {
+                    version = Math.max(version, Number(r.updated_at || 0));
+                    if (r.price !== null && r.price !== undefined) map.set(r.item, Number(r.price));
+                }
+                prices.overrides = map;
+                prices.version = version;
+                prices.loadedAt = now();
+            } finally {
+                prices.loading = null;
+            }
+        })();
+        return prices.loading;
+    }
+    /** Current price of an item, or null if it is not for sale. */
+    function priceOf(item) {
+        if (prices.overrides.has(item)) {
+            const v = prices.overrides.get(item);
+            return v < 0 ? null : v;
+        }
+        return shop.price(item);
+    }
+    /** Everything for sale with its current price. */
+    function priceList() {
+        const out = {};
+        const items = new Set([...Object.keys(shop.PRICES), ...prices.overrides.keys()]);
+        for (const item of items) {
+            const v = priceOf(item);
+            if (v !== null) out[item] = v;
+        }
+        return out;
+    }
+    const owns = (owned, item) => priceOf(item) === 0 || owned.has(item);
 
     function cleanLine(text) {
         if (typeof text !== 'string') return '';
@@ -330,8 +395,27 @@ function createLuxRouter(options = {}) {
         }
         const line = cleanLine(s.line);
         if (line) {
-            if (owns(owned, 'name:line')) out.line = line;
-            else warnings.push('nameStyle: the second line is not unlocked');
+            if (owns(owned, 'name:line')) {
+                out.line = line;
+                // colour / animation / bold of the second line (items line:*)
+                const ls = s.lineStyle;
+                if (ls && typeof ls === 'object' && isInt(ls.color, 0, 7) && isInt(ls.animation, 0, 4)) {
+                    const o = {
+                        color: owns(owned, `line:color:${ls.color}`) ? ls.color : 0,
+                        c1: isInt(ls.c1, 0, 0xffffff) ? ls.c1 : 0xffaa00,
+                        c2: isInt(ls.c2, 0, 0xffffff) ? ls.c2 : 0xff55ff,
+                        speed: isInt(ls.speed, 10, 400) ? ls.speed : 100,
+                        animation: owns(owned, `line:anim:${ls.animation}`) ? ls.animation : 0,
+                        bold: ls.bold === true && owns(owned, 'line:bold'),
+                    };
+                    if (o.color !== ls.color || o.animation !== ls.animation || o.bold !== (ls.bold === true)) {
+                        warnings.push('nameStyle: part of the second line style is not unlocked');
+                    }
+                    if (o.color || o.animation || o.bold) out.lineStyle = o;
+                }
+            } else {
+                warnings.push('nameStyle: the second line is not unlocked');
+            }
         }
         return out;
     }
@@ -434,6 +518,7 @@ function createLuxRouter(options = {}) {
 
     router.put('/me/profile', writeLimiter, wrap(async (req, res) => {
         const p = await requireMod(req);
+        await loadPrices();
         const body = req.body || {};
         const fields = [];
         const values = [];
@@ -599,15 +684,18 @@ function createLuxRouter(options = {}) {
             if (em && t - em.started < EMOTE_MS) o.emote = { id: em.id, age: t - em.started, partner: em.partner || null };
             out[u] = o;
         }
+        await loadPrices();
         res.set('Cache-Control', 'no-store');
-        res.json({ players: out, now: t });
+        res.json({ players: out, now: t, shop: prices.version });
     }));
 
     // ------------------------------------------------------------------ mod: Lux Credits shop
 
     router.get('/shop', wrap(async (req, res) => {
         const p = await requireMod(req);
-        res.json({ credits: Number(p.credits || 0), prices: shop.PRICES, owned: [...(await ownedSet(p.uuid))] });
+        await loadPrices();
+        res.set('Cache-Control', 'no-store');
+        res.json({ credits: Number(p.credits || 0), prices: priceList(), version: prices.version, owned: [...(await ownedSet(p.uuid))] });
     }));
 
     async function logCredits(uuid, delta, balance, reason, actor) {
@@ -620,7 +708,8 @@ function createLuxRouter(options = {}) {
     router.post('/shop/buy', writeLimiter, wrap(async (req, res) => {
         const p = await requireMod(req);
         const item = String((req.body && req.body.item) || '');
-        const pr = shop.ITEM_RE.test(item) ? shop.price(item) : null;
+        await loadPrices();
+        const pr = shop.ITEM_RE.test(item) ? priceOf(item) : null;
         if (pr === null) throw new HttpError(404, 'This is not for sale.');
         const owned = await ownedSet(p.uuid);
         if (owns(owned, item)) throw new HttpError(400, 'You already own this.');
@@ -787,10 +876,12 @@ function createLuxRouter(options = {}) {
         if (targets.length === 0) {
             throw new HttpError(400, 'Link your Minecraft account first: in the game, Lux Account module -> "Link website account".');
         }
-        const value = JSON.stringify({ type: 'image', hash: cape.image_hash, market: cape.id });
+        // "at": the mod switches to this cape by itself when it sees a newer website choice.
+        const value = JSON.stringify({ type: 'image', hash: cape.image_hash, market: cape.id, at: now() });
         for (const p of targets) {
             await pool.query('UPDATE lux_players SET cape = ? WHERE uuid = ?', [value, p.uuid]);
         }
+        await bumpRev(targets.map((p) => p.uuid));
         await pool.query('UPDATE lux_capes SET uses = uses + 1 WHERE id = ?', [cape.id]);
         res.json({ ok: true, players: targets.length });
     }));
@@ -853,6 +944,7 @@ function createLuxRouter(options = {}) {
             'UPDATE lux_cape_images SET status = ?, reject_reason = ?, reviewed_by = ?, reviewed_at = ? WHERE hash = ?',
             [status, status === 'rejected' ? reason : null, admin.id, now(), hash]
         );
+        await bumpWearers(hash);
     }
 
     router.post('/admin/capes/:id/:action', wrap(async (req, res) => {
@@ -984,7 +1076,47 @@ function createLuxRouter(options = {}) {
 
     router.get('/admin/shop', wrap(async (req, res) => {
         requireAdmin(req);
-        res.json({ prices: shop.PRICES });
+        await loadPrices(true);
+        res.json({ prices: priceList() });
+    }));
+
+    // Every item with its default and current price (admin -> Lux Shop).
+    router.get('/admin/prices', wrap(async (req, res) => {
+        requireAdmin(req);
+        await loadPrices(true);
+        const items = [...new Set([...Object.keys(shop.PRICES), ...prices.overrides.keys()])].map((item) => ({
+            item,
+            name: shop.itemName(item),
+            category: shop.category(item),
+            default: shop.price(item),
+            price: priceOf(item),
+            overridden: prices.overrides.has(item),
+        }));
+        res.json({ items, version: prices.version });
+    }));
+
+    // Set a price (number >= 0), take it off sale (forSale: false) or reset to the default (price: null).
+    router.put('/admin/prices', wrap(async (req, res) => {
+        const admin = requireAdmin(req);
+        const body = req.body || {};
+        const item = String(body.item || '');
+        if (!shop.ITEM_RE.test(item) || (shop.price(item) === null && !prices.overrides.has(item))) {
+            throw new HttpError(400, 'Unknown item.');
+        }
+        let value;
+        if (body.forSale === false) value = -1;
+        else if (body.price === null || body.price === undefined) value = null;
+        else if (isInt(body.price, 0, 1000000)) value = body.price;
+        else throw new HttpError(400, 'Price must be a whole number from 0 to 1,000,000.');
+        const t = Math.max(now(), prices.version + 1);
+        await pool.query(
+            `INSERT INTO lux_prices (item, price, updated_at, updated_by) VALUES (?, ?, ?, ?)
+             ON CONFLICT (item) DO UPDATE SET price = EXCLUDED.price, updated_at = EXCLUDED.updated_at, updated_by = EXCLUDED.updated_by RETURNING item`,
+            [item, value, t, admin.username || String(admin.id)]
+        );
+        await loadPrices(true);
+        await audit(admin, 'lux_price.set', 'lux_price', item, value === null ? 'default' : value < 0 ? 'not for sale' : String(value));
+        res.json({ success: true, item, price: priceOf(item), version: prices.version });
     }));
 
     router.post('/admin/players/:uuid/credits', wrap(async (req, res) => {
@@ -992,6 +1124,8 @@ function createLuxRouter(options = {}) {
         const delta = Number(req.body && req.body.delta);
         if (!Number.isInteger(delta) || delta === 0 || Math.abs(delta) > 10000000) throw new HttpError(400, 'Invalid amount.');
         const credits = await addCredits(cleanUuid(req.params.uuid), delta, req.body.reason, admin);
+        // the mod sees its own rev change and reloads shop + profile right away
+        await bumpRev([cleanUuid(req.params.uuid)]);
         res.json({ success: true, credits });
     }));
 
@@ -999,13 +1133,14 @@ function createLuxRouter(options = {}) {
         const admin = requireAdmin(req);
         const uuid = cleanUuid(req.params.uuid);
         const item = String((req.body && req.body.item) || '');
-        if (!shop.ITEM_RE.test(item) || shop.price(item) === null) throw new HttpError(400, 'Unknown item.');
+        if (!shop.ITEM_RE.test(item) || (shop.price(item) === null && !prices.overrides.has(item))) throw new HttpError(400, 'Unknown item.');
         if (!(await playerRow(uuid))) throw new HttpError(404, 'Not found.');
         await pool.query(
             'INSERT INTO lux_owned (uuid, item, price, source, acquired_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT (uuid, item) DO NOTHING RETURNING uuid',
             [uuid, item, 0, 'admin', now()]
         );
         await audit(admin, 'lux_item.grant', 'lux_player', uuid, item);
+        await bumpRev([uuid]);
         res.json({ success: true });
     }));
 
@@ -1016,6 +1151,7 @@ function createLuxRouter(options = {}) {
         await pool.query('DELETE FROM lux_owned WHERE uuid = ? AND item = ?', [uuid, item]);
         await restrip(uuid);
         await audit(admin, 'lux_item.revoke', 'lux_player', uuid, item);
+        await bumpRev([uuid]);
         res.json({ success: true });
     }));
 
@@ -1025,7 +1161,7 @@ function createLuxRouter(options = {}) {
         const p = await playerRow(uuid);
         if (!p) throw new HttpError(404, 'Not found.');
         const ns = parse(p.name_style);
-        if (ns) delete ns.line;
+        if (ns) { delete ns.line; delete ns.lineStyle; }
         const rev = Math.max(now(), Number(p.rev || 0) + 1);
         await pool.query('UPDATE lux_players SET name_style = ?, rev = ? WHERE uuid = ?', [ns ? JSON.stringify(ns) : null, rev, uuid]);
         if (live.has(uuid)) live.get(uuid).rev = rev;
@@ -1052,6 +1188,7 @@ function createLuxRouter(options = {}) {
         if (!Number.isInteger(amount) || amount <= 0 || amount > 10000000) throw new HttpError(400, 'Invalid amount.');
         const p = await findPlayer(req.body.name);
         const credits = await addCredits(p.uuid, amount, req.body.reason || 'Giveaway', admin);
+        await bumpRev([p.uuid]);
         res.json({ success: true, name: p.name, uuid: p.uuid, credits });
     }));
 

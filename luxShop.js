@@ -7,7 +7,12 @@
      name:anim:<n>   name animation n (1..4, 0 = none is free)
      name:bold       bold name
      name:line       custom second line under the name
+     line:color:<n>  colour mode n for the second line (like name:color)
+     line:anim:<n>   animation n for the second line
+     line:bold       bold second line
 
+   These are the DEFAULT prices: admins change prices in the admin panel (Lux Shop tab,
+   table lux_prices) and every mod picks the change up within seconds.
    Price 0 = free for everybody. Credits are only handed out by admins (giveaways),
    they cannot be bought. Ids the mod knows but this list does not are not for sale. */
 
@@ -26,6 +31,10 @@ const PRICES = {
     'name:anim:4': 500,   // shake
     'name:bold': 100,
     'name:line': 2500,
+    'line:color:1': 100, 'line:color:2': 200, 'line:color:3': 300, 'line:color:4': 200,
+    'line:color:5': 300, 'line:color:6': 400, 'line:color:7': 400,
+    'line:anim:1': 200, 'line:anim:2': 300, 'line:anim:3': 200, 'line:anim:4': 500,
+    'line:bold': 100,
 
     // ---------------------------------------------------------------- emotes
     'emote:wave': 0,
@@ -40,6 +49,8 @@ const PRICES = {
     'emote:air_drums': 3000,
     'emote:high_five': 2500, 'emote:fist_bump': 2500, 'emote:handshake': 2500, 'emote:hug': 2500,
     'emote:partner_dance': 5000,
+    // premium emotes (props, sounds)
+    'emote:six_seven': 3000, 'emote:l_dance': 4000, 'emote:web_hang': 5000, 'emote:cat_cuddle': 5000,
 
     // ---------------------------------------------------------------- cosmetics: head
     'cosmetic:cap': 0,
@@ -70,6 +81,8 @@ const PRICES = {
     'cosmetic:bat_wings': 2000, 'cosmetic:butterfly_wings': 2500, 'cosmetic:fairy_wings': 2500,
     'cosmetic:angel_wings': 3000, 'cosmetic:dragon_wings': 3500, 'cosmetic:demon_wings': 3500,
     'cosmetic:phoenix_wings': 4000,
+    'cosmetic:big_fairy_wings': 5000, 'cosmetic:gothic_moth_wings': 6000, 'cosmetic:crystal_wings': 6000,
+    'cosmetic:spirit_flame_wings': 6500,
     // tails
     'cosmetic:bunny_tail': 500, 'cosmetic:cat_tail': 800, 'cosmetic:wolf_tail': 800,
     'cosmetic:devil_tail': 900, 'cosmetic:fox_tail': 1000, 'cosmetic:dragon_tail': 1500,
@@ -77,10 +90,15 @@ const PRICES = {
     'cosmetic:aura_snow': 1500, 'cosmetic:aura_hearts': 1500, 'cosmetic:aura_bubbles': 1500,
     'cosmetic:aura_stars': 2000, 'cosmetic:aura_music': 2000, 'cosmetic:aura_cherry': 2000,
     'cosmetic:aura_fire': 2500, 'cosmetic:aura_magic': 2500, 'cosmetic:aura_souls': 2500,
-    'cosmetic:aura_lightning': 3000, 'cosmetic:aura_rainbow': 3000
+    'cosmetic:aura_lightning': 3000, 'cosmetic:aura_rainbow': 3000,
+    'cosmetic:aura_leaves': 3500, 'cosmetic:aura_style_stars': 3500, 'cosmetic:aura_ender': 4000,
+    'cosmetic:aura_lightning_energy': 4000,
+    // pets on the head
+    'cosmetic:head_frog': 2500, 'cosmetic:head_cat': 3000, 'cosmetic:raccoon': 3000, 'cosmetic:baby_bear': 3000
 };
 
-const ITEM_RE = /^(cosmetic|emote):[a-z0-9_]{1,32}$|^name:(color:[1-7]|anim:[1-4]|bold|line)$/;
+const ITEM_RE = /^(cosmetic|emote):[a-z0-9_]{1,32}$|^name:(color:[1-7]|anim:[1-4]|bold|line)$|^line:(color:[1-7]|anim:[1-4]|bold)$/;
+const NAMES = require('./luxShopNames');
 
 /** Price of an item, or null if it is not for sale. */
 function price(item) {
@@ -91,4 +109,18 @@ function isFree(item) {
     return price(item) === 0;
 }
 
-module.exports = { PRICES, ITEM_RE, price, isFree };
+/** Readable name for the admin panel. */
+function itemName(item) {
+    return (NAMES[item] && NAMES[item].name) || item;
+}
+
+/** Group for the admin panel (Head, Wings, Emotes, Name style ...). */
+function category(item) {
+    if (NAMES[item]) return NAMES[item].category;
+    if (item.startsWith('emote:')) return 'Emotes';
+    if (item.startsWith('name:')) return 'Name style';
+    if (item.startsWith('line:')) return 'Second line';
+    return 'Other';
+}
+
+module.exports = { PRICES, ITEM_RE, price, isFree, itemName, category };

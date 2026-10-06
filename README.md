@@ -136,15 +136,21 @@ on every server.
   the same emote with `partner` set, then both play the action together. Joining someone is free,
   even without owning the emote.
 - **Lux Credits (shop)** – cosmetics, emotes and name style features (colors, animations, bold,
-  the custom second line under the name) cost Lux Credits; a few items are free. Prices live in
-  `luxShop.js`. The mod reads `GET /api/lux/shop` (balance, prices, owned items) and buys with
+  the custom second line under the name and its own colors/animations) cost Lux Credits; a few
+  items are free. Default prices live in `luxShop.js` (names for the admin panel in the generated
+  `luxShopNames.js`); admins change prices under **Admin → Community → Lux Shop** (table
+  `lux_prices`). `/live` carries a price version, so every mod reloads the shop within seconds. The mod reads `GET /api/lux/shop` (balance, prices, owned items) and buys with
   `POST /api/lux/shop/buy {item}`. The server only shares what a player owns: unowned items are
   stripped from the profile on save. **Credits cannot be bought** – they are only handed out
   (giveaways) by admins.
 - **Admin → Community → Lux Credits** – give credits quickly (Minecraft name + amount), or look a
   player up by Minecraft name: balance, add/remove credits, credit history, unlocked items
   (grant/revoke), and reset the second line or take off all cosmetics. Every action is in the
-  audit log. API: `/api/lux/admin/players…`, `/api/lux/admin/credits/give`.
+  audit log. API: `/api/lux/admin/players…`, `/api/lux/admin/credits/give`. Every admin change
+  raises the player's revision, so their game picks it up right away.
+- **Capes from the website** – "Wear this cape" stores the cape with a timestamp and raises the
+  player's revision: the mod switches to "From the marketplace" by itself and everybody sees the
+  new cape within seconds. Approving or rejecting a picture also refreshes everybody wearing it.
 - Code: `routes/luxCosmetics.js`, tables in `db_init_lux.js`, test `npm run test:lux`.
 
 ---

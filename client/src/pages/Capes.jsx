@@ -203,7 +203,7 @@ export default function Capes() {
     setNotice(null)
     try {
       await api(`/api/lux/capes/${item.id}/use`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
-      setNotice({ kind: 'ok', text: `You are now wearing “${item.title}”. In the game, choose the cape style “From the marketplace (website)”.` })
+      setNotice({ kind: 'ok', text: `You are now wearing “${item.title}”. The game switches to it by itself within a few seconds (Lux Client 1.9 or newer) – everybody with Lux sees it right away.` })
       loadAccount()
     } catch (err) {
       setNotice({ kind: 'error', text: err.message })

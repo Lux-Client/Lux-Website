@@ -135,6 +135,10 @@ on every server.
   the emote and waits; players nearby see "X wants a high five – press G to join". Joining sends
   the same emote with `partner` set, then both play the action together. Joining someone is free,
   even without owning the emote.
+- **Cosmetic slots** – a player wears one item per slot: head, bandana, ears, face, neck, shoulder
+  pet, head pet, companion (an animal that walks next to the player), back, wings, tail, aura, ring
+  and shield (replaces the shield in the hand). The server only accepts these slot names
+  (`COSMETIC_SLOTS` in `routes/luxCosmetics.js`); the mod draws everything itself.
 - **Lux Credits (shop)** – cosmetics, emotes and name style features (colors, animations, bold,
   the custom second line under the name and its own colors/animations) cost Lux Credits; a few
   items are free. Default prices live in `luxShop.js` (names for the admin panel in the generated

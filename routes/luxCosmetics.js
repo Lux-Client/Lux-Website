@@ -27,7 +27,8 @@ const MAX_CAPES_PER_USER = 20;
 const MAX_PENDING_PER_USER = 5;
 const PAGE_SIZE = 36;
 const CAPE_STYLES = 7; // built-in animated patterns 0..6 in the mod
-const COSMETIC_SLOTS = ['head', 'ears', 'face', 'neck', 'shoulder', 'head_pet', 'back', 'wings', 'tail', 'aura'];
+const COSMETIC_SLOTS = ['head', 'bandana', 'ears', 'face', 'neck', 'shoulder', 'head_pet', 'companion', 'back', 'wings',
+    'tail', 'aura', 'ring', 'shield'];
 /** Custom second line under the name. */
 const LINE_MAX = 32;
 const ID_RE = /^[a-z0-9_]{1,32}$/;

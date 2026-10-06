@@ -177,7 +177,7 @@ module.exports = {
         "category": "Head"
     },
     "cosmetic:unicorn_horn": {
-        "name": "Einhorn-Horn",
+        "name": "Unicorn horn",
         "category": "Head"
     },
     "cosmetic:bandana": {
@@ -213,7 +213,7 @@ module.exports = {
         "category": "Face"
     },
     "cosmetic:glasses_3d": {
-        "name": "3D-Brille",
+        "name": "3D glasses",
         "category": "Face"
     },
     "cosmetic:heart_glasses": {
@@ -221,7 +221,7 @@ module.exports = {
         "category": "Face"
     },
     "cosmetic:ninja_mask": {
-        "name": "Ninja-Maske",
+        "name": "Ninja mask",
         "category": "Face"
     },
     "cosmetic:tie": {
@@ -245,7 +245,7 @@ module.exports = {
         "category": "Shoulder pet"
     },
     "cosmetic:baby_dragon": {
-        "name": "Baby-Drache",
+        "name": "Baby dragon",
         "category": "Shoulder pet"
     },
     "cosmetic:ghost": {
@@ -359,6 +359,342 @@ module.exports = {
     "cosmetic:head_frog": {
         "name": "Frog on your head",
         "category": "Head pet"
+    },
+    "cosmetic:bandana_heavenly": {
+        "name": "Heavenly bandana",
+        "category": "Bandana"
+    },
+    "cosmetic:bandana_plasma": {
+        "name": "Plasma bandana",
+        "category": "Bandana"
+    },
+    "cosmetic:bandana_inferno": {
+        "name": "Inferno bandana",
+        "category": "Bandana"
+    },
+    "cosmetic:bandana_galaxy": {
+        "name": "Galaxy bandana",
+        "category": "Bandana"
+    },
+    "cosmetic:bandana_rainbow": {
+        "name": "Rainbow bandana",
+        "category": "Bandana"
+    },
+    "cosmetic:bandana_matrix": {
+        "name": "Matrix bandana",
+        "category": "Bandana"
+    },
+    "cosmetic:bandana_lava": {
+        "name": "Lava bandana",
+        "category": "Bandana"
+    },
+    "cosmetic:bandana_ice": {
+        "name": "Ice bandana",
+        "category": "Bandana"
+    },
+    "cosmetic:bandana_camo": {
+        "name": "Camo bandana",
+        "category": "Bandana"
+    },
+    "cosmetic:bandana_checker": {
+        "name": "Checkered flag bandana",
+        "category": "Bandana"
+    },
+    "cosmetic:bandana_hearts": {
+        "name": "Hearts bandana",
+        "category": "Bandana"
+    },
+    "cosmetic:ring_orbit": {
+        "name": "Orbit ring",
+        "category": "Rings"
+    },
+    "cosmetic:ring_saturn": {
+        "name": "Saturn ring",
+        "category": "Rings"
+    },
+    "cosmetic:ring_pulse": {
+        "name": "Pulse ring",
+        "category": "Rings"
+    },
+    "cosmetic:ring_wave": {
+        "name": "Wave ring",
+        "category": "Rings"
+    },
+    "cosmetic:ring_elevator": {
+        "name": "Elevator ring",
+        "category": "Rings"
+    },
+    "cosmetic:ring_atom": {
+        "name": "Atom rings",
+        "category": "Rings"
+    },
+    "cosmetic:ring_double": {
+        "name": "Double ring",
+        "category": "Rings"
+    },
+    "cosmetic:ring_crown": {
+        "name": "Floating ring",
+        "category": "Rings"
+    },
+    "cosmetic:ring_chase": {
+        "name": "Chase ring",
+        "category": "Rings"
+    },
+    "cosmetic:ring_runes": {
+        "name": "Rune ring",
+        "category": "Rings"
+    },
+    "cosmetic:ring_color": {
+        "name": "Color-shift ring",
+        "category": "Rings"
+    },
+    "cosmetic:ring_heartbeat": {
+        "name": "Heartbeat ring",
+        "category": "Rings"
+    },
+    "cosmetic:pirate_hat": {
+        "name": "Pirate hat",
+        "category": "Head"
+    },
+    "cosmetic:graduation_cap": {
+        "name": "Graduation cap",
+        "category": "Head"
+    },
+    "cosmetic:beret": {
+        "name": "Beret",
+        "category": "Head"
+    },
+    "cosmetic:witch_hat": {
+        "name": "Witch hat",
+        "category": "Head"
+    },
+    "cosmetic:sombrero": {
+        "name": "Sombrero",
+        "category": "Head"
+    },
+    "cosmetic:knight_helmet": {
+        "name": "Knight helmet",
+        "category": "Head"
+    },
+    "cosmetic:mushroom_hat": {
+        "name": "Mushroom hat",
+        "category": "Head"
+    },
+    "cosmetic:frog_hat": {
+        "name": "Frog hat",
+        "category": "Head"
+    },
+    "cosmetic:fire_crown": {
+        "name": "Fire crown",
+        "category": "Head"
+    },
+    "cosmetic:ice_crown": {
+        "name": "Ice crown",
+        "category": "Head"
+    },
+    "cosmetic:antennae": {
+        "name": "Antennae",
+        "category": "Head"
+    },
+    "cosmetic:straw_hat": {
+        "name": "Straw hat",
+        "category": "Head"
+    },
+    "cosmetic:detective_hat": {
+        "name": "Detective hat",
+        "category": "Head"
+    },
+    "cosmetic:aura_galaxy": {
+        "name": "Galaxy",
+        "category": "Aura"
+    },
+    "cosmetic:aura_tornado": {
+        "name": "Tornado",
+        "category": "Aura"
+    },
+    "cosmetic:aura_embers": {
+        "name": "Embers",
+        "category": "Aura"
+    },
+    "cosmetic:aura_matrix": {
+        "name": "Matrix",
+        "category": "Aura"
+    },
+    "cosmetic:aura_roses": {
+        "name": "Rose petals",
+        "category": "Aura"
+    },
+    "cosmetic:aura_water": {
+        "name": "Water",
+        "category": "Aura"
+    },
+    "cosmetic:aura_fireflies": {
+        "name": "Fireflies",
+        "category": "Aura"
+    },
+    "cosmetic:aura_ice_shards": {
+        "name": "Ice shards",
+        "category": "Aura"
+    },
+    "cosmetic:aura_shadow": {
+        "name": "Shadow",
+        "category": "Aura"
+    },
+    "cosmetic:aura_toxic": {
+        "name": "Toxic",
+        "category": "Aura"
+    },
+    "cosmetic:aura_rune_circle": {
+        "name": "Rune circle",
+        "category": "Aura"
+    },
+    "cosmetic:aura_energy_orbs": {
+        "name": "Energy orbs",
+        "category": "Aura"
+    },
+    "cosmetic:pet_dog": {
+        "name": "Dog",
+        "category": "Companion"
+    },
+    "cosmetic:pet_cat": {
+        "name": "Cat",
+        "category": "Companion"
+    },
+    "cosmetic:pet_fox": {
+        "name": "Fox",
+        "category": "Companion"
+    },
+    "cosmetic:pet_wolf": {
+        "name": "Wolf",
+        "category": "Companion"
+    },
+    "cosmetic:pet_panda": {
+        "name": "Panda",
+        "category": "Companion"
+    },
+    "cosmetic:pet_pig": {
+        "name": "Pig",
+        "category": "Companion"
+    },
+    "cosmetic:pet_turtle": {
+        "name": "Turtle",
+        "category": "Companion"
+    },
+    "cosmetic:pet_penguin": {
+        "name": "Penguin",
+        "category": "Companion"
+    },
+    "cosmetic:pet_duck": {
+        "name": "Duck",
+        "category": "Companion"
+    },
+    "cosmetic:pet_bunny": {
+        "name": "Bunny",
+        "category": "Companion"
+    },
+    "cosmetic:pet_slime": {
+        "name": "Slime",
+        "category": "Companion"
+    },
+    "cosmetic:pet_dragon": {
+        "name": "Mini dragon",
+        "category": "Companion"
+    },
+    "cosmetic:pet_ghost": {
+        "name": "Little ghost",
+        "category": "Companion"
+    },
+    "cosmetic:pet_bee": {
+        "name": "Bumblebee",
+        "category": "Companion"
+    },
+    "cosmetic:shield_obsidian": {
+        "name": "Obsidian shield",
+        "category": "Shield"
+    },
+    "cosmetic:shield_sunflower": {
+        "name": "Sunflower shield",
+        "category": "Shield"
+    },
+    "cosmetic:shield_lotus": {
+        "name": "Lotus shield",
+        "category": "Shield"
+    },
+    "cosmetic:shield_snowflake": {
+        "name": "Snowflake shield",
+        "category": "Shield"
+    },
+    "cosmetic:shield_yinyang": {
+        "name": "Yin-yang shield",
+        "category": "Shield"
+    },
+    "cosmetic:shield_nether": {
+        "name": "Nether shield",
+        "category": "Shield"
+    },
+    "cosmetic:shield_end": {
+        "name": "End shield",
+        "category": "Shield"
+    },
+    "cosmetic:shield_aether": {
+        "name": "Aether shield",
+        "category": "Shield"
+    },
+    "cosmetic:shield_dragon": {
+        "name": "Dragon shield",
+        "category": "Shield"
+    },
+    "cosmetic:shield_diamond": {
+        "name": "Diamond shield",
+        "category": "Shield"
+    },
+    "cosmetic:shield_creeper": {
+        "name": "Creeper shield",
+        "category": "Shield"
+    },
+    "cosmetic:shield_rainbow": {
+        "name": "Rainbow shield",
+        "category": "Shield"
+    },
+    "cosmetic:shield_fire": {
+        "name": "Fire shield",
+        "category": "Shield"
+    },
+    "cosmetic:shield_galaxy": {
+        "name": "Galaxy shield",
+        "category": "Shield"
+    },
+    "cosmetic:shield_heart": {
+        "name": "Heart shield",
+        "category": "Shield"
+    },
+    "cosmetic:bandana_lightning_pink": {
+        "name": "Pink lightning bandana",
+        "category": "Bandana"
+    },
+    "cosmetic:bandana_lightning_black": {
+        "name": "Black lightning bandana",
+        "category": "Bandana"
+    },
+    "cosmetic:bandana_lightning_white": {
+        "name": "White lightning bandana",
+        "category": "Bandana"
+    },
+    "cosmetic:bandana_lightning_red": {
+        "name": "Red lightning bandana",
+        "category": "Bandana"
+    },
+    "cosmetic:bandana_lightning_green": {
+        "name": "Green lightning bandana",
+        "category": "Bandana"
+    },
+    "cosmetic:bandana_lightning_purple": {
+        "name": "Purple lightning bandana",
+        "category": "Bandana"
+    },
+    "cosmetic:bandana_lightning_turquoise": {
+        "name": "Turquoise lightning bandana",
+        "category": "Bandana"
     },
     "emote:wave": {
         "name": "Wave",
@@ -518,6 +854,62 @@ module.exports = {
     },
     "emote:six_seven": {
         "name": "6 7",
+        "category": "Emotes"
+    },
+    "emote:hacker": {
+        "name": "Hacker",
+        "category": "Emotes"
+    },
+    "emote:anime_run": {
+        "name": "Anime run",
+        "category": "Emotes"
+    },
+    "emote:energy_beam": {
+        "name": "Energy beam",
+        "category": "Emotes"
+    },
+    "emote:griddy": {
+        "name": "Griddy",
+        "category": "Emotes"
+    },
+    "emote:meditate": {
+        "name": "Meditate",
+        "category": "Emotes"
+    },
+    "emote:sleep": {
+        "name": "Sleep",
+        "category": "Emotes"
+    },
+    "emote:pushups": {
+        "name": "Push-ups",
+        "category": "Emotes"
+    },
+    "emote:selfie": {
+        "name": "Selfie",
+        "category": "Emotes"
+    },
+    "emote:coffee": {
+        "name": "Coffee break",
+        "category": "Emotes"
+    },
+    "emote:magic": {
+        "name": "Magic trick",
+        "category": "Emotes"
+    },
+    "emote:backflip": {
+        "name": "Backflip",
+        "category": "Emotes"
+    },
+    "emote:pirouette": {
+        "name": "Pirouette",
+        "category": "Emotes"
+    },
+    "emote:blow_kiss": {
+        "name": "Blow a kiss",
+        "category": "Emotes"
+    },
+    "emote:weights": {
+        "name": "Weightlifting",
         "category": "Emotes"
     },
     "name:color:1": {

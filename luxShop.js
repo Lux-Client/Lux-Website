@@ -1,7 +1,8 @@
 /* Lux Credits shop: prices of everything a Lux Client player can unlock.
 
    Item ids:
-     cosmetic:<id>   hats, ears, glasses, necklaces, pets, backpacks, wings, tails, auras
+     cosmetic:<id>   hats, bandanas, ears, glasses, necklaces, pets, companions, backpacks, wings,
+                     tails, auras, rings, shields
      emote:<id>      emotes (duo emotes included)
      name:color:<n>  name colour mode n (1..7, 0 = normal is free)
      name:anim:<n>   name animation n (1..4, 0 = none is free)
@@ -51,6 +52,10 @@ const PRICES = {
     'emote:partner_dance': 5000,
     // premium emotes (props, sounds)
     'emote:six_seven': 3000, 'emote:l_dance': 4000, 'emote:web_hang': 5000, 'emote:cat_cuddle': 5000,
+    'emote:coffee': 1500, 'emote:blow_kiss': 1500, 'emote:selfie': 2000, 'emote:sleep': 2000,
+    'emote:pushups': 2000, 'emote:weights': 2000, 'emote:pirouette': 2500, 'emote:griddy': 3000,
+    'emote:hacker': 3000, 'emote:meditate': 3000, 'emote:backflip': 3000, 'emote:anime_run': 3500,
+    'emote:magic': 3500, 'emote:energy_beam': 5000,
 
     // ---------------------------------------------------------------- cosmetics: head
     'cosmetic:cap': 0,
@@ -59,6 +64,20 @@ const PRICES = {
     'cosmetic:flower_crown': 900, 'cosmetic:top_hat': 1000, 'cosmetic:horns': 1000,
     'cosmetic:wizard_hat': 1200, 'cosmetic:viking_helmet': 1200, 'cosmetic:unicorn_horn': 1200,
     'cosmetic:propeller_cap': 1300, 'cosmetic:halo': 1500, 'cosmetic:crown': 2000,
+    'cosmetic:beret': 500, 'cosmetic:straw_hat': 600, 'cosmetic:graduation_cap': 700,
+    'cosmetic:mushroom_hat': 800, 'cosmetic:detective_hat': 800, 'cosmetic:sombrero': 900,
+    'cosmetic:frog_hat': 900, 'cosmetic:pirate_hat': 1000, 'cosmetic:witch_hat': 1200,
+    'cosmetic:antennae': 1200, 'cosmetic:knight_helmet': 1500, 'cosmetic:ice_crown': 2500,
+    'cosmetic:fire_crown': 2500,
+    // bandanas (animated patterns)
+    'cosmetic:bandana_camo': 600, 'cosmetic:bandana_checker': 600, 'cosmetic:bandana_hearts': 800,
+    'cosmetic:bandana_rainbow': 1000, 'cosmetic:bandana_ice': 1000,
+    'cosmetic:bandana_lightning_pink': 1200, 'cosmetic:bandana_lightning_black': 1200,
+    'cosmetic:bandana_lightning_white': 1200, 'cosmetic:bandana_lightning_red': 1200,
+    'cosmetic:bandana_lightning_green': 1200, 'cosmetic:bandana_lightning_purple': 1200,
+    'cosmetic:bandana_lightning_turquoise': 1200,
+    'cosmetic:bandana_galaxy': 1500, 'cosmetic:bandana_matrix': 1500, 'cosmetic:bandana_lava': 1500,
+    'cosmetic:bandana_heavenly': 1500, 'cosmetic:bandana_plasma': 1500, 'cosmetic:bandana_inferno': 1500,
     // ears
     'cosmetic:bear_ears': 400, 'cosmetic:panda_ears': 400, 'cosmetic:cat_ears': 500,
     'cosmetic:fox_ears': 500, 'cosmetic:bunny_ears': 500, 'cosmetic:elf_ears': 600,
@@ -93,6 +112,27 @@ const PRICES = {
     'cosmetic:aura_lightning': 3000, 'cosmetic:aura_rainbow': 3000,
     'cosmetic:aura_leaves': 3500, 'cosmetic:aura_style_stars': 3500, 'cosmetic:aura_ender': 4000,
     'cosmetic:aura_lightning_energy': 4000,
+    'cosmetic:aura_fireflies': 1500, 'cosmetic:aura_roses': 2000, 'cosmetic:aura_water': 2000,
+    'cosmetic:aura_toxic': 2000, 'cosmetic:aura_embers': 2500, 'cosmetic:aura_ice_shards': 2500,
+    'cosmetic:aura_shadow': 2500, 'cosmetic:aura_tornado': 3000, 'cosmetic:aura_matrix': 3000,
+    'cosmetic:aura_rune_circle': 3500, 'cosmetic:aura_galaxy': 3500, 'cosmetic:aura_energy_orbs': 4000,
+    // rings
+    'cosmetic:ring_orbit': 1500, 'cosmetic:ring_crown': 1500, 'cosmetic:ring_wave': 2000,
+    'cosmetic:ring_double': 2000, 'cosmetic:ring_chase': 2000, 'cosmetic:ring_pulse': 2000,
+    'cosmetic:ring_color': 2500, 'cosmetic:ring_elevator': 2500, 'cosmetic:ring_heartbeat': 2500,
+    'cosmetic:ring_saturn': 3000, 'cosmetic:ring_runes': 3000, 'cosmetic:ring_atom': 3500,
+    // companions (walk next to the player)
+    'cosmetic:pet_duck': 2500, 'cosmetic:pet_bunny': 3000, 'cosmetic:pet_pig': 3000,
+    'cosmetic:pet_turtle': 3000, 'cosmetic:pet_cat': 3500, 'cosmetic:pet_dog': 3500,
+    'cosmetic:pet_slime': 3500, 'cosmetic:pet_penguin': 3500, 'cosmetic:pet_fox': 4000,
+    'cosmetic:pet_panda': 4000, 'cosmetic:pet_wolf': 4000, 'cosmetic:pet_bee': 4000,
+    'cosmetic:pet_ghost': 5000, 'cosmetic:pet_dragon': 6000,
+    // shields (replace the shield in the hand)
+    'cosmetic:shield_creeper': 1000, 'cosmetic:shield_sunflower': 1200, 'cosmetic:shield_lotus': 1200,
+    'cosmetic:shield_heart': 1200, 'cosmetic:shield_dragon': 1500, 'cosmetic:shield_diamond': 1500,
+    'cosmetic:shield_yinyang': 1500, 'cosmetic:shield_snowflake': 1800, 'cosmetic:shield_rainbow': 2000,
+    'cosmetic:shield_fire': 2000, 'cosmetic:shield_aether': 2000, 'cosmetic:shield_nether': 2500,
+    'cosmetic:shield_end': 2500, 'cosmetic:shield_galaxy': 2500, 'cosmetic:shield_obsidian': 3000,
     // pets on the head
     'cosmetic:head_frog': 2500, 'cosmetic:head_cat': 3000, 'cosmetic:raccoon': 3000, 'cosmetic:baby_bear': 3000
 };

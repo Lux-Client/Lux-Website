@@ -5,7 +5,7 @@ import {
 } from 'chart.js'
 import { io } from 'socket.io-client'
 import {
-  BarChart2, Cloud as CloudIcon, Code2, History, LayoutDashboard,
+  BarChart2, Cloud as CloudIcon, Code2, Coins, History, LayoutDashboard,
   Newspaper, RefreshCw, ShieldCheck, Users as UsersIcon,
 } from 'lucide-react'
 
@@ -20,6 +20,7 @@ import AnalyticsView from '../components/admin/views/AnalyticsView'
 import CodesView from '../components/admin/views/CodesView'
 import ModerationView from '../components/admin/views/ModerationView'
 import UsersView from '../components/admin/views/UsersView'
+import LuxPlayersView from '../components/admin/views/LuxPlayersView'
 import AuditLogView from '../components/admin/views/AuditLogView'
 import useAuth from '../hooks/useAuth'
 
@@ -43,6 +44,7 @@ const SECTIONS = [
   { id: 'analytics',  group: 'Insights',  label: 'Analytics',     icon: BarChart2,       level: 'tools', title: 'Analytics',     description: 'Live usage, versions and download numbers.' },
   { id: 'moderation', group: 'Community', label: 'Moderation',    icon: ShieldCheck,     level: 'admin', title: 'Moderation',    description: 'Review submissions and community reports.' },
   { id: 'users',      group: 'Community', label: 'Accounts',      icon: UsersIcon,       level: 'admin', title: 'Accounts',      description: 'Registered users, roles and bans.' },
+  { id: 'luxplayers', group: 'Community', label: 'Lux Credits',   icon: Coins,           level: 'admin', title: 'Lux Credits',   description: 'Giveaways, balances and unlocks of Lux Client players.' },
   { id: 'cloud',      group: 'System',    label: 'Lux Cloud',     icon: CloudIcon,       level: 'admin', title: 'Lux Cloud',     description: 'Storage, deduplication, quotas and cleanup jobs.' },
   { id: 'auditlog',   group: 'System',    label: 'Audit log',     icon: History,         level: 'admin', title: 'Audit log',     description: 'A record of every moderation action.' },
 ]
@@ -652,6 +654,8 @@ function AdminPanelInner() {
       {tab === 'users' && isSessionAdmin && (
         <UsersView users={users} onRefresh={loadModerationData} onModerate={moderateUser} />
       )}
+
+      {tab === 'luxplayers' && isSessionAdmin && <LuxPlayersView />}
 
       {tab === 'cloud' && isSessionAdmin && <CloudPanel />}
 

@@ -106,7 +106,7 @@ after **every** deployment, the volume is not mounted and data is still being lo
 
 ---
 
-## Lux Client mod: capes & name styles
+## Lux Client mod: capes, name styles, cosmetics & Lux Credits
 
 The Lux Client Fabric mod (repo `fernsehheft/SpawnSound`, folder `Lux Client`) talks to
 `/api/lux` on this site, so Lux players see each other's capes, name styles and the Lux icon
@@ -124,10 +124,27 @@ on every server.
 - **Mod sign-in** works like a Minecraft server: `POST /api/lux/auth/start` → the mod calls
   Mojang `joinServer` → `POST /api/lux/auth/finish` checks Mojang `hasJoined` and returns a
   30-day token. Nobody can change another player's cosmetics.
-- **Cosmetics & emotes** – the mod also shares its cosmetics (hats, wings, tails, auras …,
-  `cosmetics` in `PUT /api/lux/me/profile`, returned by `/api/lux/players`) and emotes
-  (`POST /api/lux/me/emote`, `GET /api/lux/emotes?uuids=…`, polled about once a second by players
-  nearby; emotes are kept in memory only). Cosmetics are built into the mod, so they need no review.
+- **Cosmetics & emotes** – the mod also shares its cosmetics (hats, glasses, backpacks, wings,
+  tails, auras …, `cosmetics` in `PUT /api/lux/me/profile`, returned by `/api/lux/players`) and
+  emotes (`POST /api/lux/me/emote`). Cosmetics are built into the mod, so they need no review.
+- **Fast sync** – `POST /api/lux/live {uuids}` is polled about every 1.5 s by the mod. It answers
+  with a revision number per player (bumped whenever cape, name style or cosmetics change) and the
+  running emotes, so the mod only re-fetches the profiles that actually changed. Live state is kept
+  in memory only. (Older mods poll `GET /api/lux/emotes?uuids=…` instead; it still works.)
+- **Partner emotes** – high five, fist bump, handshake, hug and partner dance: one player starts
+  the emote and waits; players nearby see "X wants a high five – press G to join". Joining sends
+  the same emote with `partner` set, then both play the action together. Joining someone is free,
+  even without owning the emote.
+- **Lux Credits (shop)** – cosmetics, emotes and name style features (colors, animations, bold,
+  the custom second line under the name) cost Lux Credits; a few items are free. Prices live in
+  `luxShop.js`. The mod reads `GET /api/lux/shop` (balance, prices, owned items) and buys with
+  `POST /api/lux/shop/buy {item}`. The server only shares what a player owns: unowned items are
+  stripped from the profile on save. **Credits cannot be bought** – they are only handed out
+  (giveaways) by admins.
+- **Admin → Community → Lux Credits** – give credits quickly (Minecraft name + amount), or look a
+  player up by Minecraft name: balance, add/remove credits, credit history, unlocked items
+  (grant/revoke), and reset the second line or take off all cosmetics. Every action is in the
+  audit log. API: `/api/lux/admin/players…`, `/api/lux/admin/credits/give`.
 - Code: `routes/luxCosmetics.js`, tables in `db_init_lux.js`, test `npm run test:lux`.
 
 ---

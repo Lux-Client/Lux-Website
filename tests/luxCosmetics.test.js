@@ -7,6 +7,7 @@ const { Harness } = require('./luxcloudHarness');
 
 const ALICE = 'a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1';
 const BOB = 'b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2';
+const WINNER = 'c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3';
 
 async function png(color, w = 64, h = 32) {
     const sharp = require('sharp');
@@ -22,7 +23,8 @@ async function main() {
     await h.start({
         mount: (app) => {
             const createLuxRouter = require(path.join(__dirname, '..', 'routes', 'luxCosmetics.js'));
-            app.use('/api/lux', createLuxRouter({ hasJoined, imageDir: path.join(h.storageRoot, 'lux-capes') }));
+            const lookupName = async (name) => (name.toLowerCase() === 'winner' ? { uuid: WINNER, name: 'Winner' } : null);
+            app.use('/api/lux', createLuxRouter({ hasJoined, lookupName, imageDir: path.join(h.storageRoot, 'lux-capes') }));
         }
     });
     const conn = await h.pool.getConnection();
@@ -71,6 +73,27 @@ async function main() {
         assert.strictEqual(me.body.name, 'Alice');
     });
 
+    const grant = async (uuid, items) => {
+        for (const item of items) {
+            await h.pool.query('INSERT INTO lux_owned (uuid, item, price, source, acquired_at) VALUES (?, ?, ?, ?, ?) RETURNING uuid',
+                [uuid, item, 0, 'test', Date.now()]);
+        }
+    };
+
+    await test('locked name styles and cosmetics are not shared until unlocked', async () => {
+        const res = await h.request({
+            method: 'PUT', url: '/api/lux/me/profile', token: bob,
+            body: { nameStyle: { color: 3, animation: 1, line: 'twitch.tv/bob' }, cosmetics: { head: { id: 'crown' }, neck: { id: 'bow_tie' } } }
+        });
+        assert.strictEqual(res.status, 200);
+        assert.strictEqual(res.body.nameStyle.color, 0);
+        assert.strictEqual(res.body.nameStyle.animation, 0);
+        assert.strictEqual(res.body.nameStyle.line, undefined);
+        assert.deepStrictEqual(res.body.cosmetics, { neck: { id: 'bow_tie' } }, 'free bow tie stays, locked crown goes');
+        assert.ok(res.body.warnings.length >= 3);
+        await grant(BOB, ['name:color:3', 'name:anim:1', 'name:line', 'cosmetic:top_hat', 'cosmetic:angel_wings']);
+    });
+
     await test('name style and pattern cape are visible to other players right away', async () => {
         const res = await h.request({
             method: 'PUT', url: '/api/lux/me/profile', token: bob,
@@ -84,6 +107,11 @@ async function main() {
 
     await test('cosmetics are shared with other players and checked', async () => {
         const cosmetics = { head: { id: 'top_hat', color: 0x112233 }, wings: { id: 'angel_wings', rainbow: true }, bogus: { id: 'x' } };
+        const line = await h.request({
+            method: 'PUT', url: '/api/lux/me/profile', token: bob,
+            body: { nameStyle: { color: 3, animation: 1, line: '  §cTwitch:\u0007   bob_live  ' } }
+        });
+        assert.strictEqual(line.body.nameStyle.line, 'Twitch: bob_live', 'colour codes and control characters are removed');
         const res = await h.request({ method: 'PUT', url: '/api/lux/me/profile', token: bob, body: { cosmetics } });
         assert.strictEqual(res.status, 200);
         assert.deepStrictEqual(res.body.cosmetics, { head: { id: 'top_hat', color: 0x112233 }, wings: { id: 'angel_wings', rainbow: true } });
@@ -93,6 +121,40 @@ async function main() {
         assert.strictEqual(bad.status, 200);
         assert.ok(bad.body.warnings && /cosmetics/.test(bad.body.warnings[0]));
         assert.strictEqual(bad.body.cosmetics, null, 'invalid cosmetics are not stored');
+    });
+
+    await test('live poll tells who uses Lux, when the profile changed and the emote', async () => {
+        const first = await h.request({ method: 'POST', url: '/api/lux/live', token: alice, body: { uuids: [ALICE, BOB, WINNER] } });
+        assert.strictEqual(first.status, 200);
+        assert.ok(first.body.players[BOB], 'bob is online');
+        assert.strictEqual(first.body.players[WINNER], undefined, 'unknown players are not listed');
+        const rev = first.body.players[BOB].rev;
+        await h.request({ method: 'PUT', url: '/api/lux/me/profile', token: bob, body: { cosmetics: { head: { id: 'top_hat' } } } });
+        const second = await h.request({ method: 'POST', url: '/api/lux/live', token: alice, body: { uuids: [BOB] } });
+        assert.ok(second.body.players[BOB].rev > rev, 'rev goes up when the profile changes');
+        const same = await h.request({ method: 'PUT', url: '/api/lux/me/profile', token: bob, body: { cosmetics: { head: { id: 'top_hat' } } } });
+        const third = await h.request({ method: 'POST', url: '/api/lux/live', token: alice, body: { uuids: [BOB] } });
+        assert.strictEqual(third.body.players[BOB].rev, second.body.players[BOB].rev, 'unchanged profile keeps rev');
+        assert.strictEqual(same.status, 200);
+        const players = await h.request({ url: `/api/lux/players?uuids=${BOB}`, token: alice });
+        assert.strictEqual(players.headers['cache-control'], 'no-store');
+    });
+
+    await test('locked emotes cannot be played; duo emotes carry the partner', async () => {
+        const locked = await h.request({ method: 'POST', url: '/api/lux/me/emote', token: alice, body: { emote: 'dance' } });
+        assert.strictEqual(locked.status, 403);
+        await grant(ALICE, ['emote:high_five']);
+        const bobAlone = await h.request({ method: 'POST', url: '/api/lux/me/emote', token: bob, body: { emote: 'high_five' } });
+        assert.strictEqual(bobAlone.status, 403, 'starting a partner emote needs it unlocked');
+        await h.request({ method: 'POST', url: '/api/lux/me/emote', token: alice, body: { emote: 'high_five' } });
+        const join = await h.request({ method: 'POST', url: '/api/lux/me/emote', token: bob, body: { emote: 'high_five', partner: ALICE } });
+        assert.strictEqual(join.status, 200, 'joining is free');
+        const live = await h.request({ method: 'POST', url: '/api/lux/live', token: alice, body: { uuids: [ALICE, BOB] } });
+        assert.strictEqual(live.body.players[ALICE].emote.id, 'high_five');
+        assert.strictEqual(live.body.players[ALICE].emote.partner, null);
+        assert.strictEqual(live.body.players[BOB].emote.partner, ALICE);
+        await h.request({ method: 'POST', url: '/api/lux/me/emote', token: alice, body: { emote: null } });
+        await h.request({ method: 'POST', url: '/api/lux/me/emote', token: bob, body: { emote: null } });
     });
 
     await test('emotes reach the players around you and can be stopped', async () => {
@@ -127,12 +189,12 @@ async function main() {
     await test('nobody can wear somebody else\'s unreviewed picture (the rest of the profile still counts)', async () => {
         const res = await h.request({
             method: 'PUT', url: '/api/lux/me/profile', token: bob,
-            body: { cape: { type: 'image', hash: ownHash }, cosmetics: { head: { id: 'crown' } } }
+            body: { cape: { type: 'image', hash: ownHash }, cosmetics: { head: { id: 'top_hat' } } }
         });
         assert.strictEqual(res.status, 200);
         assert.strictEqual(res.body.cape, null);
         assert.ok(res.body.warnings && /cape/.test(res.body.warnings[0]));
-        assert.strictEqual(res.body.cosmetics.head.id, 'crown');
+        assert.strictEqual(res.body.cosmetics.head.id, 'top_hat');
     });
 
     await test('the same picture uploaded by a second player is theirs too', async () => {
@@ -240,6 +302,61 @@ async function main() {
         assert.strictEqual(res.status, 200);
         const seen = await h.request({ url: `/api/lux/players?uuids=${ALICE}`, token: bob });
         assert.strictEqual(seen.body.players[ALICE].cape.hash, ownHash);
+    });
+
+    await test('shop: prices, not enough credits, buying, owning twice', async () => {
+        const s1 = await h.request({ url: '/api/lux/shop', token: alice });
+        assert.strictEqual(s1.body.credits, 0);
+        assert.strictEqual(s1.body.prices['emote:dance'], 3000);
+        const poor = await h.request({ method: 'POST', url: '/api/lux/shop/buy', token: alice, body: { item: 'emote:dance' } });
+        assert.strictEqual(poor.status, 400);
+        const nope = await h.request({ method: 'POST', url: '/api/lux/shop/buy', token: alice, body: { item: 'cosmetic:does_not_exist' } });
+        assert.strictEqual(nope.status, 404);
+        await h.pool.query('UPDATE lux_players SET credits = 5000 WHERE uuid = ?', [ALICE]);
+        const ok = await h.request({ method: 'POST', url: '/api/lux/shop/buy', token: alice, body: { item: 'emote:dance' } });
+        assert.strictEqual(ok.status, 200, JSON.stringify(ok.body));
+        assert.strictEqual(ok.body.credits, 2000);
+        assert.ok(ok.body.owned.includes('emote:dance'));
+        const twice = await h.request({ method: 'POST', url: '/api/lux/shop/buy', token: alice, body: { item: 'emote:dance' } });
+        assert.strictEqual(twice.status, 400);
+        const free = await h.request({ method: 'POST', url: '/api/lux/shop/buy', token: alice, body: { item: 'emote:wave' } });
+        assert.strictEqual(free.status, 400, 'free items are already owned');
+        const dance = await h.request({ method: 'POST', url: '/api/lux/me/emote', token: alice, body: { emote: 'dance' } });
+        assert.strictEqual(dance.status, 200);
+        const [log] = await h.pool.query('SELECT delta FROM lux_credit_log WHERE uuid = ?', [ALICE]);
+        assert.ok(log.some((l) => Number(l.delta) === -3000));
+    });
+
+    await test('admin: give credits by Minecraft name, look up, revoke, reset line', async () => {
+        h.setSessionUser(uploader);
+        const denied = await h.request({ method: 'POST', url: '/api/lux/admin/credits/give', body: { name: 'Bob', amount: 100 } });
+        assert.strictEqual(denied.status, 403);
+        h.setSessionUser(admin);
+        const give = await h.request({ method: 'POST', url: '/api/lux/admin/credits/give', body: { name: 'bob', amount: 750, reason: 'Giveaway #1' } });
+        assert.strictEqual(give.status, 200, JSON.stringify(give.body));
+        assert.strictEqual(give.body.credits, 750);
+        const stranger = await h.request({ method: 'POST', url: '/api/lux/admin/credits/give', body: { name: 'Winner', amount: 1000 } });
+        assert.strictEqual(stranger.status, 200, 'unknown names are looked up at Mojang');
+        assert.strictEqual(stranger.body.uuid, WINNER);
+        const missingName = await h.request({ method: 'POST', url: '/api/lux/admin/credits/give', body: { name: 'NoSuchPlayer', amount: 5 } });
+        assert.strictEqual(missingName.status, 404);
+        const look = await h.request({ url: '/api/lux/admin/players?name=Bob' });
+        assert.strictEqual(look.body.credits, 750);
+        assert.ok(look.body.owned.some((o) => o.item === 'cosmetic:top_hat'));
+        assert.strictEqual(look.body.nameStyle.line, 'Twitch: bob_live');
+        const minus = await h.request({ method: 'POST', url: `/api/lux/admin/players/${BOB}/credits`, body: { delta: -1000, reason: 'oops' } });
+        assert.strictEqual(minus.body.credits, 0, 'never below zero');
+        await h.request({ method: 'POST', url: `/api/lux/admin/players/${BOB}/revoke`, body: { item: 'cosmetic:top_hat' } });
+        await h.request({ method: 'POST', url: `/api/lux/admin/players/${BOB}/reset-line`, body: {} });
+        const after = await h.request({ url: `/api/lux/admin/players/${BOB}` });
+        assert.ok(!after.body.owned.some((o) => o.item === 'cosmetic:top_hat'));
+        assert.strictEqual(after.body.cosmetics.head, undefined, 'revoked hat is taken off');
+        assert.strictEqual(after.body.nameStyle.line, undefined);
+        const grantRes = await h.request({ method: 'POST', url: `/api/lux/admin/players/${BOB}/grant`, body: { item: 'emote:hug' } });
+        assert.strictEqual(grantRes.status, 200);
+        const [audits] = await h.pool.query("SELECT action FROM admin_audit_log WHERE action LIKE 'lux_%'");
+        assert.ok(audits.some((a) => a.action === 'lux_credits.add'));
+        h.setSessionUser(null);
     });
 
     h.stop();

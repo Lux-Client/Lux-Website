@@ -15,6 +15,7 @@ const fs = require('fs');
 const path = require('path');
 const { rateLimit } = require('express-rate-limit');
 const pool = require('../database');
+const shop = require('../luxShop');
 
 const TOKEN_DAYS = 30;
 /** How long a player counts as "playing with Lux" (the mod pings every 2 minutes). */
@@ -26,7 +27,9 @@ const MAX_CAPES_PER_USER = 20;
 const MAX_PENDING_PER_USER = 5;
 const PAGE_SIZE = 36;
 const CAPE_STYLES = 7; // built-in animated patterns 0..6 in the mod
-const COSMETIC_SLOTS = ['head', 'ears', 'neck', 'shoulder', 'wings', 'tail', 'aura'];
+const COSMETIC_SLOTS = ['head', 'ears', 'face', 'neck', 'shoulder', 'back', 'wings', 'tail', 'aura'];
+/** Custom second line under the name. */
+const LINE_MAX = 32;
 const ID_RE = /^[a-z0-9_]{1,32}$/;
 /** An emote is forgotten after this long (looping emotes are stopped by the mod). */
 const EMOTE_MS = 10 * 60 * 1000;
@@ -45,6 +48,16 @@ const now = () => Date.now();
 const sha256 = (data) => crypto.createHash('sha256').update(data).digest('hex');
 const isInt = (v, min, max) => Number.isInteger(v) && v >= min && v <= max;
 const cleanUuid = (v) => (typeof v === 'string' ? v.replace(/-/g, '').toLowerCase() : '');
+
+/** Minecraft name -> { uuid, name } (for admins giving credits to someone who never used Lux). */
+async function mojangLookup(name) {
+    const res = await fetch(`https://api.mojang.com/users/profiles/minecraft/${encodeURIComponent(name)}`,
+        { signal: AbortSignal.timeout(8000) });
+    if (res.status !== 200) return null;
+    const body = await res.json().catch(() => null);
+    if (!body || typeof body.id !== 'string' || typeof body.name !== 'string') return null;
+    return { uuid: body.id.toLowerCase(), name: body.name };
+}
 
 async function mojangHasJoined(name, serverId) {
     const base = process.env.MOJANG_SESSION_URL || 'https://sessionserver.mojang.com';
@@ -77,6 +90,7 @@ async function normalizePng(buf) {
 
 function createLuxRouter(options = {}) {
     const hasJoined = options.hasJoined || mojangHasJoined;
+    const lookupName = options.lookupName || mojangLookup;
     const allowOffline = options.allowOffline ?? process.env.LUX_ALLOW_OFFLINE === 'true';
     const imageDir = options.imageDir || path.join(
         process.env.DATA_DIR ? path.resolve(process.env.DATA_DIR) : path.join(__dirname, '..', 'data'),
@@ -88,8 +102,20 @@ function createLuxRouter(options = {}) {
     const challenges = new Map();
     /** link code -> { uuid, expires } */
     const linkCodes = new Map();
-    /** uuid -> { id, started } - emotes only live in memory, they are over in seconds */
+    /** uuid -> { id, started, partner } - emotes only live in memory, they are over in seconds */
     const emotes = new Map();
+    /** uuid -> { rev, seen }: who plays with Lux right now and when the profile last changed. */
+    const live = new Map();
+    /** uuid -> time until which "not a Lux player" is believed (saves database lookups). */
+    const missing = new Map();
+
+    function touch(uuid, rev) {
+        const e = live.get(uuid) || { rev: 0, seen: 0 };
+        e.seen = now();
+        if (rev !== undefined && rev !== null) e.rev = Number(rev);
+        live.set(uuid, e);
+        missing.delete(uuid);
+    }
 
     const router = express.Router();
     const rawPng = express.raw({ type: () => true, limit: MAX_IMAGE_BYTES });
@@ -102,6 +128,7 @@ function createLuxRouter(options = {}) {
         handler: (req, res) => res.status(429).json({ error: 'Too many requests - please wait a moment.' })
     });
     const authLimiter = limiter(30);
+    const liveLimiter = limiter(150);
     const writeLimiter = limiter(60);
     const uploadLimiter = limiter(10);
 
@@ -226,6 +253,20 @@ function createLuxRouter(options = {}) {
         return cape;
     }
 
+    async function ownedSet(uuid) {
+        const [rows] = await pool.query('SELECT item FROM lux_owned WHERE uuid = ?', [uuid]);
+        return new Set(rows.map((r) => r.item));
+    }
+
+    const owns = (owned, item) => shop.isFree(item) || owned.has(item);
+
+    function cleanLine(text) {
+        if (typeof text !== 'string') return '';
+        // no colour codes, no control characters, single spaces
+        return text.replace(/§./g, '').replace(/[\u0000-\u001f\u007f-\u009f]/g, '').replace(/\s+/g, ' ')
+            .trim().slice(0, LINE_MAX);
+    }
+
     async function cleanCape(c, player) {
         if (c === null || c === undefined) return null;
         if (typeof c !== 'object') throw new HttpError(400, 'Invalid cape.');
@@ -261,12 +302,13 @@ function createLuxRouter(options = {}) {
         }
     }
 
-    function cleanNameStyle(s) {
+    /** Name style; whatever is not unlocked falls back to the plain variant. */
+    function cleanNameStyle(s, owned, warnings = []) {
         if (s === null || s === undefined) return null;
         if (typeof s !== 'object' || !isInt(s.color, 0, 7) || !isInt(s.animation, 0, 4)) {
             throw new HttpError(400, 'Invalid name style.');
         }
-        return {
+        const out = {
             color: s.color,
             c1: isInt(s.c1, 0, 0xffffff) ? s.c1 : 0xffaa00,
             c2: isInt(s.c2, 0, 0xffffff) ? s.c2 : 0xff55ff,
@@ -274,10 +316,28 @@ function createLuxRouter(options = {}) {
             animation: s.animation,
             bold: s.bold === true
         };
+        if (out.color && !owns(owned, `name:color:${out.color}`)) {
+            warnings.push(`nameStyle: colour ${out.color} is not unlocked`);
+            out.color = 0;
+        }
+        if (out.animation && !owns(owned, `name:anim:${out.animation}`)) {
+            warnings.push(`nameStyle: animation ${out.animation} is not unlocked`);
+            out.animation = 0;
+        }
+        if (out.bold && !owns(owned, 'name:bold')) {
+            warnings.push('nameStyle: bold is not unlocked');
+            out.bold = false;
+        }
+        const line = cleanLine(s.line);
+        if (line) {
+            if (owns(owned, 'name:line')) out.line = line;
+            else warnings.push('nameStyle: the second line is not unlocked');
+        }
+        return out;
     }
 
-    /** Hats, wings, tails ...: one cosmetic per slot, ids are checked by the mod itself. */
-    function cleanCosmetics(c) {
+    /** Hats, wings, tails ...: one cosmetic per slot, only what the player unlocked. */
+    function cleanCosmetics(c, owned, warnings = []) {
         if (c === null || c === undefined) return null;
         if (typeof c !== 'object' || Array.isArray(c)) throw new HttpError(400, 'Invalid cosmetics.');
         const out = {};
@@ -286,6 +346,10 @@ function createLuxRouter(options = {}) {
             if (e === undefined || e === null) continue;
             if (typeof e !== 'object' || typeof e.id !== 'string' || !ID_RE.test(e.id)) {
                 throw new HttpError(400, 'Invalid cosmetic.');
+            }
+            if (!owns(owned, `cosmetic:${e.id}`)) {
+                warnings.push(`cosmetics: ${e.id} is not unlocked`);
+                continue;
             }
             const clean = { id: e.id };
             if (isInt(e.color, 0, 0xffffff)) clean.color = e.color;
@@ -310,7 +374,8 @@ function createLuxRouter(options = {}) {
         }
         return {
             uuid: p.uuid, name: p.name, cape, nameStyle: parse(p.name_style),
-            cosmetics: parse(p.cosmetics), capeReview, linked: p.linked || null
+            cosmetics: parse(p.cosmetics), capeReview, linked: p.linked || null,
+            credits: Number(p.credits || 0), rev: Number(p.rev || 0)
         };
     }
 
@@ -355,6 +420,8 @@ function createLuxRouter(options = {}) {
              ON CONFLICT (uuid) DO UPDATE SET name = EXCLUDED.name, last_seen = EXCLUDED.last_seen RETURNING uuid`,
             [profile.uuid, profile.name, t, t]
         );
+        const [revRows] = await pool.query('SELECT rev FROM lux_players WHERE uuid = ?', [profile.uuid]);
+        touch(profile.uuid, revRows[0] ? revRows[0].rev : 0);
         res.json({ token: await issueToken(profile.uuid), uuid: profile.uuid, name: profile.name });
     }));
 
@@ -372,6 +439,7 @@ function createLuxRouter(options = {}) {
         const values = [];
         const warnings = [];
         // One bad part (e.g. a cape picture that was rejected) must not throw away the rest.
+        const owned = await ownedSet(p.uuid);
         const take = async (key, column, clean) => {
             if (!(key in body)) return;
             let value = null;
@@ -385,11 +453,26 @@ function createLuxRouter(options = {}) {
             values.push(value ? JSON.stringify(value) : null);
         };
         await take('cape', 'cape', (c) => cleanCape(c, p));
-        await take('nameStyle', 'name_style', cleanNameStyle);
-        await take('cosmetics', 'cosmetics', cleanCosmetics);
+        await take('nameStyle', 'name_style', (s) => cleanNameStyle(s, owned, warnings));
+        await take('cosmetics', 'cosmetics', (c) => cleanCosmetics(c, owned, warnings));
+        // Did anything others see change? Then raise rev so their clients fetch it right away.
+        const before = [p.cape, p.name_style, p.cosmetics];
+        const t = now();
+        let rev = Number(p.rev || 0);
+        const changed = fields.some((f, i) => {
+            const col = f.split(' ')[0];
+            const old = col === 'cape' ? before[0] : col === 'name_style' ? before[1] : before[2];
+            return (old || null) !== (values[i] || null);
+        });
+        if (changed) {
+            rev = Math.max(t, rev + 1);
+            fields.push('rev = ?');
+            values.push(rev);
+        }
         fields.push('last_seen = ?');
-        values.push(now());
+        values.push(t);
         await pool.query(`UPDATE lux_players SET ${fields.join(', ')} WHERE uuid = ?`, [...values, p.uuid]);
+        touch(p.uuid, rev);
         const profile = await ownProfile(p.uuid);
         if (warnings.length) profile.warnings = warnings;
         res.json(profile);
@@ -398,6 +481,7 @@ function createLuxRouter(options = {}) {
     router.post('/me/ping', wrap(async (req, res) => {
         const p = await requireMod(req);
         await pool.query('UPDATE lux_players SET last_seen = ? WHERE uuid = ?', [now(), p.uuid]);
+        touch(p.uuid);
         res.json({ ok: true });
     }));
 
@@ -431,7 +515,7 @@ function createLuxRouter(options = {}) {
         const out = {};
         if (uuids.length) {
             const [rows] = await pool.query(
-                `SELECT uuid, name, cape, name_style, cosmetics FROM lux_players WHERE last_seen > ? AND uuid IN (${uuids.map(() => '?').join(',')})`,
+                `SELECT uuid, name, cape, name_style, cosmetics, rev FROM lux_players WHERE last_seen > ? AND uuid IN (${uuids.map(() => '?').join(',')})`,
                 [now() - ONLINE_MS, ...uuids]
             );
             const capes = rows.map((r) => parse(r.cape));
@@ -441,11 +525,13 @@ function createLuxRouter(options = {}) {
                     name: r.name,
                     cape: publicCape(capes[i], approved),
                     nameStyle: parse(r.name_style),
-                    cosmetics: parse(r.cosmetics)
+                    cosmetics: parse(r.cosmetics),
+                    rev: Number(r.rev || 0)
                 };
             });
         }
-        res.set('Cache-Control', 'max-age=20');
+        // Never cache: a changed cape or name has to show up right away.
+        res.set('Cache-Control', 'no-store');
         res.json({ players: out });
     }));
 
@@ -456,10 +542,16 @@ function createLuxRouter(options = {}) {
         if (id === null || id === undefined) {
             emotes.delete(p.uuid);
         } else if (typeof id === 'string' && ID_RE.test(id)) {
-            emotes.set(p.uuid, { id, started: now() });
+            const partner = cleanUuid(req.body.partner);
+            // Joining somebody's partner emote is free - only starting one needs it unlocked.
+            const partnerEmote = UUID_RE.test(partner) ? emotes.get(partner) : null;
+            const joining = partnerEmote && partnerEmote.id === id && !partnerEmote.partner;
+            if (!joining && !owns(await ownedSet(p.uuid), `emote:${id}`)) throw new HttpError(403, 'This emote is not unlocked.');
+            emotes.set(p.uuid, { id, started: now(), partner: UUID_RE.test(partner) ? partner : null });
         } else {
             throw new HttpError(400, 'Invalid emote.');
         }
+        touch(p.uuid);
         res.json({ ok: true });
     }));
 
@@ -473,6 +565,86 @@ function createLuxRouter(options = {}) {
         res.set('Cache-Control', 'no-store');
         res.json({ emotes: out });
     });
+
+    /**
+     * Polled by the mod about every 1.5 s with the players in its tab list: who uses Lux, when their
+     * profile last changed (rev - the mod refetches only then) and which emote they are doing.
+     * Answered from memory; the database is only asked about players never seen before.
+     */
+    router.post('/live', liveLimiter, wrap(async (req, res) => {
+        const list = Array.isArray(req.body && req.body.uuids) ? req.body.uuids : [];
+        const uuids = [...new Set(list.map(cleanUuid).filter((u) => UUID_RE.test(u)))].slice(0, 300);
+        const t = now();
+        const unknown = uuids.filter((u) => !live.has(u) && !((missing.get(u) || 0) > t));
+        if (unknown.length) {
+            const [rows] = await pool.query(
+                `SELECT uuid, rev, last_seen FROM lux_players WHERE uuid IN (${unknown.map(() => '?').join(',')})`,
+                unknown
+            );
+            const found = new Set();
+            for (const r of rows) {
+                if (Number(r.last_seen) > t - ONLINE_MS) {
+                    live.set(r.uuid, { rev: Number(r.rev || 0), seen: Number(r.last_seen) });
+                    found.add(r.uuid);
+                }
+            }
+            for (const u of unknown) if (!found.has(u)) missing.set(u, t + 20000);
+        }
+        const out = {};
+        for (const u of uuids) {
+            const e = live.get(u);
+            if (!e || t - e.seen > ONLINE_MS) continue;
+            const o = { rev: e.rev };
+            const em = emotes.get(u);
+            if (em && t - em.started < EMOTE_MS) o.emote = { id: em.id, age: t - em.started, partner: em.partner || null };
+            out[u] = o;
+        }
+        res.set('Cache-Control', 'no-store');
+        res.json({ players: out, now: t });
+    }));
+
+    // ------------------------------------------------------------------ mod: Lux Credits shop
+
+    router.get('/shop', wrap(async (req, res) => {
+        const p = await requireMod(req);
+        res.json({ credits: Number(p.credits || 0), prices: shop.PRICES, owned: [...(await ownedSet(p.uuid))] });
+    }));
+
+    async function logCredits(uuid, delta, balance, reason, actor) {
+        await pool.query(
+            'INSERT INTO lux_credit_log (uuid, delta, balance, reason, actor, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+            [uuid, delta, balance, reason ? String(reason).slice(0, 200) : null, actor || null, now()]
+        );
+    }
+
+    router.post('/shop/buy', writeLimiter, wrap(async (req, res) => {
+        const p = await requireMod(req);
+        const item = String((req.body && req.body.item) || '');
+        const pr = shop.ITEM_RE.test(item) ? shop.price(item) : null;
+        if (pr === null) throw new HttpError(404, 'This is not for sale.');
+        const owned = await ownedSet(p.uuid);
+        if (owns(owned, item)) throw new HttpError(400, 'You already own this.');
+        // Atomic: only takes the credits if there are enough.
+        const [upd] = await pool.query(
+            'UPDATE lux_players SET credits = credits + ? WHERE uuid = ? AND credits >= ? RETURNING credits',
+            [-pr, p.uuid, pr]
+        );
+        if (!upd.rows || upd.rows.length === 0) throw new HttpError(400, 'Not enough Lux Credits.');
+        const [ins] = await pool.query(
+            'INSERT INTO lux_owned (uuid, item, price, source, acquired_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT (uuid, item) DO NOTHING RETURNING uuid',
+            [p.uuid, item, pr, 'shop', now()]
+        );
+        let credits = Number(upd.rows[0].credits);
+        if (!ins.rows || ins.rows.length === 0) {
+            // bought twice at the same moment - give the credits back
+            const [back] = await pool.query('UPDATE lux_players SET credits = credits + ? WHERE uuid = ? RETURNING credits', [pr, p.uuid]);
+            credits = Number(back.rows[0].credits);
+        } else {
+            await logCredits(p.uuid, -pr, credits, `bought ${item}`, 'shop');
+        }
+        owned.add(item);
+        res.json({ ok: true, credits, owned: [...owned] });
+    }));
 
     // Pictures: approved ones for everybody, others only for the uploader and admins.
     router.get('/images/:file', wrap(async (req, res) => {
@@ -729,6 +901,160 @@ function createLuxRouter(options = {}) {
         res.json({ success: true });
     }));
 
+    // ------------------------------------------------------------------ admin: Lux players & credits
+
+    async function playerRow(uuid) {
+        const [rows] = await pool.query('SELECT * FROM lux_players WHERE uuid = ?', [uuid]);
+        return rows[0] || null;
+    }
+
+    /** By Minecraft name; unknown names are looked up at Mojang and added (credits for giveaways). */
+    async function findPlayer(name) {
+        const clean = String(name || '').trim();
+        if (!/^[A-Za-z0-9_]{1,16}$/.test(clean)) throw new HttpError(400, 'Invalid Minecraft name.');
+        const [rows] = await pool.query(
+            'SELECT * FROM lux_players WHERE LOWER(name) = ? ORDER BY last_seen DESC LIMIT 1',
+            [clean.toLowerCase()]
+        );
+        if (rows[0]) return rows[0];
+        const profile = await lookupName(clean).catch(() => null);
+        if (!profile) throw new HttpError(404, `No Minecraft account called ${clean}.`);
+        const existing = await playerRow(profile.uuid);
+        if (existing) return existing;
+        await pool.query(
+            'INSERT INTO lux_players (uuid, name, last_seen, created_at) VALUES (?, ?, ?, ?) RETURNING uuid',
+            [profile.uuid, profile.name, 0, now()]
+        );
+        return playerRow(profile.uuid);
+    }
+
+    async function panel(uuid) {
+        const p = await playerRow(uuid);
+        if (!p) throw new HttpError(404, 'Not found.');
+        const [owned] = await pool.query('SELECT item, price, source, acquired_at FROM lux_owned WHERE uuid = ? ORDER BY acquired_at DESC', [uuid]);
+        const [log] = await pool.query('SELECT delta, balance, reason, actor, created_at FROM lux_credit_log WHERE uuid = ? ORDER BY id DESC LIMIT 25', [uuid]);
+        const [acc] = p.user_id ? await pool.query('SELECT username FROM users WHERE id = ?', [p.user_id]) : [[]];
+        return {
+            uuid: p.uuid,
+            name: p.name,
+            credits: Number(p.credits || 0),
+            online: Number(p.last_seen || 0) > now() - ONLINE_MS,
+            lastSeen: Number(p.last_seen || 0),
+            account: acc[0] ? acc[0].username : null,
+            cosmetics: parse(p.cosmetics),
+            nameStyle: parse(p.name_style),
+            cape: parse(p.cape),
+            owned: owned.map((o) => ({ item: o.item, price: Number(o.price), source: o.source, at: Number(o.acquired_at) })),
+            log: log.map((l) => ({ delta: Number(l.delta), balance: Number(l.balance), reason: l.reason, actor: l.actor, at: Number(l.created_at) }))
+        };
+    }
+
+    async function addCredits(uuid, delta, reason, admin) {
+        const p = await playerRow(uuid);
+        if (!p) throw new HttpError(404, 'Not found.');
+        const balance = Math.max(0, Number(p.credits || 0) + delta);
+        await pool.query('UPDATE lux_players SET credits = ? WHERE uuid = ?', [balance, uuid]);
+        await logCredits(uuid, balance - Number(p.credits || 0), balance, reason || (delta > 0 ? 'Giveaway' : 'Removed by an admin'), admin.username);
+        await audit(admin, delta >= 0 ? 'lux_credits.add' : 'lux_credits.remove', 'lux_player', p.name, `${delta} (${reason || '-'})`);
+        return balance;
+    }
+
+    /** After taking something away: remove it from what the player currently wears. */
+    async function restrip(uuid) {
+        const p = await playerRow(uuid);
+        const owned = await ownedSet(uuid);
+        const cos = p.cosmetics ? cleanCosmetics(parse(p.cosmetics), owned) : null;
+        const ns = p.name_style ? cleanNameStyle(parse(p.name_style), owned) : null;
+        const rev = Math.max(now(), Number(p.rev || 0) + 1);
+        await pool.query('UPDATE lux_players SET cosmetics = ?, name_style = ?, rev = ? WHERE uuid = ?',
+            [cos ? JSON.stringify(cos) : null, ns ? JSON.stringify(ns) : null, rev, uuid]);
+        if (live.has(uuid)) live.get(uuid).rev = rev;
+    }
+
+    router.get('/admin/players', wrap(async (req, res) => {
+        requireAdmin(req);
+        const p = await findPlayer(req.query.name);
+        res.json(await panel(p.uuid));
+    }));
+
+    router.get('/admin/players/:uuid', wrap(async (req, res) => {
+        requireAdmin(req);
+        res.json(await panel(cleanUuid(req.params.uuid)));
+    }));
+
+    router.get('/admin/shop', wrap(async (req, res) => {
+        requireAdmin(req);
+        res.json({ prices: shop.PRICES });
+    }));
+
+    router.post('/admin/players/:uuid/credits', wrap(async (req, res) => {
+        const admin = requireAdmin(req);
+        const delta = Number(req.body && req.body.delta);
+        if (!Number.isInteger(delta) || delta === 0 || Math.abs(delta) > 10000000) throw new HttpError(400, 'Invalid amount.');
+        const credits = await addCredits(cleanUuid(req.params.uuid), delta, req.body.reason, admin);
+        res.json({ success: true, credits });
+    }));
+
+    router.post('/admin/players/:uuid/grant', wrap(async (req, res) => {
+        const admin = requireAdmin(req);
+        const uuid = cleanUuid(req.params.uuid);
+        const item = String((req.body && req.body.item) || '');
+        if (!shop.ITEM_RE.test(item) || shop.price(item) === null) throw new HttpError(400, 'Unknown item.');
+        if (!(await playerRow(uuid))) throw new HttpError(404, 'Not found.');
+        await pool.query(
+            'INSERT INTO lux_owned (uuid, item, price, source, acquired_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT (uuid, item) DO NOTHING RETURNING uuid',
+            [uuid, item, 0, 'admin', now()]
+        );
+        await audit(admin, 'lux_item.grant', 'lux_player', uuid, item);
+        res.json({ success: true });
+    }));
+
+    router.post('/admin/players/:uuid/revoke', wrap(async (req, res) => {
+        const admin = requireAdmin(req);
+        const uuid = cleanUuid(req.params.uuid);
+        const item = String((req.body && req.body.item) || '');
+        await pool.query('DELETE FROM lux_owned WHERE uuid = ? AND item = ?', [uuid, item]);
+        await restrip(uuid);
+        await audit(admin, 'lux_item.revoke', 'lux_player', uuid, item);
+        res.json({ success: true });
+    }));
+
+    router.post('/admin/players/:uuid/reset-line', wrap(async (req, res) => {
+        const admin = requireAdmin(req);
+        const uuid = cleanUuid(req.params.uuid);
+        const p = await playerRow(uuid);
+        if (!p) throw new HttpError(404, 'Not found.');
+        const ns = parse(p.name_style);
+        if (ns) delete ns.line;
+        const rev = Math.max(now(), Number(p.rev || 0) + 1);
+        await pool.query('UPDATE lux_players SET name_style = ?, rev = ? WHERE uuid = ?', [ns ? JSON.stringify(ns) : null, rev, uuid]);
+        if (live.has(uuid)) live.get(uuid).rev = rev;
+        await audit(admin, 'lux_name.reset_line', 'lux_player', p.name, ns ? null : 'no style');
+        res.json({ success: true });
+    }));
+
+    router.post('/admin/players/:uuid/reset-cosmetics', wrap(async (req, res) => {
+        const admin = requireAdmin(req);
+        const uuid = cleanUuid(req.params.uuid);
+        const p = await playerRow(uuid);
+        if (!p) throw new HttpError(404, 'Not found.');
+        const rev = Math.max(now(), Number(p.rev || 0) + 1);
+        await pool.query('UPDATE lux_players SET cosmetics = NULL, rev = ? WHERE uuid = ?', [rev, uuid]);
+        if (live.has(uuid)) live.get(uuid).rev = rev;
+        await audit(admin, 'lux_cosmetics.reset', 'lux_player', p.name, null);
+        res.json({ success: true });
+    }));
+
+    // Quick giveaway: Minecraft name + amount.
+    router.post('/admin/credits/give', wrap(async (req, res) => {
+        const admin = requireAdmin(req);
+        const amount = Number(req.body && req.body.amount);
+        if (!Number.isInteger(amount) || amount <= 0 || amount > 10000000) throw new HttpError(400, 'Invalid amount.');
+        const p = await findPlayer(req.body.name);
+        const credits = await addCredits(p.uuid, amount, req.body.reason || 'Giveaway', admin);
+        res.json({ success: true, name: p.name, uuid: p.uuid, credits });
+    }));
+
     // ------------------------------------------------------------------ errors
 
     router.use((req, res) => res.status(404).json({ error: 'Unknown address.' }));
@@ -746,6 +1072,8 @@ function createLuxRouter(options = {}) {
         for (const [k, v] of challenges) if (v.expires < t) challenges.delete(k);
         for (const [k, v] of linkCodes) if (v.expires < t) linkCodes.delete(k);
         for (const [k, v] of emotes) if (t - v.started > EMOTE_MS) emotes.delete(k);
+        for (const [k, v] of live) if (t - v.seen > ONLINE_MS) live.delete(k);
+        for (const [k, v] of missing) if (v < t) missing.delete(k);
         try {
             await pool.query('DELETE FROM lux_tokens WHERE expires < ?', [t]);
         } catch {

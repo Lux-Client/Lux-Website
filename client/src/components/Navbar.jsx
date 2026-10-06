@@ -7,6 +7,7 @@ import useAuth, { fixPath } from '../hooks/useAuth'
 const NAV_LINKS = [
   { to: '/#features', label: 'Features' },
   { to: '/extensions', label: 'Extensions' },
+  { to: '/capes', label: 'Capes' },
   { to: '/docs', label: 'Docs' },
   { to: '/modpack', label: 'Modpack' },
   { href: 'https://pluginhub.de/discord.html', label: 'Support', external: true },

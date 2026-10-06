@@ -4,6 +4,7 @@ import AdminPanel from './pages/AdminPanel'
 import AnalyticsOptOut from './pages/AnalyticsOptOut'
 import AuthorizeDevice from './pages/AuthorizeDevice'
 import LinkDevice from './pages/LinkDevice'
+import Capes from './pages/Capes'
 import Changelog from './pages/Changelog'
 import CodePreview from './pages/CodePreview'
 import Dashboard from './pages/Dashboard'
@@ -37,6 +38,7 @@ export default function App() {
         <Route path="/" element={<LandingPage />} />
         <Route path="/extensions" element={<Extensions />} />
         <Route path="/extensions/:id" element={<ExtensionDetail />} />
+        <Route path="/capes" element={<Capes />} />
         <Route path="/dashboard" element={<Dashboard />} />
 
         {/* Developer area */}

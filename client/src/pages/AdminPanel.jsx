@@ -76,6 +76,8 @@ function AdminPanelInner() {
   const [pendingVersions,   setPendingVersions]   = useState([])
   const [pendingDrafts,     setPendingDrafts]     = useState([])
   const [reports,           setReports]           = useState([])
+  const [luxQueue,          setLuxQueue]          = useState({ capes: [], images: [] })
+  const [liveCapes,         setLiveCapes]         = useState([])
   const [auditLog,          setAuditLog]          = useState([])
   const [auditLogLoaded,    setAuditLogLoaded]    = useState(false)
 
@@ -150,18 +152,22 @@ function AdminPanelInner() {
   }, [])
 
   const loadModerationData = useCallback(async () => {
-    const [u, e, v, d, r] = await Promise.all([
+    const [u, e, v, d, r, lq, lc] = await Promise.all([
       fetch('/api/admin/users').then(res => res.ok ? res.json() : []),
       fetch('/api/admin/extensions/pending').then(res => res.ok ? res.json() : []),
       fetch('/api/admin/versions/pending').then(res => res.ok ? res.json() : []),
       fetch('/api/admin/drafts/pending').then(res => res.ok ? res.json() : []),
       fetch('/api/admin/reports').then(res => res.ok ? res.json() : []),
+      fetch('/api/lux/admin/queue').then(res => res.ok ? res.json() : {}).catch(() => ({})),
+      fetch('/api/lux/admin/capes').then(res => res.ok ? res.json() : {}).catch(() => ({})),
     ])
     setUsers(Array.isArray(u) ? u : [])
     setPendingExtensions(Array.isArray(e) ? e : [])
     setPendingVersions(Array.isArray(v) ? v : [])
     setPendingDrafts(Array.isArray(d) ? d : [])
     setReports(Array.isArray(r) ? r : [])
+    setLuxQueue({ capes: Array.isArray(lq?.capes) ? lq.capes : [], images: Array.isArray(lq?.images) ? lq.images : [] })
+    setLiveCapes(Array.isArray(lc?.items) ? lc.items : [])
   }, [])
 
   const loadAuditLog = useCallback(async () => {
@@ -277,6 +283,7 @@ function AdminPanelInner() {
   const todaysLaunches = statsData.launchesPerDay?.[new Date().toISOString().split('T')[0]] || 0
   const uniqueMachines = Number(statsData.uniqueMachineCount || 0)
   const pendingTotal   = pendingExtensions.length + pendingVersions.length + pendingDrafts.length + reports.length
+    + luxQueue.capes.length + luxQueue.images.length
 
   const navGroups = useMemo(() => {
     const allowed = SECTIONS.filter(s =>
@@ -490,6 +497,29 @@ function AdminPanelInner() {
     if (done) loadModerationData()
   }
 
+  /* Lux Client capes: approving makes the picture visible to every Lux player,
+     rejecting (or removing a published one) asks for the reason the uploader receives. */
+  const moderateLux = async (url, label, action, published) => {
+    let reason = ''
+    if (action === 'reject') {
+      const values = await dialog.prompt({
+        title: published ? `Remove “${label}” from the marketplace?` : `Reject “${label}”`,
+        description: 'Nobody will see this picture any more. The reason is sent to the uploader.',
+        tone: 'danger',
+        confirmLabel: published ? 'Remove' : 'Reject',
+        fields: [{ name: 'reason', label: 'Reason', placeholder: 'e.g. inappropriate content', required: true }],
+      })
+      if (!values) return
+      reason = values.reason
+    }
+    const done = await request(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason }),
+    }, { success: `“${label}” ${action === 'approve' ? 'approved' : 'rejected'}`, failure: `Could not ${action} “${label}”` })
+    if (done) loadModerationData()
+  }
+
   const moderateReport = async (item, action) => {
     const done = await request(`/api/admin/reports/${item.id}/${action}`, { method: 'POST' },
       { success: action === 'resolve' ? 'Report resolved' : 'Report dismissed', failure: 'Could not update the report' })
@@ -557,6 +587,7 @@ function AdminPanelInner() {
             versions:   pendingVersions.length,
             drafts:     pendingDrafts.length,
             reports:    reports.length,
+            capes:      luxQueue.capes.length + luxQueue.images.length,
             users:      users.length,
           }}
           socketStatus={socketStatus}
@@ -610,6 +641,11 @@ function AdminPanelInner() {
           onModerateExtension={(item, action) => moderateSubmission('extensions', item, action, item.name)}
           onModerateVersion={moderateVersion}
           onModerateDraft={(item, action) => moderateSubmission('drafts', item, action, item.original_name)}
+          luxCapes={luxQueue.capes}
+          luxImages={luxQueue.images}
+          liveCapes={liveCapes}
+          onModerateLuxCape={(item, action) => moderateLux(`/api/lux/admin/capes/${item.id}/${action}`, item.title, action, liveCapes.some(c => c.id === item.id))}
+          onModerateLuxImage={(item, action) => moderateLux(`/api/lux/admin/images/${item.hash}/${action}`, `cape of ${item.player || 'unknown player'}`, action, false)}
         />
       )}
 

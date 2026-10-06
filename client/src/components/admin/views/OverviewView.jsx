@@ -1,6 +1,6 @@
 import {
   BarChart2, CheckCircle2, Cloud, Download, FileText, Flag, Lock,
-  RefreshCw, ShieldCheck, Tag, TrendingUp, Users as UsersIcon, Wifi, Wrench,
+  RefreshCw, ShieldCheck, Shirt, Tag, TrendingUp, Users as UsersIcon, Wifi, Wrench,
 } from 'lucide-react'
 import { Badge, Button, EmptyState, GroupHeading, LiveDot, Panel, Sparkline, StatTile, Switch } from '../ui'
 
@@ -39,6 +39,7 @@ export default function OverviewView({
     { id: 'versions',   icon: Tag,         label: 'Version uploads',       hint: 'New builds for approved projects',        count: counts.versions,   color: '#3b82f6', tab: 'moderation' },
     { id: 'drafts',     icon: FileText,    label: 'Metadata drafts',       hint: 'Creator-submitted metadata changes',      count: counts.drafts,     color: '#8b5cf6', tab: 'moderation' },
     { id: 'reports',    icon: Flag,        label: 'User reports',          hint: 'Content flagged by the community',        count: counts.reports,    color: '#ef4444', tab: 'moderation' },
+    { id: 'capes',      icon: Shirt,       label: 'Lux Client capes',      hint: 'Cape pictures waiting for approval',      count: counts.capes || 0, color: '#14b8a6', tab: 'moderation' },
   ].filter(item => item.count > 0)
 
   return (

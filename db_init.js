@@ -1,5 +1,6 @@
 const pool = require('./database');
 const { createCloudTables } = require('./db_init_cloud');
+const { createLuxTables } = require('./db_init_lux');
 
 const createTables = async () => {
     let connection;
@@ -206,6 +207,7 @@ const createTables = async () => {
         }
 
         await createCloudTables(connection);
+        await createLuxTables(connection);
 
         return true;
     } catch (err) {

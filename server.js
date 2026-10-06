@@ -1734,6 +1734,9 @@ if (LUXCLOUD_SWITCHED_OFF) {
     console.warn('[LuxCloud] No LUXCLOUD_JWT_SECRET set - using a development fallback. Never do this in production.');
 }
 
+// Lux Client mod: capes, name styles and the cape marketplace (with admin review).
+app.use('/api/lux', require('./routes/luxCosmetics')({ imageDir: path.join(DATA_DIR, 'lux-capes') }));
+
 app.get('/api/cloud/status', (req, res) => {
     res.json({ enabled: LUXCLOUD_ACTIVE, reason: LUXCLOUD_ACTIVE ? null : (LUXCLOUD_SWITCHED_OFF ? 'disabled' : 'not_configured') });
 });

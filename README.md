@@ -106,6 +106,28 @@ after **every** deployment, the volume is not mounted and data is still being lo
 
 ---
 
+## Lux Client mod: capes & name styles
+
+The Lux Client Fabric mod (repo `fernsehheft/SpawnSound`, folder `Lux Client`) talks to
+`/api/lux` on this site, so Lux players see each other's capes, name styles and the Lux icon
+on every server.
+
+- **Page `/capes`** – cape marketplace: upload a PNG (signed in with the normal Lux account),
+  browse, and "Wear this cape". Wearing needs the Minecraft account linked: in the game, module
+  **Lux Account → "Link website account"** opens `/capes?link=CODE`, which links it to the
+  signed-in account.
+- **Moderation** – every picture (marketplace uploads *and* the own picture a player picks in
+  the mod) is invisible to everybody else until an admin approves it under
+  **Admin → Moderation → Capes**. Rejecting (or removing a published cape) takes it off every
+  player at once; the uploader gets a notification with the reason, and the action is in the
+  audit log. A rejected picture cannot simply be uploaded again.
+- **Mod sign-in** works like a Minecraft server: `POST /api/lux/auth/start` → the mod calls
+  Mojang `joinServer` → `POST /api/lux/auth/finish` checks Mojang `hasJoined` and returns a
+  30-day token. Nobody can change another player's cosmetics.
+- Code: `routes/luxCosmetics.js`, tables in `db_init_lux.js`, test `npm run test:lux`.
+
+---
+
 ## Platform Usage
 
 - **Plugin Gallery:** Visit the homepage to browse or search for plugins, extensions, resourcepacks, or shaders.

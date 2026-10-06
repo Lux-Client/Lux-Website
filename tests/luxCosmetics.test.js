@@ -390,6 +390,32 @@ async function main() {
         h.setSessionUser(null);
     });
 
+    await test('gifts: pay for someone else, they own it and see a pop-up once', async () => {
+        h.setSessionUser(admin);
+        await h.request({ method: 'POST', url: '/api/lux/admin/credits/give', body: { name: 'Alice', amount: 5000 } });
+        h.setSessionUser(null);
+        await h.request({ method: 'POST', url: `/api/lux/admin/players/${BOB}/revoke`, body: { item: 'emote:floss' } });
+        const before = (await h.request({ url: '/api/lux/shop', token: alice })).body.credits;
+        const gift = await h.request({ method: 'POST', url: '/api/lux/shop/gift', token: alice, body: { item: 'emote:floss', name: 'bob' } });
+        assert.strictEqual(gift.status, 200, JSON.stringify(gift.body));
+        assert.strictEqual(gift.body.credits, before - 3000);
+        const bobShop = await h.request({ url: '/api/lux/shop', token: bob });
+        assert.ok(bobShop.body.owned.includes('emote:floss'), 'receiver owns it');
+        const again = await h.request({ method: 'POST', url: '/api/lux/shop/gift', token: alice, body: { item: 'emote:floss', name: 'Bob' } });
+        assert.strictEqual(again.status, 400, 'already has it');
+        const nobody = await h.request({ method: 'POST', url: '/api/lux/shop/gift', token: alice, body: { item: 'emote:floss', name: 'Winner' } });
+        assert.strictEqual(nobody.status, 404, 'only Lux players');
+        const self = await h.request({ method: 'POST', url: '/api/lux/shop/gift', token: alice, body: { item: 'emote:robot', name: 'Alice' } });
+        assert.strictEqual(self.status, 400);
+        const me = await h.request({ url: '/api/lux/me', token: bob });
+        assert.strictEqual(me.body.gifts.length, 1);
+        assert.strictEqual(me.body.gifts[0].from, 'Alice');
+        assert.strictEqual(me.body.gifts[0].item, 'emote:floss');
+        await h.request({ method: 'POST', url: '/api/lux/me/gifts/seen', token: bob, body: { ids: [me.body.gifts[0].id] } });
+        const after = await h.request({ url: '/api/lux/me', token: bob });
+        assert.strictEqual(after.body.gifts.length, 0, 'pop-up only once');
+    });
+
     h.stop();
     if (failures) {
         console.error(`\n${failures} test(s) failed`);

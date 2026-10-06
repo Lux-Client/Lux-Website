@@ -143,6 +143,11 @@ on every server.
   `POST /api/lux/shop/buy {item}`. The server only shares what a player owns: unowned items are
   stripped from the profile on save. **Credits cannot be bought** – they are only handed out
   (giveaways) by admins.
+- **Gifting** – `POST /api/lux/shop/gift {item, name}`: the sender pays the price, the recipient
+  (looked up by Minecraft name, must have used Lux Client and not own the item yet) gets it with
+  source `gift`. Gifts are stored in `lux_gifts`; unseen ones come with the recipient's own profile
+  (`gifts`), the mod shows a pop-up and confirms them with `POST /api/lux/me/gifts/seen {ids}`.
+  The sender's credit history notes who got the gift.
 - **Admin → Community → Lux Credits** – give credits quickly (Minecraft name + amount), or look a
   player up by Minecraft name: balance, add/remove credits, credit history, unlocked items
   (grant/revoke), and reset the second line or take off all cosmetics. Every action is in the

@@ -459,8 +459,18 @@ function createLuxRouter(options = {}) {
         return {
             uuid: p.uuid, name: p.name, cape, nameStyle: parse(p.name_style),
             cosmetics: parse(p.cosmetics), capeReview, linked: p.linked || null,
-            credits: Number(p.credits || 0), rev: Number(p.rev || 0)
+            credits: Number(p.credits || 0), rev: Number(p.rev || 0),
+            gifts: await unseenGifts(p.uuid)
         };
+    }
+
+    /** Gifts the player has not seen yet (the mod shows a pop-up, then marks them seen). */
+    async function unseenGifts(uuid) {
+        const [rows] = await pool.query(
+            'SELECT id, from_name, item, created_at FROM lux_gifts WHERE to_uuid = ? AND seen = FALSE ORDER BY id LIMIT 20',
+            [uuid]
+        );
+        return rows.map((r) => ({ id: Number(r.id), from: r.from_name, item: r.item, at: Number(r.created_at) }));
     }
 
     function listing(row) {
@@ -704,6 +714,57 @@ function createLuxRouter(options = {}) {
             [uuid, delta, balance, reason ? String(reason).slice(0, 200) : null, actor || null, now()]
         );
     }
+
+    // Gift an item to another Lux player: the sender pays, the receiver owns it and gets a pop-up.
+    router.post('/shop/gift', writeLimiter, wrap(async (req, res) => {
+        const p = await requireMod(req);
+        const item = String((req.body && req.body.item) || '');
+        const name = String((req.body && req.body.name) || '').trim();
+        await loadPrices();
+        const pr = shop.ITEM_RE.test(item) ? priceOf(item) : null;
+        if (pr === null) throw new HttpError(404, 'This is not for sale.');
+        if (pr === 0) throw new HttpError(400, 'This is free for everybody - no need to gift it.');
+        if (!/^[A-Za-z0-9_]{1,16}$/.test(name)) throw new HttpError(400, 'Invalid Minecraft name.');
+        const [found] = await pool.query(
+            'SELECT uuid, name FROM lux_players WHERE LOWER(name) = ? AND last_seen > 0 ORDER BY last_seen DESC LIMIT 1',
+            [name.toLowerCase()]
+        );
+        const to = found[0];
+        if (!to) throw new HttpError(404, `${name} does not use Lux Client.`);
+        if (to.uuid === p.uuid) throw new HttpError(400, 'You cannot gift something to yourself.');
+        if ((await ownedSet(to.uuid)).has(item)) throw new HttpError(400, `${to.name} already has this.`);
+        const [upd] = await pool.query(
+            'UPDATE lux_players SET credits = credits + ? WHERE uuid = ? AND credits >= ? RETURNING credits',
+            [-pr, p.uuid, pr]
+        );
+        if (!upd.rows || upd.rows.length === 0) throw new HttpError(400, 'Not enough Lux Credits.');
+        let credits = Number(upd.rows[0].credits);
+        const [ins] = await pool.query(
+            'INSERT INTO lux_owned (uuid, item, price, source, acquired_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT (uuid, item) DO NOTHING RETURNING uuid',
+            [to.uuid, item, pr, 'gift', now()]
+        );
+        if (!ins.rows || ins.rows.length === 0) {
+            const [back] = await pool.query('UPDATE lux_players SET credits = credits + ? WHERE uuid = ? RETURNING credits', [pr, p.uuid]);
+            credits = Number(back.rows[0].credits);
+            throw new HttpError(400, `${to.name} already has this.`);
+        }
+        await pool.query(
+            'INSERT INTO lux_gifts (from_uuid, from_name, to_uuid, item, price, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+            [p.uuid, p.name, to.uuid, item, pr, now()]
+        );
+        await logCredits(p.uuid, -pr, credits, `gift ${item} to ${to.name}`, 'shop');
+        await bumpRev([to.uuid]);
+        res.json({ ok: true, credits, to: to.name });
+    }));
+
+    router.post('/me/gifts/seen', wrap(async (req, res) => {
+        const p = await requireMod(req);
+        const ids = (Array.isArray(req.body && req.body.ids) ? req.body.ids : []).filter((v) => isInt(v, 1, 2 ** 31 - 1)).slice(0, 50);
+        for (const id of ids) {
+            await pool.query('UPDATE lux_gifts SET seen = TRUE WHERE id = ? AND to_uuid = ?', [id, p.uuid]);
+        }
+        res.json({ ok: true });
+    }));
 
     router.post('/shop/buy', writeLimiter, wrap(async (req, res) => {
         const p = await requireMod(req);

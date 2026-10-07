@@ -68,30 +68,6 @@ module.exports = {
         "name": "Bow tie",
         "category": "Neck"
     },
-    "cosmetic:parrot": {
-        "name": "Parrot",
-        "category": "Shoulder pet"
-    },
-    "cosmetic:shoulder_cat": {
-        "name": "Cat",
-        "category": "Shoulder pet"
-    },
-    "cosmetic:shoulder_fox": {
-        "name": "Fox",
-        "category": "Shoulder pet"
-    },
-    "cosmetic:slime": {
-        "name": "Slime",
-        "category": "Shoulder pet"
-    },
-    "cosmetic:bee": {
-        "name": "Bee",
-        "category": "Shoulder pet"
-    },
-    "cosmetic:axolotl": {
-        "name": "Axolotl",
-        "category": "Shoulder pet"
-    },
     "cosmetic:angel_wings": {
         "name": "Angel wings",
         "category": "Wings"
@@ -232,30 +208,6 @@ module.exports = {
         "name": "Medal",
         "category": "Neck"
     },
-    "cosmetic:penguin": {
-        "name": "Penguin",
-        "category": "Shoulder pet"
-    },
-    "cosmetic:frog": {
-        "name": "Frog",
-        "category": "Shoulder pet"
-    },
-    "cosmetic:owl": {
-        "name": "Owl",
-        "category": "Shoulder pet"
-    },
-    "cosmetic:baby_dragon": {
-        "name": "Baby dragon",
-        "category": "Shoulder pet"
-    },
-    "cosmetic:ghost": {
-        "name": "Ghost",
-        "category": "Shoulder pet"
-    },
-    "cosmetic:chick": {
-        "name": "Chick",
-        "category": "Shoulder pet"
-    },
     "cosmetic:backpack": {
         "name": "Backpack",
         "category": "Back"
@@ -328,6 +280,30 @@ module.exports = {
         "name": "Spirit flame wings",
         "category": "Wings"
     },
+    "cosmetic:archangel_wings": {
+        "name": "Archangel Wings",
+        "category": "Wings"
+    },
+    "cosmetic:wyvern_wings": {
+        "name": "Wyvern Wings",
+        "category": "Wings"
+    },
+    "cosmetic:monarch_wings": {
+        "name": "Monarch Wings",
+        "category": "Wings"
+    },
+    "cosmetic:firebird_wings": {
+        "name": "Firebird Wings",
+        "category": "Wings"
+    },
+    "cosmetic:void_wings": {
+        "name": "Void Wings",
+        "category": "Wings"
+    },
+    "cosmetic:mecha_wings": {
+        "name": "Mecha Wings",
+        "category": "Wings"
+    },
     "cosmetic:aura_style_stars": {
         "name": "Style stars",
         "category": "Aura"
@@ -343,22 +319,6 @@ module.exports = {
     "cosmetic:aura_ender": {
         "name": "Ender glow",
         "category": "Aura"
-    },
-    "cosmetic:head_cat": {
-        "name": "Cat on your head",
-        "category": "Head pet"
-    },
-    "cosmetic:raccoon": {
-        "name": "Raccoon",
-        "category": "Head pet"
-    },
-    "cosmetic:baby_bear": {
-        "name": "Baby bear",
-        "category": "Head pet"
-    },
-    "cosmetic:head_frog": {
-        "name": "Frog on your head",
-        "category": "Head pet"
     },
     "cosmetic:bandana_heavenly": {
         "name": "Heavenly bandana",
@@ -608,6 +568,70 @@ module.exports = {
         "name": "Bumblebee",
         "category": "Companion"
     },
+    "cosmetic:parrot": {
+        "name": "Parrot",
+        "category": "Shoulder pet"
+    },
+    "cosmetic:shoulder_cat": {
+        "name": "Cat",
+        "category": "Shoulder pet"
+    },
+    "cosmetic:shoulder_fox": {
+        "name": "Fox",
+        "category": "Shoulder pet"
+    },
+    "cosmetic:slime": {
+        "name": "Slime",
+        "category": "Shoulder pet"
+    },
+    "cosmetic:bee": {
+        "name": "Bee",
+        "category": "Shoulder pet"
+    },
+    "cosmetic:axolotl": {
+        "name": "Axolotl",
+        "category": "Shoulder pet"
+    },
+    "cosmetic:penguin": {
+        "name": "Penguin",
+        "category": "Shoulder pet"
+    },
+    "cosmetic:frog": {
+        "name": "Frog",
+        "category": "Shoulder pet"
+    },
+    "cosmetic:owl": {
+        "name": "Owl",
+        "category": "Shoulder pet"
+    },
+    "cosmetic:baby_dragon": {
+        "name": "Baby dragon",
+        "category": "Shoulder pet"
+    },
+    "cosmetic:ghost": {
+        "name": "Ghost",
+        "category": "Shoulder pet"
+    },
+    "cosmetic:chick": {
+        "name": "Chick",
+        "category": "Shoulder pet"
+    },
+    "cosmetic:head_cat": {
+        "name": "Cat on your head",
+        "category": "Head pet"
+    },
+    "cosmetic:raccoon": {
+        "name": "Raccoon",
+        "category": "Head pet"
+    },
+    "cosmetic:baby_bear": {
+        "name": "Baby bear",
+        "category": "Head pet"
+    },
+    "cosmetic:head_frog": {
+        "name": "Frog on your head",
+        "category": "Head pet"
+    },
     "cosmetic:shield_obsidian": {
         "name": "Obsidian shield",
         "category": "Shield"
@@ -666,6 +690,46 @@ module.exports = {
     },
     "cosmetic:shield_heart": {
         "name": "Heart shield",
+        "category": "Shield"
+    },
+    "cosmetic:shield_moon": {
+        "name": "Moon Shield",
+        "category": "Shield"
+    },
+    "cosmetic:shield_sun": {
+        "name": "Sun Shield",
+        "category": "Shield"
+    },
+    "cosmetic:shield_vortex": {
+        "name": "Vortex Shield",
+        "category": "Shield"
+    },
+    "cosmetic:shield_ocean": {
+        "name": "Ocean Shield",
+        "category": "Shield"
+    },
+    "cosmetic:shield_eye": {
+        "name": "Guardian Shield",
+        "category": "Shield"
+    },
+    "cosmetic:shield_clock": {
+        "name": "Clockwork Shield",
+        "category": "Shield"
+    },
+    "cosmetic:shield_storm": {
+        "name": "Storm Shield",
+        "category": "Shield"
+    },
+    "cosmetic:shield_amethyst": {
+        "name": "Amethyst Shield",
+        "category": "Shield"
+    },
+    "cosmetic:shield_sakura": {
+        "name": "Cherry Blossom Shield",
+        "category": "Shield"
+    },
+    "cosmetic:shield_neon": {
+        "name": "Neon Shield",
         "category": "Shield"
     },
     "cosmetic:bandana_lightning_pink": {
@@ -911,6 +975,30 @@ module.exports = {
     "emote:weights": {
         "name": "Weightlifting",
         "category": "Emotes"
+    },
+    "emote:heart_together": {
+        "name": "Heart Together",
+        "category": "Partner emotes"
+    },
+    "emote:cheers": {
+        "name": "Cheers",
+        "category": "Partner emotes"
+    },
+    "emote:secret_handshake": {
+        "name": "Secret Handshake",
+        "category": "Partner emotes"
+    },
+    "emote:double_high_five": {
+        "name": "Double High Five",
+        "category": "Partner emotes"
+    },
+    "emote:chest_bump": {
+        "name": "Chest Bump",
+        "category": "Partner emotes"
+    },
+    "emote:waltz": {
+        "name": "Waltz",
+        "category": "Partner emotes"
     },
     "name:color:1": {
         "name": "Name colour: Solid color",

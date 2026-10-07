@@ -50,6 +50,8 @@ const PRICES = {
     'emote:air_drums': 3000,
     'emote:high_five': 2500, 'emote:fist_bump': 2500, 'emote:handshake': 2500, 'emote:hug': 2500,
     'emote:partner_dance': 5000,
+    'emote:double_high_five': 3000, 'emote:chest_bump': 3000, 'emote:cheers': 3500,
+    'emote:heart_together': 4000, 'emote:secret_handshake': 4500, 'emote:waltz': 5000,
     // premium emotes (props, sounds)
     'emote:six_seven': 3000, 'emote:l_dance': 4000, 'emote:web_hang': 5000, 'emote:cat_cuddle': 5000,
     'emote:coffee': 1500, 'emote:blow_kiss': 1500, 'emote:selfie': 2000, 'emote:sleep': 2000,
@@ -102,6 +104,8 @@ const PRICES = {
     'cosmetic:phoenix_wings': 4000,
     'cosmetic:big_fairy_wings': 5000, 'cosmetic:gothic_moth_wings': 6000, 'cosmetic:crystal_wings': 6000,
     'cosmetic:spirit_flame_wings': 6500,
+    'cosmetic:monarch_wings': 5500, 'cosmetic:wyvern_wings': 6000, 'cosmetic:archangel_wings': 6500,
+    'cosmetic:void_wings': 6500, 'cosmetic:firebird_wings': 7000, 'cosmetic:mecha_wings': 7000,
     // tails
     'cosmetic:bunny_tail': 500, 'cosmetic:cat_tail': 800, 'cosmetic:wolf_tail': 800,
     'cosmetic:devil_tail': 900, 'cosmetic:fox_tail': 1000, 'cosmetic:dragon_tail': 1500,
@@ -133,6 +137,10 @@ const PRICES = {
     'cosmetic:shield_yinyang': 1500, 'cosmetic:shield_snowflake': 1800, 'cosmetic:shield_rainbow': 2000,
     'cosmetic:shield_fire': 2000, 'cosmetic:shield_aether': 2000, 'cosmetic:shield_nether': 2500,
     'cosmetic:shield_end': 2500, 'cosmetic:shield_galaxy': 2500, 'cosmetic:shield_obsidian': 3000,
+    'cosmetic:shield_amethyst': 1800, 'cosmetic:shield_sakura': 2000, 'cosmetic:shield_ocean': 2000,
+    'cosmetic:shield_moon': 2200, 'cosmetic:shield_sun': 2200, 'cosmetic:shield_neon': 2500,
+    'cosmetic:shield_storm': 2500, 'cosmetic:shield_eye': 2800, 'cosmetic:shield_clock': 3000,
+    'cosmetic:shield_vortex': 3000,
     // pets on the head
     'cosmetic:head_frog': 2500, 'cosmetic:head_cat': 3000, 'cosmetic:raccoon': 3000, 'cosmetic:baby_bear': 3000
 };

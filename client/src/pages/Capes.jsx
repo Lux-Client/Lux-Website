@@ -7,7 +7,7 @@ import {
 import PageShell from '../components/PageShell'
 import useAuth from '../hooks/useAuth'
 
-/* Cape marketplace for the Lux Client mod. Capes are PNG pictures; every upload is
+/* Cape marketplace for the Lux Client mod. Capes are PNG, JPG or WebP pictures (stored as PNG); every upload is
    checked by the Lux team before anyone else can see it. Wearing one needs the
    Minecraft account linked — that link is opened from the game (Lux Account module). */
 
@@ -185,7 +185,7 @@ export default function Capes() {
     try {
       await api(`/api/lux/capes?title=${encodeURIComponent(title)}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'image/png' },
+        headers: { 'Content-Type': file.type || 'application/octet-stream' },
         body: file,
       })
       setNotice({ kind: 'ok', text: 'Uploaded! Your cape is now checked by the Lux team and shows up in the marketplace once it is approved.' })
@@ -360,14 +360,14 @@ export default function Capes() {
                   <input
                     ref={fileInput}
                     type="file"
-                    accept="image/png"
+                    accept="image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp"
                     required
                     onChange={e => setFile(e.target.files?.[0] || null)}
                     className="text-sm text-white/50 file:mr-3 file:rounded-lg file:border-0 file:bg-white/8 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-white"
                   />
                   {filePreview && <div className="grid place-items-center rounded-xl bg-black/30 py-3"><CapePreview src={filePreview} /></div>}
                   <p className="text-xs leading-relaxed text-white/30">
-                    PNG, at most 1 MB. A Minecraft cape texture (64×32) or any picture — it is cropped to the cape.
+                    PNG, JPG or WebP, at most 12 MB (big pictures are scaled down). A Minecraft cape texture (64×32) or any picture — it is cropped to the cape.
                     No sexual, violent, hateful or copyrighted content: the Lux team checks every upload.
                   </p>
                   <button disabled={busy || !file} className="rounded-lg bg-primary px-4 py-2.5 text-sm font-bold text-black transition hover:bg-primary-light disabled:opacity-50">

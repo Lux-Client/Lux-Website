@@ -17,7 +17,7 @@ async function png(color, w = 64, h = 32) {
 async function main() {
     const h = new Harness();
     // Mojang says yes for every name it knows.
-    const known = { Alice: ALICE, Bob: BOB };
+    const known = { Alice: ALICE, Bob: BOB, Carol: 'c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0' };
     const hasJoined = async (name) => (known[name] ? { uuid: known[name], name } : null);
 
     await h.start({
@@ -414,6 +414,36 @@ async function main() {
         await h.request({ method: 'POST', url: '/api/lux/me/gifts/seen', token: bob, body: { ids: [me.body.gifts[0].id] } });
         const after = await h.request({ url: '/api/lux/me', token: bob });
         assert.strictEqual(after.body.gifts.length, 0, 'pop-up only once');
+    });
+
+    await test('JPG and WebP pictures are accepted and stored as PNG (checked by content, not name)', async () => {
+        const sharp = require('sharp');
+        const carol = (await login('Carol')).body.token;
+        for (const fmt of ['jpeg', 'webp']) {
+            const pic = await sharp({ create: { width: 64, height: 32, channels: 3, background: fmt === 'jpeg' ? '#3366ff' : '#33ff66' } })[fmt]().toBuffer();
+            // the mod and the website send it as image/png - a renamed JPG must still work
+            const up = await h.request({ method: 'PUT', url: '/api/lux/me/cape-image', token: carol, body: pic, headers: { 'Content-Type': 'image/png' } });
+            assert.strictEqual(up.status, 200, fmt + ': ' + JSON.stringify(up.body));
+            const img = await h.request({ url: `/api/lux/images/${up.body.hash}.png`, token: carol, raw: true });
+            assert.strictEqual(img.status, 200);
+            assert.strictEqual((await sharp(img.body).metadata()).format, 'png');
+        }
+    });
+
+    await test('a big photo is scaled down instead of rejected', async () => {
+        const sharp = require('sharp');
+        const carol = (await login('Carol')).body.token;
+        // 3000x2000 noise: far over 2048 px, and as PNG far over 1 MB
+        const w = 3000, hh = 2000, raw = Buffer.alloc(w * hh * 3);
+        for (let i = 0; i < raw.length; i++) raw[i] = (i * 2654435761 >>> 13) & 255;
+        const photo = await sharp(raw, { raw: { width: w, height: hh, channels: 3 } }).jpeg({ quality: 90 }).toBuffer();
+        const up = await h.request({ method: 'PUT', url: '/api/lux/me/cape-image', token: carol, body: photo, headers: { 'Content-Type': 'image/png' } });
+        assert.strictEqual(up.status, 200, JSON.stringify(up.body));
+        const img = await h.request({ url: `/api/lux/images/${up.body.hash}.png`, token: carol, raw: true });
+        const meta = await sharp(img.body).metadata();
+        assert.ok(img.body.length <= 1024 * 1024, 'stored PNG fits 1 MB');
+        assert.ok(meta.width <= 2048 && meta.height <= 2048);
+        assert.ok(Math.abs(meta.width / meta.height - 1.5) < 0.02, 'keeps the aspect ratio');
     });
 
     h.stop();

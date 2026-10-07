@@ -22,6 +22,9 @@ const TOKEN_DAYS = 30;
 const ONLINE_MS = 10 * 60 * 1000;
 const LINK_CODE_MS = 10 * 60 * 1000;
 const MAX_IMAGE_BYTES = 1024 * 1024;
+/** Uploads may be bigger (photos, JPG); they are shrunk until the stored PNG fits MAX_IMAGE_BYTES. */
+const MAX_UPLOAD_BYTES = 12 * 1024 * 1024;
+const UPLOAD_FORMATS = ['png', 'jpeg', 'webp'];
 const MAX_IMAGE_SIDE = 2048;
 const MAX_CAPES_PER_USER = 20;
 const MAX_PENDING_PER_USER = 5;
@@ -70,23 +73,37 @@ async function mojangHasJoined(name, serverId) {
     return { uuid: body.id.toLowerCase(), name: body.name };
 }
 
-/** Validates a PNG and re-encodes it (drops metadata and anything hidden in extra chunks). */
+/**
+ * Validates a picture (PNG, JPG or WebP - checked by its content, not the file name) and
+ * re-encodes it as PNG (drops metadata and anything hidden in extra chunks). Big pictures
+ * are scaled down until they fit MAX_IMAGE_SIDE and MAX_IMAGE_BYTES.
+ */
 async function normalizePng(buf) {
-    if (!Buffer.isBuffer(buf) || buf.length === 0) throw new HttpError(400, 'Please send a PNG picture.');
+    if (!Buffer.isBuffer(buf) || buf.length === 0) throw new HttpError(400, 'Please send a PNG or JPG picture.');
     const sharp = require('sharp');
     let meta;
     try {
         meta = await sharp(buf).metadata();
     } catch {
-        throw new HttpError(400, 'That is not a valid PNG picture.');
+        throw new HttpError(400, 'That is not a valid PNG or JPG picture.');
     }
-    if (meta.format !== 'png') throw new HttpError(400, 'Only PNG pictures are allowed.');
-    if (!meta.width || !meta.height || meta.width < 8 || meta.height < 8
-        || meta.width > MAX_IMAGE_SIDE || meta.height > MAX_IMAGE_SIDE) {
-        throw new HttpError(400, `The picture must be between 8x8 and ${MAX_IMAGE_SIDE}x${MAX_IMAGE_SIDE} pixels.`);
+    if (!UPLOAD_FORMATS.includes(meta.format)) throw new HttpError(400, 'Only PNG, JPG and WebP pictures are allowed.');
+    if (!meta.width || !meta.height || meta.width < 8 || meta.height < 8) {
+        throw new HttpError(400, 'The picture must be at least 8x8 pixels.');
     }
-    const out = await sharp(buf).png({ compressionLevel: 9 }).toBuffer();
-    return { buf: out, width: meta.width, height: meta.height };
+    // JPG photos can be stored rotated (EXIF); turn them the right way up first
+    let width = meta.width, height = meta.height;
+    if (meta.orientation >= 5) [width, height] = [height, width];
+    let side = Math.min(MAX_IMAGE_SIDE, Math.max(width, height));
+    for (;;) {
+        const scale = Math.min(1, side / Math.max(width, height));
+        const w = Math.max(8, Math.round(width * scale)), h = Math.max(8, Math.round(height * scale));
+        const out = await sharp(buf).rotate().resize(w, h, { fit: 'fill' }).png({ compressionLevel: 9 }).toBuffer();
+        if (out.length <= MAX_IMAGE_BYTES || side <= 64) {
+            return { buf: out, width: w, height: h };
+        }
+        side = Math.floor(side * 0.75);
+    }
 }
 
 function createLuxRouter(options = {}) {
@@ -140,7 +157,7 @@ function createLuxRouter(options = {}) {
     }
 
     const router = express.Router();
-    const rawPng = express.raw({ type: () => true, limit: MAX_IMAGE_BYTES });
+    const rawPng = express.raw({ type: () => true, limit: MAX_UPLOAD_BYTES });
 
     const limiter = (limit) => rateLimit({
         windowMs: 60 * 1000,
@@ -1261,7 +1278,7 @@ function createLuxRouter(options = {}) {
     // eslint-disable-next-line no-unused-vars
     router.use((err, req, res, next) => {
         if (err instanceof HttpError) return res.status(err.status).json({ error: err.message });
-        if (err && err.type === 'entity.too.large') return res.status(413).json({ error: 'The picture may be at most 1 MB.' });
+        if (err && err.type === 'entity.too.large') return res.status(413).json({ error: 'The picture may be at most 12 MB.' });
         console.error('[LuxCosmetics]', err);
         res.status(500).json({ error: 'Server error.' });
     });

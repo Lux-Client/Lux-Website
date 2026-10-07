@@ -688,6 +688,21 @@ function createLuxRouter(options = {}) {
         const list = Array.isArray(req.body && req.body.uuids) ? req.body.uuids : [];
         const uuids = [...new Set(list.map(cleanUuid).filter((u) => UUID_RE.test(u)))].slice(0, 300);
         const t = now();
+        // Cracked-/Proxy-Server: dort haben Spieler eine Offline-UUID - der Mod fragt dann per Name nach.
+        const names = Array.isArray(req.body && req.body.names)
+            ? [...new Set(req.body.names.filter((n) => typeof n === 'string' && /^[A-Za-z0-9_]{1,16}$/.test(n))
+                .map((n) => n.toLowerCase()))].slice(0, 100)
+            : [];
+        const aliases = {};
+        if (names.length) {
+            const [rows] = await pool.query(
+                `SELECT uuid, LOWER(name) AS lname, last_seen FROM lux_players WHERE LOWER(name) IN (${names.map(() => '?').join(',')}) ORDER BY last_seen DESC`,
+                names
+            );
+            for (const r of rows) {
+                if (!aliases[r.lname] && Number(r.last_seen) > t - ONLINE_MS) aliases[r.lname] = r.uuid;
+            }
+        }
         const unknown = uuids.filter((u) => !live.has(u) && !((missing.get(u) || 0) > t));
         if (unknown.length) {
             const [rows] = await pool.query(
@@ -714,7 +729,7 @@ function createLuxRouter(options = {}) {
         }
         await loadPrices();
         res.set('Cache-Control', 'no-store');
-        res.json({ players: out, now: t, shop: prices.version });
+        res.json({ players: out, now: t, shop: prices.version, aliases });
     }));
 
     // ------------------------------------------------------------------ mod: Lux Credits shop

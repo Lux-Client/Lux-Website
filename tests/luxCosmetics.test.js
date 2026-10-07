@@ -140,6 +140,15 @@ async function main() {
         assert.strictEqual(players.headers['cache-control'], 'no-store');
     });
 
+    await test('live poll finds Lux players by name (cracked servers with offline UUIDs)', async () => {
+        const res = await h.request({ method: 'POST', url: '/api/lux/live', token: alice, body: { uuids: [], names: ['bob', 'Nobody', '<bad>'] } });
+        assert.strictEqual(res.status, 200);
+        assert.strictEqual(res.body.aliases.bob, BOB, 'name -> real uuid of an online Lux player');
+        assert.strictEqual(res.body.aliases.nobody, undefined, 'unknown names are not listed');
+        const none = await h.request({ method: 'POST', url: '/api/lux/live', token: alice, body: { uuids: [BOB] } });
+        assert.deepStrictEqual(none.body.aliases, {}, 'no names, no aliases');
+    });
+
     await test('locked emotes cannot be played; duo emotes carry the partner', async () => {
         const locked = await h.request({ method: 'POST', url: '/api/lux/me/emote', token: alice, body: { emote: 'dance' } });
         assert.strictEqual(locked.status, 403);

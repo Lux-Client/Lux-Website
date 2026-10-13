@@ -16,6 +16,7 @@ const path = require('path');
 const { rateLimit } = require('express-rate-limit');
 const pool = require('../database');
 const shop = require('../luxShop');
+const { attachFriends } = require('../luxFriends');
 
 const TOKEN_DAYS = 30;
 /** How long a player counts as "playing with Lux" (the mod pings every 2 minutes). */
@@ -1142,6 +1143,7 @@ function createLuxRouter(options = {}) {
         const [owned] = await pool.query('SELECT item, price, source, acquired_at FROM lux_owned WHERE uuid = ? ORDER BY acquired_at DESC', [uuid]);
         const [log] = await pool.query('SELECT delta, balance, reason, actor, created_at FROM lux_credit_log WHERE uuid = ? ORDER BY id DESC LIMIT 25', [uuid]);
         const [acc] = p.user_id ? await pool.query('SELECT username FROM users WHERE id = ?', [p.user_id]) : [[]];
+        const socialBan = await friends.socialBan(uuid);
         return {
             uuid: p.uuid,
             name: p.name,
@@ -1151,6 +1153,7 @@ function createLuxRouter(options = {}) {
             account: acc[0] ? acc[0].username : null,
             cosmetics: parse(p.cosmetics),
             nameStyle: parse(p.name_style),
+            socialBan,
             cape: parse(p.cape),
             owned: owned.map((o) => ({ item: o.item, price: Number(o.price), source: o.source, at: Number(o.acquired_at) })),
             log: log.map((l) => ({ delta: Number(l.delta), balance: Number(l.balance), reason: l.reason, actor: l.actor, at: Number(l.created_at) }))
@@ -1307,6 +1310,10 @@ function createLuxRouter(options = {}) {
         await bumpRev([p.uuid]);
         res.json({ success: true, name: p.name, uuid: p.uuid, credits });
     }));
+
+    // ------------------------------------------------------------------ friends, chat, invites
+
+    const friends = attachFriends(router, { requireMod, requireAdmin, audit, wrap, HttpError });
 
     // ------------------------------------------------------------------ errors
 

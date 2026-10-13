@@ -123,7 +123,8 @@ async function createLuxTables(connection) {
     `);
     await connection.query('CREATE INDEX IF NOT EXISTS idx_lux_capes_status ON lux_capes(status)');
     await connection.query('CREATE INDEX IF NOT EXISTS idx_lux_capes_user_id ON lux_capes(user_id)');
-    console.log('[Database] Lux cosmetics tables checked/created.');
+    await require('./luxFriends').createFriendTables(connection);
+    console.log('[Database] Lux cosmetics + friends tables checked/created.');
 }
 
 module.exports = { createLuxTables };

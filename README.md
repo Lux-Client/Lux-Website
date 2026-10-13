@@ -164,6 +164,19 @@ on every server.
 
 ---
 
+- **Friends & chat** (`luxFriends.js`, like Discord without voice) – requests by Minecraft name
+  (`POST /api/lux/friends/request {name}`, `accept` / `decline` / `cancel` / `remove` / `block` /
+  `unblock` / `mute` with `{uuid}`), `GET /api/lux/friends` (friends with online status and
+  activity, requests, blocked players). The mod sends a heartbeat `POST /api/lux/friends/poll
+  {kind: menu|single|server, version, server, address, since}` every few seconds; the answer brings
+  new messages. Friends only see the public server name, never the address. Chats:
+  `GET/POST /api/lux/friends/messages/:uuid` (max 500 characters, formatting codes removed),
+  invites `POST /api/lux/friends/invite/:uuid` – valid only while the sender is still on that
+  server. Blocking ends the friendship and stops requests and messages.
+- **Admin → Community → Lux Credits → Friends & chat** – ban a player from the whole social
+  feature (`POST/DELETE /api/lux/admin/players/:uuid/social-ban`, list: `GET /api/lux/admin/social-bans`).
+  Banned players look offline to their friends. Tests: `node tests/luxFriends.test.js`.
+
 ## Platform Usage
 
 - **Plugin Gallery:** Visit the homepage to browse or search for plugins, extensions, resourcepacks, or shaders.

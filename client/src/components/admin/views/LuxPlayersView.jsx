@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Coins, Gift, Minus, Plus, RefreshCw, RotateCcw, Search, Trash2, UserRound } from 'lucide-react'
+import { Ban, Coins, Gift, MessageSquareOff, Minus, Plus, RefreshCw, RotateCcw, Search, Trash2, UserRound } from 'lucide-react'
 import { Badge, Button, EmptyState, Field, Panel, TextInput } from '../ui'
 import { useDialog, useToast } from '../feedback'
 
@@ -52,9 +52,11 @@ export default function LuxPlayersView() {
   const [loading, setLoading] = useState(false)
   const [prices, setPrices] = useState({})
   const [grantItem, setGrantItem] = useState('')
+  const [bans, setBans] = useState([])
 
   useEffect(() => {
     call('/api/lux/admin/shop').then(d => setPrices(d.prices || {})).catch(() => {})
+    loadBans()
   }, [])
 
   const load = async (name = query) => {
@@ -119,6 +121,41 @@ export default function LuxPlayersView() {
     }
   }
 
+  function loadBans() {
+    call('/api/lux/admin/social-bans').then(d => setBans(d.bans || [])).catch(() => {})
+  }
+
+  const socialBan = async () => {
+    const values = await dialog.prompt({
+      title: `Ban ${player.name} from friends & chat?`,
+      description: 'They can no longer add friends, write messages or send invites. Friends see them as offline.',
+      fields: [{ name: 'reason', label: 'Reason (shown to the player)', placeholder: 'Spam' }],
+      confirmLabel: 'Ban',
+      tone: 'danger',
+    })
+    if (!values) return
+    try {
+      await call(`/api/lux/admin/players/${player.uuid}/social-ban`, { method: 'POST', body: { reason: values.reason } })
+      toast.success('Banned from friends & chat')
+      reload()
+      loadBans()
+    } catch (e) {
+      toast.error('Action failed', e.message)
+    }
+  }
+
+  const socialUnban = async (uuid, name) => {
+    if (!(await dialog.confirm({ title: `Lift the ban for ${name}?`, description: 'They can use friends and chat again.', confirmLabel: 'Lift ban' }))) return
+    try {
+      await call(`/api/lux/admin/players/${uuid}/social-ban`, { method: 'DELETE' })
+      toast.success('Ban lifted')
+      if (player && player.uuid === uuid) reload()
+      loadBans()
+    } catch (e) {
+      toast.error('Action failed', e.message)
+    }
+  }
+
   const action = async (path, body, confirm, success) => {
     if (confirm && !(await dialog.confirm(confirm))) return
     try {
@@ -169,6 +206,7 @@ export default function LuxPlayersView() {
                   <p className="text-lg font-bold text-white">{player.name}</p>
                   <Badge tone={player.online ? 'success' : 'neutral'}>{player.online ? 'Online' : 'Offline'}</Badge>
                   {player.account && <Badge tone="info">Website: {player.account}</Badge>}
+                  {player.socialBan && <Badge tone="danger">Banned from friends & chat</Badge>}
                 </div>
                 <p className="mt-0.5 font-mono text-[11px] text-white/30">{player.uuid} · last seen {ago(player.lastSeen)}</p>
               </div>
@@ -215,6 +253,18 @@ export default function LuxPlayersView() {
                   </div>
                 </div>
 
+                <p className="mb-2 mt-5 text-[11px] font-bold uppercase tracking-[0.1em] text-white/35">Friends & chat</p>
+                <div className="flex items-center justify-between gap-3 rounded-xl border border-white/[0.06] bg-white/[0.02] p-4 text-sm">
+                  <p className="text-white/60">
+                    {player.socialBan
+                      ? <>Banned{player.socialBan.reason ? <> – <span className="text-white">“{player.socialBan.reason}”</span></> : ''} <span className="text-white/30">since {ago(player.socialBan.at)}</span></>
+                      : 'Can use friends, chat and invites.'}
+                  </p>
+                  {player.socialBan
+                    ? <Button size="sm" icon={RotateCcw} onClick={() => socialUnban(player.uuid, player.name)}>Lift ban</Button>
+                    : <Button size="sm" variant="danger" icon={Ban} onClick={socialBan}>Ban</Button>}
+                </div>
+
                 <p className="mb-2 mt-5 text-[11px] font-bold uppercase tracking-[0.1em] text-white/35">Credit history</p>
                 <div className="flex max-h-64 flex-col gap-1 overflow-y-auto rounded-xl border border-white/[0.06] bg-white/[0.02] p-2 text-xs">
                   {player.log.length === 0 && <p className="p-2 text-white/30">No changes yet.</p>}
@@ -258,6 +308,24 @@ export default function LuxPlayersView() {
                 </div>
               </div>
             </div>
+          </div>
+        )}
+      </Panel>
+
+      <Panel title="Banned from friends & chat" description="Players who can no longer add friends, write messages or send invites in the Lux Client.">
+        {bans.length === 0 ? (
+          <EmptyState icon={MessageSquareOff} title="Nobody banned" message="Ban a player above (look them up first)." />
+        ) : (
+          <div className="flex flex-col gap-1.5">
+            {bans.map(b => (
+              <div key={b.uuid} className="flex items-center gap-3 rounded-lg px-2 py-1.5 text-sm hover:bg-white/[0.03]">
+                <img src={`https://mc-heads.net/avatar/${b.uuid}/24`} alt="" className="h-6 w-6 rounded" />
+                <span className="font-semibold text-white">{b.name || b.uuid}</span>
+                <span className="flex-1 truncate text-white/45">{b.reason || '-'}{b.by ? ` · ${b.by}` : ''}</span>
+                <span className="text-xs text-white/25">{ago(b.at)}</span>
+                <Button size="sm" icon={RotateCcw} onClick={() => socialUnban(b.uuid, b.name || b.uuid)}>Lift ban</Button>
+              </div>
+            ))}
           </div>
         )}
       </Panel>

@@ -162,8 +162,6 @@ on every server.
   new cape within seconds. Approving or rejecting a picture also refreshes everybody wearing it.
 - Code: `routes/luxCosmetics.js`, tables in `db_init_lux.js`, test `npm run test:lux`.
 
----
-
 - **Friends & chat** (`luxFriends.js`, like Discord without voice) – requests by Minecraft name
   (`POST /api/lux/friends/request {name}`, `accept` / `decline` / `cancel` / `remove` / `block` /
   `unblock` / `mute` with `{uuid}`), `GET /api/lux/friends` (friends with online status and
@@ -176,6 +174,8 @@ on every server.
 - **Admin → Community → Lux Credits → Friends & chat** – ban a player from the whole social
   feature (`POST/DELETE /api/lux/admin/players/:uuid/social-ban`, list: `GET /api/lux/admin/social-bans`).
   Banned players look offline to their friends. Tests: `node tests/luxFriends.test.js`.
+
+---
 
 ## Platform Usage
 

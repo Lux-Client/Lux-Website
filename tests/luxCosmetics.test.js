@@ -388,6 +388,16 @@ async function main() {
         assert.strictEqual(free.status, 200);
         const emoteOk = await h.request({ method: 'POST', url: '/api/lux/me/emote', token: alice, body: { emote: 'clap' } });
         assert.strictEqual(emoteOk.status, 200, 'price 0 = free for everybody');
+        // free cosmetic worn by a player who never bought it: once it costs, others do not see it any more
+        await h.request({ method: 'PUT', url: '/api/lux/admin/prices', body: { item: 'cosmetic:crown', price: 0 } });
+        const wear = await h.request({ method: 'PUT', url: '/api/lux/me/profile', token: bob, body: { cosmetics: { head: { id: 'crown' } } } });
+        assert.strictEqual(wear.status, 200);
+        const seen = await h.request({ url: `/api/lux/players?uuids=${BOB}`, token: alice });
+        assert.strictEqual(seen.body.players[BOB].cosmetics.head.id, 'crown', 'free item is visible');
+        await h.request({ method: 'PUT', url: '/api/lux/admin/prices', body: { item: 'cosmetic:crown', price: 500 } });
+        const hidden = await h.request({ url: `/api/lux/players?uuids=${BOB}`, token: alice });
+        assert.strictEqual(hidden.body.players[BOB].cosmetics.head, undefined, 'no longer free and not bought -> others do not see it');
+        await h.request({ method: 'PUT', url: '/api/lux/admin/prices', body: { item: 'cosmetic:crown', price: null } });
         await h.request({ method: 'PUT', url: '/api/lux/admin/prices', body: { item: 'emote:dance', forSale: false } });
         const off = await h.request({ method: 'POST', url: '/api/lux/shop/buy', token: alice, body: { item: 'emote:dance' } });
         assert.strictEqual(off.status, 404, 'not for sale');

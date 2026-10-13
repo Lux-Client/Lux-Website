@@ -633,12 +633,34 @@ function createLuxRouter(options = {}) {
             );
             const capes = rows.map((r) => parse(r.cape));
             const approved = await approvedHashes(capes.filter((c) => c && c.type === 'image').map((c) => c.hash));
+            // Anti-cheat: nochmal gegen den Besitz prüfen (z.B. Item seitdem kostenpflichtig) - andere
+            // sehen nur, was wirklich gekauft oder gratis ist, egal was gespeichert ist.
+            await loadPrices();
+            const ownedBy = new Map();
+            if (rows.length) {
+                const [own] = await pool.query(
+                    `SELECT uuid, item FROM lux_owned WHERE uuid IN (${rows.map(() => '?').join(',')})`,
+                    rows.map((r) => r.uuid)
+                );
+                for (const o of own) {
+                    if (!ownedBy.has(o.uuid)) ownedBy.set(o.uuid, new Set());
+                    ownedBy.get(o.uuid).add(o.item);
+                }
+            }
+            const safe = (fn, v, owned) => {
+                try {
+                    return v ? fn(v, owned) : null;
+                } catch (e) {
+                    return null;
+                }
+            };
             rows.forEach((r, i) => {
+                const owned = ownedBy.get(r.uuid) || new Set();
                 out[r.uuid] = {
                     name: r.name,
                     cape: publicCape(capes[i], approved),
-                    nameStyle: parse(r.name_style),
-                    cosmetics: parse(r.cosmetics),
+                    nameStyle: safe(cleanNameStyle, parse(r.name_style), owned),
+                    cosmetics: safe(cleanCosmetics, parse(r.cosmetics), owned),
                     rev: Number(r.rev || 0)
                 };
             });

@@ -129,6 +129,9 @@ on every server.
   cosmetic/emote). After adding or changing cosmetics in the mod, run in the SpawnSound repo:
   `sh "Lux Client/tools/export-cosmetics.sh" <path to lux-website>/client/public/lux-cosmetics`
   (needs Java 21+ and a Gradle build of the mod once, for the joml/gson jars).
+  HD cosmetics (branch `hd-cosmetics` of the mod): the export also writes the code-painted texture
+  atlas (`atlas<n>.png`) and the runtime-painted shield pictures (`d/<n>.png`); textured faces and
+  camera-facing sprites are rebuilt by `MinecraftViewer.jsx`.
 - **Moderation** – every picture (marketplace uploads *and* the own picture a player picks in
   the mod) is invisible to everybody else until an admin approves it under
   **Admin → Moderation → Capes**. Rejecting (or removing a published cape) takes it off every

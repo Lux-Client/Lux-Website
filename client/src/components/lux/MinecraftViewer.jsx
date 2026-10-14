@@ -84,10 +84,54 @@ function cube(x, y, z, w, h, d, u, v, grow, texW, texH) {
   return g
 }
 
-/** Flächen aus dem Export ([x0,y0,z0..x3,y3,z3, argb, glow]) als Meshes. */
+// HD-Texturen aus dem Export: Atlas-Seiten (tex >= 0) und zur Laufzeit gemalte Bilder (tex < 0)
+const texCache = new Map()
+function hdTexture(tex) {
+  const url = tex >= 0 ? `/lux-cosmetics/atlas${tex}.png` : `/lux-cosmetics/d/${-1 - tex}.png`
+  if (!texCache.has(url)) {
+    const t = new THREE.TextureLoader().load(url)
+    t.flipY = false
+    t.colorSpace = THREE.SRGBColorSpace
+    t.magFilter = THREE.LinearFilter
+    texCache.set(url, t)
+  }
+  return texCache.get(url)
+}
+
+const unpack = argb => {
+  argb >>>= 0
+  return [((argb >> 16) & 255) / 255, ((argb >> 8) & 255) / 255, (argb & 255) / 255, ((argb >>> 24) & 255) / 255]
+}
+
+function texMaterial(tex, glow) {
+  const opts = { map: hdTexture(tex), vertexColors: true, side: THREE.DoubleSide, transparent: true }
+  return glow
+    ? new THREE.MeshBasicMaterial({ ...opts, depthWrite: false, blending: THREE.AdditiveBlending })
+    : new THREE.MeshLambertMaterial({ ...opts, alphaTest: 0.08 })
+}
+
+/**
+ * Flächen aus dem Export als Meshes. Drei Arten (an der Länge erkannt):
+ * 14 = einfarbig [Ecken x12, argb, leuchtet], 23 = mit Textur [Ecken x12, uv x8, argb, art, tex],
+ * 16 = Bild zur Kamera [Mitte x3, halbe Größe, Drehung, uv x8, argb, art, tex].
+ */
 function quadsToMeshes(quads) {
   const groups = { solid: [], clear: [], glow: [] }
+  const textured = new Map()
+  const sprites = new Map()
   for (const q of quads) {
+    if (q.length === 23) {
+      const k = `${q[22]}:${q[21]}`
+      if (!textured.has(k)) textured.set(k, [])
+      textured.get(k).push(q)
+      continue
+    }
+    if (q.length === 16) {
+      const k = `${q[15]}:${q[14]}`
+      if (!sprites.has(k)) sprites.set(k, [])
+      sprites.get(k).push(q)
+      continue
+    }
     const argb = q[12] >>> 0
     const a = (argb >>> 24) & 255
     const key = q[13] ? 'glow' : a < 250 ? 'clear' : 'solid'
@@ -100,8 +144,7 @@ function quadsToMeshes(quads) {
     const col = new Float32Array(list.length * 24)
     let p = 0, c = 0
     for (const q of list) {
-      const argb = q[12] >>> 0
-      const r = ((argb >> 16) & 255) / 255, gg = ((argb >> 8) & 255) / 255, b = (argb & 255) / 255, a = ((argb >>> 24) & 255) / 255
+      const [r, gg, b, a] = unpack(q[12])
       for (const i of [0, 1, 2, 0, 2, 3]) {
         pos[p++] = q[i * 3]; pos[p++] = q[i * 3 + 1]; pos[p++] = q[i * 3 + 2]
       }
@@ -116,6 +159,72 @@ function quadsToMeshes(quads) {
     const opts = { vertexColors: true, side: THREE.DoubleSide, transparent: key !== 'solid', depthWrite: key === 'solid' }
     const mat = key === 'glow' ? new THREE.MeshBasicMaterial(opts) : new THREE.MeshLambertMaterial(opts)
     out.push(new THREE.Mesh(g, mat))
+  }
+  for (const [key, list] of textured) {
+    const [tex, mode] = key.split(':').map(Number)
+    const pos = new Float32Array(list.length * 18)
+    const uv = new Float32Array(list.length * 12)
+    const col = new Float32Array(list.length * 24)
+    let p = 0, u = 0, c = 0
+    for (const q of list) {
+      const [r, gg, b, a] = unpack(q[20])
+      for (const i of [0, 1, 2, 0, 2, 3]) {
+        pos[p++] = q[i * 3]; pos[p++] = q[i * 3 + 1]; pos[p++] = q[i * 3 + 2]
+        uv[u++] = q[12 + i * 2]; uv[u++] = q[13 + i * 2]
+        col[c++] = r; col[c++] = gg; col[c++] = b; col[c++] = a
+      }
+    }
+    const g = new THREE.BufferGeometry()
+    g.setAttribute('position', new THREE.BufferAttribute(pos, 3))
+    g.setAttribute('uv', new THREE.BufferAttribute(uv, 2))
+    g.setAttribute('color', new THREE.BufferAttribute(col, 4))
+    g.computeVertexNormals()
+    const mesh = new THREE.Mesh(g, texMaterial(tex, mode === 1))
+    if (mode === 1) mesh.renderOrder = 2
+    out.push(mesh)
+  }
+  for (const [key, list] of sprites) {
+    const [tex, mode] = key.split(':').map(Number)
+    const pos = new Float32Array(list.length * 18)
+    const uv = new Float32Array(list.length * 12)
+    const col = new Float32Array(list.length * 24)
+    let u = 0, c = 0
+    for (const q of list) {
+      const [r, gg, b, a] = unpack(q[13])
+      for (const i of [0, 1, 2, 0, 2, 3]) {
+        uv[u++] = q[5 + i * 2]; uv[u++] = q[6 + i * 2]
+        col[c++] = r; col[c++] = gg; col[c++] = b; col[c++] = a
+      }
+    }
+    const g = new THREE.BufferGeometry()
+    g.setAttribute('position', new THREE.BufferAttribute(pos, 3))
+    g.setAttribute('uv', new THREE.BufferAttribute(uv, 2))
+    g.setAttribute('color', new THREE.BufferAttribute(col, 4))
+    const mesh = new THREE.Mesh(g, texMaterial(tex, mode === 1))
+    mesh.frustumCulled = false
+    mesh.renderOrder = 3
+    const inv = new THREE.Matrix4(), right = new THREE.Vector3(), up = new THREE.Vector3()
+    const sx = [-1, 1, 1, -1], sy = [1, 1, -1, -1]
+    // jedes Bild vor dem Zeichnen zur Kamera drehen (im Raum des Körperteils)
+    mesh.onBeforeRender = (r, sc, camera) => {
+      inv.copy(mesh.matrixWorld).invert()
+      right.set(1, 0, 0).applyQuaternion(camera.quaternion).transformDirection(inv)
+      up.set(0, 1, 0).applyQuaternion(camera.quaternion).transformDirection(inv)
+      let p = 0
+      for (const q of list) {
+        const h = q[3], rad = q[4] * Math.PI / 180
+        const cs = Math.cos(rad) * h, sn = Math.sin(rad) * h
+        const ax = right.x * cs + up.x * sn, ay = right.y * cs + up.y * sn, az = right.z * cs + up.z * sn
+        const bx = up.x * cs - right.x * sn, by = up.y * cs - right.y * sn, bz = up.z * cs - right.z * sn
+        for (const i of [0, 1, 2, 0, 2, 3]) {
+          pos[p++] = q[0] + ax * sx[i] + bx * sy[i]
+          pos[p++] = q[1] + ay * sx[i] + by * sy[i]
+          pos[p++] = q[2] + az * sx[i] + bz * sy[i]
+        }
+      }
+      g.attributes.position.needsUpdate = true
+    }
+    out.push(mesh)
   }
   return out
 }

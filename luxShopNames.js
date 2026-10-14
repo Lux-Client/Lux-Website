@@ -240,6 +240,18 @@ module.exports = {
         "name": "Demon wings",
         "category": "Wings"
     },
+    "cosmetic:devil_wings_hd": {
+        "name": "Devil wings HD",
+        "category": "Wings"
+    },
+    "cosmetic:aura_water_hd": {
+        "name": "Water HD",
+        "category": "Aura"
+    },
+    "cosmetic:aura_wind_hd": {
+        "name": "Wind HD",
+        "category": "Aura"
+    },
     "cosmetic:wolf_tail": {
         "name": "Wolf tail",
         "category": "Tail"

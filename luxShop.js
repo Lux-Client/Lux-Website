@@ -102,6 +102,8 @@ const PRICES = {
     'cosmetic:bat_wings': 2000, 'cosmetic:butterfly_wings': 2500, 'cosmetic:fairy_wings': 2500,
     'cosmetic:angel_wings': 3000, 'cosmetic:dragon_wings': 3500, 'cosmetic:demon_wings': 3500,
     'cosmetic:phoenix_wings': 4000,
+    // HD cosmetics (Lux Client 1.27)
+    'cosmetic:devil_wings_hd': 6000, 'cosmetic:aura_water_hd': 4000, 'cosmetic:aura_wind_hd': 4000,
     'cosmetic:big_fairy_wings': 5000, 'cosmetic:gothic_moth_wings': 6000, 'cosmetic:crystal_wings': 6000,
     'cosmetic:spirit_flame_wings': 6500,
     'cosmetic:monarch_wings': 5500, 'cosmetic:wyvern_wings': 6000, 'cosmetic:archangel_wings': 6500,

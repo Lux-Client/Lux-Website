@@ -936,6 +936,26 @@ module.exports = {
         "name": "Hacker",
         "category": "Emotes"
     },
+    "emote:flash_run": {
+        "name": "Lightning sprint",
+        "category": "Emotes"
+    },
+    "emote:skateboard": {
+        "name": "Skateboard",
+        "category": "Emotes"
+    },
+    "emote:moonwalk": {
+        "name": "Moonwalk",
+        "category": "Emotes"
+    },
+    "emote:car": {
+        "name": "Car",
+        "category": "Emotes"
+    },
+    "emote:ufo": {
+        "name": "UFO",
+        "category": "Emotes"
+    },
     "emote:anime_run": {
         "name": "Anime run",
         "category": "Emotes"

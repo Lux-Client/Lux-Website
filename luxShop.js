@@ -58,6 +58,8 @@ const PRICES = {
     'emote:pushups': 2000, 'emote:weights': 2000, 'emote:pirouette': 2500, 'emote:griddy': 3000,
     'emote:hacker': 3000, 'emote:meditate': 3000, 'emote:backflip': 3000, 'emote:anime_run': 3500,
     'emote:magic': 3500, 'emote:energy_beam': 5000,
+    // Fortbewegung (Lux Client 1.28)
+    'emote:flash_run': 3500, 'emote:skateboard': 4000, 'emote:moonwalk': 3000, 'emote:car': 6000, 'emote:ufo': 7000,
 
     // ---------------------------------------------------------------- cosmetics: head
     'cosmetic:cap': 0,

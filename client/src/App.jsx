@@ -5,6 +5,7 @@ import AnalyticsOptOut from './pages/AnalyticsOptOut'
 import AuthorizeDevice from './pages/AuthorizeDevice'
 import LinkDevice from './pages/LinkDevice'
 import Capes from './pages/Capes'
+import { lazy, Suspense } from 'react'
 import Changelog from './pages/Changelog'
 import CodePreview from './pages/CodePreview'
 import Dashboard from './pages/Dashboard'
@@ -30,6 +31,9 @@ function RedirectToEditor() {
   return <Navigate to={`/developer/projects/${id}/edit`} replace />
 }
 
+// three.js nur laden, wenn jemand eine Cape-Seite öffnet
+const CapeDetail = lazy(() => import('./pages/CapeDetail'))
+
 export default function App() {
   return (
     <BrowserRouter>
@@ -39,6 +43,7 @@ export default function App() {
         <Route path="/extensions" element={<Extensions />} />
         <Route path="/extensions/:id" element={<ExtensionDetail />} />
         <Route path="/capes" element={<Capes />} />
+        <Route path="/capes/:id" element={<Suspense fallback={null}><CapeDetail /></Suspense>} />
         <Route path="/dashboard" element={<Dashboard />} />
 
         {/* Developer area */}

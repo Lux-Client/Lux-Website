@@ -16,6 +16,7 @@ async function png(color, w = 64, h = 32) {
 
 async function main() {
     const h = new Harness();
+    const skinPng = await png('#336699', 64, 64);
     // Mojang says yes for every name it knows.
     const known = { Alice: ALICE, Bob: BOB, Carol: 'c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0' };
     const hasJoined = async (name) => (known[name] ? { uuid: known[name], name } : null);
@@ -24,7 +25,8 @@ async function main() {
         mount: (app) => {
             const createLuxRouter = require(path.join(__dirname, '..', 'routes', 'luxCosmetics.js'));
             const lookupName = async (name) => (name.toLowerCase() === 'winner' ? { uuid: WINNER, name: 'Winner' } : null);
-            app.use('/api/lux', createLuxRouter({ hasJoined, lookupName, imageDir: path.join(h.storageRoot, 'lux-capes') }));
+            const fetchSkin = async (name) => (name.toLowerCase() === 'alice' ? { png: skinPng, slim: true, name: 'Alice' } : null);
+            app.use('/api/lux', createLuxRouter({ hasJoined, lookupName, fetchSkin, imageDir: path.join(h.storageRoot, 'lux-capes') }));
         }
     });
     const conn = await h.pool.getConnection();
@@ -269,6 +271,27 @@ async function main() {
         assert.ok(notes.some((n) => /approved/.test(n.message)));
         const [log] = await h.pool.query("SELECT action FROM admin_audit_log WHERE action = 'lux_cape.approve'");
         assert.strictEqual(log.length, 1);
+    });
+
+    await test('cape detail page: author, stats and other capes; hidden capes stay hidden', async () => {
+        const res = await h.request({ url: `/api/lux/capes/${capeId}` });
+        assert.strictEqual(res.status, 200);
+        assert.strictEqual(res.body.author, 'capemaker');
+        assert.strictEqual(res.body.authorCapes, 1);
+        assert.strictEqual(typeof res.body.wearing, 'number');
+        assert.deepStrictEqual(res.body.more, []);
+        assert.strictEqual((await h.request({ url: '/api/lux/capes/999999' })).status, 404);
+        assert.strictEqual((await h.request({ url: '/api/lux/capes/abc' })).status, 404);
+    });
+
+    await test('skin proxy: PNG with model header, bad and unknown names', async () => {
+        const res = await h.request({ url: '/api/lux/skin/Alice', raw: true });
+        assert.strictEqual(res.status, 200);
+        assert.strictEqual(res.headers['x-skin-model'], 'slim');
+        assert.ok(Buffer.from(res.body).equals(skinPng));
+        assert.strictEqual((await h.request({ url: '/api/lux/skin/nobody' })).status, 404);
+        assert.strictEqual((await h.request({ url: '/api/lux/skin/bad%20name!' })).status, 400);
+        assert.strictEqual((await h.request({ url: '/api/lux/skin/waytoolongnameforminecraft' })).status, 400);
     });
 
     await test('link the Minecraft account from the game and wear a marketplace cape', async () => {

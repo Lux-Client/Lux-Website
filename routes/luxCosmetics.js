@@ -64,6 +64,33 @@ async function mojangLookup(name) {
     return { uuid: body.id.toLowerCase(), name: body.name };
 }
 
+/** Minecraft name -> { png, slim } of the current skin (for the 3D preview on the website). */
+async function mojangSkin(name, lookup = mojangLookup) {
+    const who = await lookup(name);
+    if (!who) return null;
+    const base = process.env.MOJANG_SESSION_URL || 'https://sessionserver.mojang.com';
+    const res = await fetch(`${base}/session/minecraft/profile/${who.uuid}`, { signal: AbortSignal.timeout(8000) });
+    if (res.status !== 200) return null;
+    const body = await res.json().catch(() => null);
+    const prop = body && Array.isArray(body.properties) && body.properties.find((p) => p.name === 'textures');
+    if (!prop) return null;
+    let tex;
+    try {
+        tex = JSON.parse(Buffer.from(prop.value, 'base64').toString('utf8')).textures?.SKIN;
+    } catch {
+        return null;
+    }
+    if (!tex || typeof tex.url !== 'string') return null;
+    const url = new URL(tex.url);
+    if (url.hostname !== 'textures.minecraft.net') return null;
+    url.protocol = 'https:';
+    const img = await fetch(url, { signal: AbortSignal.timeout(8000) });
+    if (img.status !== 200) return null;
+    const png = Buffer.from(await img.arrayBuffer());
+    if (png.length > 256 * 1024 || png.readUInt32BE(0) !== 0x89504e47) return null;
+    return { png, slim: tex.metadata?.model === 'slim', name: who.name };
+}
+
 async function mojangHasJoined(name, serverId) {
     const base = process.env.MOJANG_SESSION_URL || 'https://sessionserver.mojang.com';
     const url = `${base}/session/minecraft/hasJoined?username=${encodeURIComponent(name)}&serverId=${encodeURIComponent(serverId)}`;
@@ -110,6 +137,7 @@ async function normalizePng(buf) {
 function createLuxRouter(options = {}) {
     const hasJoined = options.hasJoined || mojangHasJoined;
     const lookupName = options.lookupName || mojangLookup;
+    const fetchSkin = options.fetchSkin || ((name) => mojangSkin(name, lookupName));
     const allowOffline = options.allowOffline ?? process.env.LUX_ALLOW_OFFLINE === 'true';
     const imageDir = options.imageDir || path.join(
         process.env.DATA_DIR ? path.resolve(process.env.DATA_DIR) : path.join(__dirname, '..', 'data'),
@@ -171,6 +199,9 @@ function createLuxRouter(options = {}) {
     const liveLimiter = limiter(150);
     const writeLimiter = limiter(60);
     const uploadLimiter = limiter(10);
+    const skinLimiter = limiter(40);
+    /** lowercase name -> { at, skin } (skin null = no such player) */
+    const skins = new Map();
 
     const wrap = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 
@@ -947,11 +978,55 @@ function createLuxRouter(options = {}) {
     router.get('/capes/:id', wrap(async (req, res) => {
         const id = parseInt(req.params.id, 10);
         const [rows] = await pool.query(
-            "SELECT c.*, u.username AS author FROM lux_capes c LEFT JOIN users u ON u.id = c.user_id WHERE c.id = ? AND c.status = 'approved'",
-            [Number.isFinite(id) ? id : 0]
+            "SELECT c.*, u.username AS author, u.avatar AS author_avatar FROM lux_capes c LEFT JOIN users u ON u.id = c.user_id WHERE c.id = ? AND c.status = 'approved'",
+            [Number.isFinite(id) && id > 0 ? id : 0]
         );
-        if (!rows[0]) throw new HttpError(404, 'Not found.');
-        res.json(listing(rows[0]));
+        const row = rows[0];
+        if (!row) throw new HttpError(404, 'Not found.');
+        const [[wearing]] = await pool.query('SELECT COUNT(*) AS n FROM lux_players WHERE cape LIKE ?', [`%${row.image_hash}%`]);
+        const [others] = await pool.query(
+            `SELECT c.*, u.username AS author FROM lux_capes c LEFT JOIN users u ON u.id = c.user_id
+             WHERE c.user_id = ? AND c.id <> ? AND c.status = 'approved' ORDER BY c.uses DESC, c.id DESC LIMIT 6`,
+            [row.user_id, row.id]
+        );
+        const [[authorStats]] = await pool.query(
+            "SELECT COUNT(*) AS capes, COALESCE(SUM(uses), 0) AS uses FROM lux_capes WHERE user_id = ? AND status = 'approved'",
+            [row.user_id]
+        );
+        res.json({
+            ...listing(row),
+            authorAvatar: row.author_avatar || null,
+            wearing: Number(wearing.n || 0),
+            authorCapes: Number(authorStats.capes || 0),
+            authorUses: Number(authorStats.uses || 0),
+            more: others.map(listing)
+        });
+    }));
+
+    // Skin of a Minecraft player for the 3D preview (PNG, model in X-Skin-Model). Cached for an hour.
+    router.get('/skin/:name', skinLimiter, wrap(async (req, res) => {
+        const name = String(req.params.name || '');
+        if (!/^[A-Za-z0-9_]{1,16}$/.test(name)) throw new HttpError(400, 'Not a Minecraft name.');
+        const key = name.toLowerCase();
+        let hit = skins.get(key);
+        if (!hit || now() - hit.at > 60 * 60 * 1000) {
+            let skin = null;
+            try {
+                skin = await fetchSkin(name);
+            } catch {
+                skin = null;
+            }
+            hit = { at: now(), skin };
+            if (skins.size > 2000) skins.delete(skins.keys().next().value);
+            skins.set(key, hit);
+        }
+        if (!hit.skin) throw new HttpError(404, 'No such Minecraft player.');
+        res.set('Content-Type', 'image/png');
+        res.set('Cache-Control', 'public, max-age=3600');
+        res.set('X-Skin-Model', hit.skin.slim ? 'slim' : 'classic');
+        res.set('X-Skin-Name', hit.skin.name || name);
+        res.set('Access-Control-Expose-Headers', 'X-Skin-Model, X-Skin-Name');
+        res.send(hit.skin.png);
     }));
 
     // Upload: PNG as the request body, title as ?title=. Goes into the review queue.
@@ -1347,3 +1422,4 @@ function createLuxRouter(options = {}) {
 
 module.exports = createLuxRouter;
 module.exports.HttpError = HttpError;
+module.exports.mojangSkin = mojangSkin;

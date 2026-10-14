@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Ban, Check, Coins, RefreshCw, RotateCcw, ShoppingBag } from 'lucide-react'
+import { Ban, Check, Coins, Eye, RefreshCw, RotateCcw, ShoppingBag } from 'lucide-react'
 import { Badge, Button, Cell, EmptyState, Panel, Row, SearchField, SegmentedControl, Table } from '../ui'
 import { useToast } from '../feedback'
+import LuxItemPreview from './LuxItemPreview'
 
 /* Lux Shop: the price of every cosmetic, emote and name style feature. Defaults come from
    luxShop.js; what is changed here is stored on the server and every Lux Client picks it
@@ -21,7 +22,7 @@ async function call(url, options = {}) {
 
 const fmt = n => Number(n || 0).toLocaleString()
 
-function PriceRow({ item, onSaved }) {
+function PriceRow({ item, onSaved, selected, onSelect }) {
   const toast = useToast()
   const [value, setValue] = useState(item.price === null ? '' : String(item.price))
   const [busy, setBusy] = useState(false)
@@ -45,10 +46,15 @@ function PriceRow({ item, onSaved }) {
   const changed = valid && parsed !== item.price
 
   return (
-    <Row>
+    <Row className={selected ? 'bg-primary/[0.06]' : ''}>
       <Cell>
-        <p className="font-semibold text-white">{item.name}</p>
-        <p className="font-mono text-[10px] text-white/25">{item.item}</p>
+        <button type="button" onClick={onSelect} className="group/item flex items-center gap-2 text-left" title="Show how it looks in game">
+          <Eye className={`h-3.5 w-3.5 shrink-0 ${selected ? 'text-primary' : 'text-white/20 group-hover/item:text-white/60'}`} />
+          <span>
+            <span className={`block font-semibold ${selected ? 'text-primary' : 'text-white group-hover/item:text-primary'}`}>{item.name}</span>
+            <span className="block font-mono text-[10px] text-white/25">{item.item}</span>
+          </span>
+        </button>
       </Cell>
       <Cell>
         {item.price === null
@@ -87,6 +93,7 @@ export default function LuxShopView() {
   const [items, setItems] = useState(null)
   const [category, setCategory] = useState('all')
   const [query, setQuery] = useState('')
+  const [selected, setSelected] = useState(null)
 
   const load = async () => {
     try {
@@ -114,6 +121,7 @@ export default function LuxShopView() {
 
   return (
     <Panel
+      className="overflow-visible"
       title="Lux Shop prices"
       description="Prices in Lux Credits. Changes are saved on the server and reach every Lux Client within a few seconds. Credits themselves can't be bought."
       actions={<div className="flex items-center gap-2"><SearchField value={query} onChange={setQuery} placeholder="Search items…" /><Button icon={RefreshCw} onClick={load}>Reload</Button></div>}
@@ -125,9 +133,22 @@ export default function LuxShopView() {
       ) : (
         <div className="flex flex-col gap-4">
           <SegmentedControl items={categories} value={category} onChange={setCategory} />
-          <Table columns={[{ label: 'Item' }, { label: 'Price' }, { label: 'Default' }, { label: 'Change', align: 'right' }]}>
-            {shown.map(i => <PriceRow key={i.item} item={i} onSaved={load} />)}
-          </Table>
+          <div className="grid items-start gap-4 xl:grid-cols-[1fr_320px]">
+            <Table columns={[{ label: 'Item' }, { label: 'Price' }, { label: 'Default' }, { label: 'Change', align: 'right' }]}>
+              {shown.map(i => (
+                <PriceRow key={i.item} item={i} onSaved={load} selected={selected?.item === i.item} onSelect={() => setSelected(i)} />
+              ))}
+            </Table>
+            <aside className="order-first overflow-hidden rounded-2xl border border-white/[0.06] bg-black/30 xl:sticky xl:top-24 xl:order-none">
+              <div className="h-[340px]"><LuxItemPreview item={selected} /></div>
+              {selected && (
+                <div className="border-t border-white/[0.06] p-3">
+                  <p className="font-semibold text-white">{selected.name}</p>
+                  <p className="font-mono text-[10px] text-white/30">{selected.item}</p>
+                </div>
+              )}
+            </aside>
+          </div>
           <p className="flex items-center gap-2 text-[11px] text-white/30"><Coins className="h-3.5 w-3.5" /> 0 = free for everybody. “Take off sale” hides the item from the shop (players who own it keep it).</p>
         </div>
       )}

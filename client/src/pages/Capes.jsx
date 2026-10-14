@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import {
   AlertCircle, CheckCircle2, Clock, Gamepad2, Link2, Search, Shirt, Trash2, Upload, Users, XCircle,
@@ -76,6 +76,8 @@ function StatusBadge({ status }) {
   )
 }
 
+export { api as luxApi, Notice }
+
 function CapeCard({ item, children }) {
   return (
     <motion.div
@@ -83,12 +85,16 @@ function CapeCard({ item, children }) {
       animate={{ opacity: 1, y: 0 }}
       className="flex flex-col overflow-hidden rounded-2xl border border-white/6 bg-[#0f0f0f] transition-colors hover:border-white/10"
     >
-      <div className="grid h-48 place-items-center bg-[radial-gradient(circle_at_50%_40%,#2b2b35,#121216)]">
-        <CapePreview src={item.image} />
-      </div>
-      <div className="flex flex-1 flex-col gap-1 p-4">
-        <p className="truncate font-bold text-white">{item.title}</p>
-        <p className="text-xs text-white/35">by {item.author}{item.uses ? ` · worn ${item.uses}×` : ''}</p>
+      <Link to={`/capes/${item.id}`} className="group block" title="Details and 3D preview">
+        <div className="grid h-48 place-items-center bg-[radial-gradient(circle_at_50%_40%,#2b2b35,#121216)]">
+          <CapePreview src={item.image} className="transition-transform duration-300 group-hover:scale-105" />
+        </div>
+        <div className="px-4 pt-4">
+          <p className="truncate font-bold text-white group-hover:text-primary">{item.title}</p>
+          <p className="text-xs text-white/35">by {item.author}{item.uses ? ` · worn ${item.uses}×` : ''}</p>
+        </div>
+      </Link>
+      <div className="flex flex-1 flex-col gap-1 px-4 pb-4">
         {children}
       </div>
     </motion.div>

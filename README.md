@@ -116,6 +116,19 @@ on every server.
   browse, and "Wear this cape". Wearing needs the Minecraft account linked: in the game, module
   **Lux Account → "Link website account"** opens `/capes?link=CODE`, which links it to the
   signed-in account.
+- **Cape page `/capes/:id`** – click a cape in the marketplace: who made it (with their other
+  capes), how often it was worn, how many wear it right now, and a **3D preview** of the cape on
+  your own Minecraft skin (type any Minecraft name; linked accounts are filled in). Skins come
+  through `GET /api/lux/skin/:name` (Mojang profile → skin PNG, `X-Skin-Model: slim|classic`,
+  cached for an hour). The viewer (`client/src/components/lux/MinecraftViewer.jsx`, three.js) is
+  built exactly like Minecraft's player model.
+- **In-game previews in the admin panel** – under **Admin → Community → Lux Shop**, click an item
+  (eye icon) to see it as in game: cosmetics and emotes in 3D on Steve, name styles and the second
+  line with the same colour/animation formulas as the mod. The 3D models are **exported from the
+  mod's own code** into `client/public/lux-cosmetics/` (`index.json` + one gzipped file per
+  cosmetic/emote). After adding or changing cosmetics in the mod, run in the SpawnSound repo:
+  `sh "Lux Client/tools/export-cosmetics.sh" <path to lux-website>/client/public/lux-cosmetics`
+  (needs Java 21+ and a Gradle build of the mod once, for the joml/gson jars).
 - **Moderation** – every picture (marketplace uploads *and* the own picture a player picks in
   the mod) is invisible to everybody else until an admin approves it under
   **Admin → Moderation → Capes**. Rejecting (or removing a published cape) takes it off every

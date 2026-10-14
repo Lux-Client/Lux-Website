@@ -321,6 +321,7 @@ function createLuxRouter(options = {}) {
     function publicCape(cape, approved) {
         if (!cape) return null;
         if (cape.type === 'image' && !approved.has(cape.hash)) return null;
+        if (cape.type === 'painted' && !(cape.hash && approved.has(cape.hash))) return null;
         return cape;
     }
 
@@ -394,7 +395,18 @@ function createLuxRouter(options = {}) {
                 if (!Array.isArray(c.pixels) || c.pixels.length !== 160 || !c.pixels.every((v) => isInt(v, 0, 0xffffff))) {
                     throw new HttpError(400, 'Invalid painted cape.');
                 }
-                return { type: 'painted', pixels: c.pixels };
+                // Wie hochgeladene Bilder: als PNG in die Prüfung - andere sehen es erst nach der Freigabe.
+                // Jede Änderung ergibt ein neues Bild und muss neu geprüft werden.
+                const raw = Buffer.alloc(160 * 4);
+                c.pixels.forEach((v, i) => {
+                    raw[i * 4] = (v >> 16) & 255;
+                    raw[i * 4 + 1] = (v >> 8) & 255;
+                    raw[i * 4 + 2] = v & 255;
+                    raw[i * 4 + 3] = 255;
+                });
+                const png = await require('sharp')(raw, { raw: { width: 10, height: 16, channels: 4 } }).png().toBuffer();
+                const img = await storeImage(png, { ownerUuid: player.uuid, ownerUserId: player.user_id || null });
+                return { type: 'painted', pixels: c.pixels, hash: img.hash };
             case 'image': {
                 if (typeof c.hash !== 'string' || !HASH_RE.test(c.hash)) throw new HttpError(400, 'Invalid picture.');
                 const img = await imageRow(c.hash);
@@ -502,7 +514,8 @@ function createLuxRouter(options = {}) {
         const p = rows[0];
         const cape = parse(p.cape);
         let capeReview = null;
-        if (cape && cape.type === 'image') {
+        // Marktplatz-Capes sind schon geprüft - keine "freigegeben"-Meldung im Spiel
+        if (cape && !cape.market && (cape.type === 'image' || (cape.type === 'painted' && cape.hash))) {
             const img = await imageRow(cape.hash);
             capeReview = img ? img.status : 'pending';
         }
@@ -664,7 +677,7 @@ function createLuxRouter(options = {}) {
                 [now() - ONLINE_MS, ...uuids]
             );
             const capes = rows.map((r) => parse(r.cape));
-            const approved = await approvedHashes(capes.filter((c) => c && c.type === 'image').map((c) => c.hash));
+            const approved = await approvedHashes(capes.filter((c) => c && (c.type === 'image' || c.type === 'painted') && c.hash).map((c) => c.hash));
             // Anti-cheat: nochmal gegen den Besitz prüfen (z.B. Item seitdem kostenpflichtig) - andere
             // sehen nur, was wirklich gekauft oder gratis ist, egal was gespeichert ist.
             await loadPrices();
@@ -787,6 +800,12 @@ function createLuxRouter(options = {}) {
     }));
 
     // ------------------------------------------------------------------ mod: Lux Credits shop
+
+    // Settings the Lux team controls for every client (no login needed).
+    router.get('/client-config', wrap(async (req, res) => {
+        res.set('Cache-Control', 'public, max-age=300');
+        res.json({ discordAppId: String(process.env.LUX_DISCORD_APP_ID || '').trim() });
+    }));
 
     router.get('/shop', wrap(async (req, res) => {
         const p = await requireMod(req);
@@ -1076,6 +1095,20 @@ function createLuxRouter(options = {}) {
         await bumpRev(targets.map((p) => p.uuid));
         await pool.query('UPDATE lux_capes SET uses = uses + 1 WHERE id = ?', [cape.id]);
         res.json({ ok: true, players: targets.length });
+    }));
+
+    // Put a marketplace cape on from inside the game (Lux Client, "Capes" tab) - no website account needed.
+    router.post('/capes/:id/wear', writeLimiter, wrap(async (req, res) => {
+        const p = await requireMod(req);
+        const [rows] = await pool.query("SELECT * FROM lux_capes WHERE id = ? AND status = 'approved'", [parseInt(req.params.id, 10) || 0]);
+        const cape = rows[0];
+        if (!cape) throw new HttpError(404, 'This cape is not in the marketplace (any more).');
+        // "at": the mod switches to this cape by itself (same as the website button)
+        const value = JSON.stringify({ type: 'image', hash: cape.image_hash, market: cape.id, at: now() });
+        await pool.query('UPDATE lux_players SET cape = ? WHERE uuid = ?', [value, p.uuid]);
+        await bumpRev([p.uuid]);
+        await pool.query('UPDATE lux_capes SET uses = uses + 1 WHERE id = ?', [cape.id]);
+        res.json({ ok: true, title: cape.title });
     }));
 
     router.delete('/capes/:id', writeLimiter, wrap(async (req, res) => {

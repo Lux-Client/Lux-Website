@@ -27,6 +27,7 @@ services:
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
       - CALLBACK_URL=${CALLBACK_URL}
       - ALLOWED_ORIGINS=${ALLOWED_ORIGINS}
+      - LUX_DISCORD_APP_ID=${LUX_DISCORD_APP_ID}
     volumes:
       - lux_data:/app/data
     healthcheck:

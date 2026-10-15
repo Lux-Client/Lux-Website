@@ -102,6 +102,19 @@ function attachFriends(router, ctx) {
         legacyHeaders: false,
         handler: (req, res) => res.status(429).json({ error: 'Too many requests - please wait a moment.' })
     });
+    // Pro Spieler (nicht pro IP): Spam-Schutz für Nachrichten und Einladungen.
+    const recent = new Map(); // key -> [timestamps]
+    function throttle(key, windowMs, max, message) {
+        const t = Date.now();
+        const list = (recent.get(key) || []).filter((x) => t - x < windowMs);
+        if (list.length >= max) {
+            const wait = Math.ceil((windowMs - (t - list[0])) / 1000);
+            throw new HttpError(429, `${message} (${wait}s)`);
+        }
+        list.push(t);
+        recent.set(key, list);
+        if (recent.size > 20000) recent.clear();
+    }
     const pollLimiter = limiter(150);
     const actionLimiter = limiter(40);
     const messageLimiter = limiter(30);
@@ -431,6 +444,9 @@ function attachFriends(router, ctx) {
         const text = String((req.body && req.body.text) || '').replace(/§./g, '').replace(/[\u0000-\u001f\u007f§]/g, ' ').trim();
         if (!text) throw new HttpError(400, 'Empty message.');
         if (text.length > MAX_TEXT) throw new HttpError(400, `At most ${MAX_TEXT} characters.`);
+        throttle(`msg1:${me.uuid}`, 1000, 1, 'Slow down - one message per second.');
+        throttle(`msg:${me.uuid}`, 10 * 1000, 5, 'Too many messages - please wait a moment.');
+        throttle(`msgmin:${me.uuid}`, 60 * 1000, 20, 'Too many messages - please wait a moment.');
         const [ins] = await pool.query(
             'INSERT INTO lux_messages (from_uuid, to_uuid, kind, body, created_at) VALUES (?, ?, ?, ?, ?) RETURNING *',
             [me.uuid, other, 'text', text, now()]
@@ -444,6 +460,8 @@ function attachFriends(router, ctx) {
         if (!p || p.kind !== 'server' || !p.address || p.at < now() - ONLINE_MS) {
             throw new HttpError(400, 'You can only invite while you are on a multiplayer server.');
         }
+        throttle(`inv:${me.uuid}:${other}`, 30 * 1000, 1, 'You already invited this friend - wait a bit.');
+        throttle(`invall:${me.uuid}`, 5 * 60 * 1000, 5, 'Too many invites - please wait a moment.');
         const body = JSON.stringify({ server: p.server || p.address, address: p.address });
         const [ins] = await pool.query(
             'INSERT INTO lux_messages (from_uuid, to_uuid, kind, body, created_at) VALUES (?, ?, ?, ?, ?) RETURNING *',

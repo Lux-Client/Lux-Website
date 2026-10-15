@@ -173,8 +173,8 @@ function attachFriends(router, ctx) {
         const unreadBy = new Map(unread.map((u) => [u.from_uuid, Number(u.n)]));
         const [lastRows] = await pool.query(
             `SELECT CASE WHEN from_uuid = ? THEN to_uuid ELSE from_uuid END AS other, MAX(created_at) AS at
-             FROM lux_messages WHERE from_uuid = ? OR to_uuid = ? GROUP BY CASE WHEN from_uuid = ? THEN to_uuid ELSE from_uuid END`,
-            [me, me, me, me]
+             FROM lux_messages WHERE from_uuid = ? OR to_uuid = ? GROUP BY 1`,
+            [me, me, me]
         );
         const lastAt = new Map(lastRows.map((r) => [r.other, Number(r.at)]));
         const out = [];

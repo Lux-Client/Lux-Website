@@ -1089,13 +1089,27 @@ function createLuxRouter(options = {}) {
         }
         // "at": the mod switches to this cape by itself when it sees a newer website choice.
         const value = JSON.stringify({ type: 'image', hash: cape.image_hash, market: cape.id, at: now() });
+        // nur zählen, wenn mindestens ein Account es vorher noch nicht trug (kein Hochklicken)
+        const [rows2] = await pool.query(`SELECT uuid, cape FROM lux_players WHERE uuid IN (${targets.map(() => '?').join(',')})`,
+            targets.map((t) => t.uuid));
+        const fresh = rows2.filter((r) => { const c = parse(r.cape); return !(c && Number(c.market) === Number(cape.id)); });
+        wearThrottle(`web:${user.id}`);
         for (const p of targets) {
             await pool.query('UPDATE lux_players SET cape = ? WHERE uuid = ?', [value, p.uuid]);
         }
         await bumpRev(targets.map((p) => p.uuid));
-        await pool.query('UPDATE lux_capes SET uses = uses + 1 WHERE id = ?', [cape.id]);
+        if (fresh.length > 0) await pool.query('UPDATE lux_capes SET uses = uses + 1 WHERE id = ?', [cape.id]);
         res.json({ ok: true, players: targets.length });
     }));
+
+    // Höchstens ein Cape-Wechsel alle 3 Sekunden pro Spieler/Konto.
+    const wearAt = new Map();
+    function wearThrottle(key) {
+        const t = now();
+        if (t - (wearAt.get(key) || 0) < 3000) throw new HttpError(429, 'Slow down - wait a moment before changing your cape again.');
+        wearAt.set(key, t);
+        if (wearAt.size > 20000) wearAt.clear();
+    }
 
     // Put a marketplace cape on from inside the game (Lux Client, "Capes" tab) - no website account needed.
     router.post('/capes/:id/wear', writeLimiter, wrap(async (req, res) => {
@@ -1103,12 +1117,16 @@ function createLuxRouter(options = {}) {
         const [rows] = await pool.query("SELECT * FROM lux_capes WHERE id = ? AND status = 'approved'", [parseInt(req.params.id, 10) || 0]);
         const cape = rows[0];
         if (!cape) throw new HttpError(404, 'This cape is not in the marketplace (any more).');
+        // Trägt man es schon, zählt es nicht nochmal (sonst ließe sich der Zähler hochklicken)
+        const current = parse(p.cape);
+        const already = !!(current && Number(current.market) === Number(cape.id));
+        wearThrottle(p.uuid);
         // "at": the mod switches to this cape by itself (same as the website button)
         const value = JSON.stringify({ type: 'image', hash: cape.image_hash, market: cape.id, at: now() });
         await pool.query('UPDATE lux_players SET cape = ? WHERE uuid = ?', [value, p.uuid]);
         await bumpRev([p.uuid]);
-        await pool.query('UPDATE lux_capes SET uses = uses + 1 WHERE id = ?', [cape.id]);
-        res.json({ ok: true, title: cape.title });
+        if (!already) await pool.query('UPDATE lux_capes SET uses = uses + 1 WHERE id = ?', [cape.id]);
+        res.json({ ok: true, already, title: cape.title });
     }));
 
     router.delete('/capes/:id', writeLimiter, wrap(async (req, res) => {

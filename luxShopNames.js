@@ -241,7 +241,7 @@ module.exports = {
         "category": "Wings"
     },
     "cosmetic:devil_wings_hd": {
-        "name": "Devil wings HD",
+        "name": "Devil wings",
         "category": "Wings"
     },
     "cosmetic:aura_water_hd": {
@@ -645,7 +645,7 @@ module.exports = {
         "category": "Head pet"
     },
     "cosmetic:shield_obsidian": {
-        "name": "Obsidian shield",
+        "name": "Lava Lamp shield",
         "category": "Shield"
     },
     "cosmetic:shield_sunflower": {
@@ -653,95 +653,95 @@ module.exports = {
         "category": "Shield"
     },
     "cosmetic:shield_lotus": {
-        "name": "Lotus shield",
+        "name": "Koi Pond shield",
         "category": "Shield"
     },
     "cosmetic:shield_snowflake": {
-        "name": "Snowflake shield",
+        "name": "Northern Lights shield",
         "category": "Shield"
     },
     "cosmetic:shield_yinyang": {
-        "name": "Yin-yang shield",
+        "name": "Fire & Ice shield",
         "category": "Shield"
     },
     "cosmetic:shield_nether": {
-        "name": "Nether shield",
+        "name": "Synthwave shield",
         "category": "Shield"
     },
     "cosmetic:shield_end": {
-        "name": "End shield",
+        "name": "Dragon eye shield",
         "category": "Shield"
     },
     "cosmetic:shield_aether": {
-        "name": "Aether shield",
+        "name": "Angel wings shield",
         "category": "Shield"
     },
     "cosmetic:shield_dragon": {
-        "name": "Dragon shield",
+        "name": "Dragon Scales shield",
         "category": "Shield"
     },
     "cosmetic:shield_diamond": {
-        "name": "Diamond shield",
+        "name": "Crystal shield",
         "category": "Shield"
     },
     "cosmetic:shield_creeper": {
-        "name": "Creeper shield",
+        "name": "Toxic Zone shield",
         "category": "Shield"
     },
     "cosmetic:shield_rainbow": {
-        "name": "Rainbow shield",
+        "name": "Holo shield",
         "category": "Shield"
     },
     "cosmetic:shield_fire": {
-        "name": "Fire shield",
+        "name": "Phoenix shield",
         "category": "Shield"
     },
     "cosmetic:shield_galaxy": {
-        "name": "Galaxy shield",
+        "name": "Black Hole shield",
         "category": "Shield"
     },
     "cosmetic:shield_heart": {
-        "name": "Heart shield",
+        "name": "Pixel Heart shield",
         "category": "Shield"
     },
     "cosmetic:shield_moon": {
-        "name": "Moon Shield",
+        "name": "Constellation shield",
         "category": "Shield"
     },
     "cosmetic:shield_sun": {
-        "name": "Sun Shield",
+        "name": "Solar Eclipse shield",
         "category": "Shield"
     },
     "cosmetic:shield_vortex": {
-        "name": "Vortex Shield",
+        "name": "Hypnosis shield",
         "category": "Shield"
     },
     "cosmetic:shield_ocean": {
-        "name": "Ocean Shield",
+        "name": "Great Wave shield",
         "category": "Shield"
     },
     "cosmetic:shield_eye": {
-        "name": "Guardian Shield",
+        "name": "Skull shield",
         "category": "Shield"
     },
     "cosmetic:shield_clock": {
-        "name": "Clockwork Shield",
+        "name": "Gears shield",
         "category": "Shield"
     },
     "cosmetic:shield_storm": {
-        "name": "Storm Shield",
+        "name": "Thunderstorm shield",
         "category": "Shield"
     },
     "cosmetic:shield_amethyst": {
-        "name": "Amethyst Shield",
+        "name": "Nebula Galaxy shield",
         "category": "Shield"
     },
     "cosmetic:shield_sakura": {
-        "name": "Cherry Blossom Shield",
+        "name": "Cherry Moon shield",
         "category": "Shield"
     },
     "cosmetic:shield_neon": {
-        "name": "Neon Shield",
+        "name": "Circuit shield",
         "category": "Shield"
     },
     "cosmetic:bandana_lightning_pink": {

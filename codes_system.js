@@ -43,6 +43,7 @@ function cleanupOldCodes(pool) {
                     if (pool) {
                         try {
                             await pool.query('DELETE FROM modpack_codes WHERE code = ?', [file.replace('.json', '')]);
+                            await codeFiles.releaseCode(file.replace('.json', ''), pool);
                         } catch (dbErr) {
                             console.error(`[CodesSystem] DB cleanup error for ${file}:`, dbErr);
                         }
@@ -53,7 +54,27 @@ function cleanupOldCodes(pool) {
                 console.error(`[CodesSystem] Cleanup error for ${file}:`, e);
             }
         }
+
+        if (pool) {
+            try {
+                await releaseOrphanedCodeFiles(pool);
+                const pruned = await codeFiles.pruneStaleUploads(pool);
+                if (pruned.removed > 0) console.log(`[CodesSystem] Removed ${pruned.removed} unused uploaded file(s).`);
+            } catch (e) {
+                console.error('[CodesSystem] Cleanup of uploaded files failed:', e.message);
+            }
+        }
     });
+}
+
+// Dateien, deren Code-Datei es nicht mehr gibt (z.B. von Hand geloescht), freigeben.
+async function releaseOrphanedCodeFiles(pool) {
+    const [rows] = await pool.query('SELECT DISTINCT code FROM modpack_code_files');
+    for (const row of rows) {
+        if (!fs.existsSync(path.join(CODES_DIR, `${row.code}.json`))) {
+            await codeFiles.releaseCode(row.code, pool);
+        }
+    }
 }
 
 function generateCode() {
@@ -183,8 +204,21 @@ function buildLivePayload(data) {
         mods: Array.isArray(data.mods) ? data.mods : [],
         resourcePacks: Array.isArray(data.resourcePacks) ? data.resourcePacks : [],
         shaders: Array.isArray(data.shaders) ? data.shaders : [],
+        uploads: publicUploads(data),
         ...liveInfo(data)
     };
+}
+
+// Eigene Dateien, die der Ersteller in seinen Cloud-Speicher geladen hat (siehe codeFiles.js).
+// Geladen werden sie ueber /api/modpack/:code/files/:sha256.
+function publicUploads(data) {
+    return (Array.isArray(data.uploads) ? data.uploads : []).map((file) => ({
+        sha256: file.sha256,
+        size: Number(file.size) || 0,
+        fileName: file.fileName,
+        kind: file.kind,
+        title: file.title || file.fileName
+    }));
 }
 
 function previewContentItem(item) {
@@ -219,7 +253,8 @@ function buildCodePreview(data) {
         hasSettings: Boolean(data.keybinds),
         mods: (Array.isArray(data.mods) ? data.mods : []).map(previewContentItem),
         resourcePacks: (Array.isArray(data.resourcePacks) ? data.resourcePacks : []).map(previewContentItem),
-        shaders: (Array.isArray(data.shaders) ? data.shaders : []).map(previewContentItem)
+        shaders: (Array.isArray(data.shaders) ? data.shaders : []).map(previewContentItem),
+        uploads: publicUploads(data).map(({ fileName, kind, title, size }) => ({ fileName, kind, title, size }))
     };
 }
 
@@ -233,7 +268,8 @@ function readCodePreview(code) {
 }
 
 const createAdminAuth = require('./middleware/adminAuth');
-const { ensureDeviceAuth } = require('./middleware/deviceAuth');
+const { ensureDeviceAuth, ensureCloudUser } = require('./middleware/deviceAuth');
+const codeFiles = require('./codeFiles');
 
 // Who is calling: the launcher sends its Lux account token (Bearer), the website has its
 // session. Both are optional -- without them a code is created exactly as before.
@@ -276,6 +312,11 @@ module.exports = function (app, ADMIN_PASSWORD, pool) {
     async function handleSave(req, res) {
         try {
             const { name, mods, resourcePacks, shaders, instanceVersion, instanceLoader, keybinds, ownerUuid, icon } = req.body;
+            await ensureCodeSchema();
+            const uploadCheck = await codeFiles.validateUploads(req.cloudUser ? req.cloudUser.id : null, req.body.uploads);
+            if (uploadCheck.error) {
+                return res.status(uploadCheck.status || 400).json({ success: false, error: uploadCheck.error });
+            }
             const wantsLive = req.body.live === true;
             const expiry = parseExpiry(req.body.expiry);
             if ((wantsLive || expiry) && !isCodeAdmin(req)) {
@@ -322,6 +363,7 @@ module.exports = function (app, ADMIN_PASSWORD, pool) {
                 shaders: shaders || [],
                 keybinds: keybinds || null,
                 icon: safeIcon,
+                uploads: uploadCheck.files,
                 created: now,
                 updated: now,
                 expires: expiry ? expiry.expires : now + (expiryDays * DAY_MS),
@@ -337,16 +379,176 @@ module.exports = function (app, ADMIN_PASSWORD, pool) {
             writeCodeFile(code, data);
 
             if (pool) {
-                await pool.query('INSERT INTO modpack_codes (code, owner_uuid, owner_ip) VALUES (?, ?, ?)', [code, ownerUuid || null, ip]);
+                try {
+                    await pool.query(
+                        'INSERT INTO modpack_codes (code, owner_uuid, owner_ip, owner_user_id) VALUES (?, ?, ?, ?)',
+                        [code, ownerUuid || null, ip, data.owner_user_id]
+                    );
+                } catch (insertErr) {
+                    // Spalte fehlt noch (Schema nicht aktualisiert): Code trotzdem anlegen.
+                    if (!/owner_user_id/.test(String(insertErr && insertErr.message))) throw insertErr;
+                    await pool.query('INSERT INTO modpack_codes (code, owner_uuid, owner_ip) VALUES (?, ?, ?)', [code, ownerUuid || null, ip]);
+                }
+                if (uploadCheck.files.length > 0) {
+                    await codeFiles.attachToCode(code, data.owner_user_id, uploadCheck.files, pool);
+                }
             }
 
             console.log(`[CodesSystem] Saved modpack ${code} (${name}) for ${ownerUuid || ip}${wantsLive ? ' [live]' : ''}`);
-            res.json({ success: true, code, ...liveInfo(data), expires: data.expires });
+            res.json({ success: true, code, ...liveInfo(data), expires: data.expires, uploads: uploadCheck.files.length });
         } catch (error) {
             console.error('[CodesSystem] Save error:', error);
             res.status(500).json({ success: false, error: error.message });
         }
     }
+
+    // ---- Eigene Dateien (Mods, die Modrinth und CurseForge nicht kennen) ----
+
+    let schemaReady = null;
+    function ensureCodeSchema() {
+        if (!pool) return Promise.resolve();
+        if (!schemaReady) {
+            schemaReady = pool.query('ALTER TABLE modpack_codes ADD COLUMN IF NOT EXISTS owner_user_id INTEGER')
+                .catch((err) => {
+                    schemaReady = null;
+                    console.error('[CodesSystem] Could not add owner_user_id:', err.message);
+                });
+        }
+        return schemaReady;
+    }
+    ensureCodeSchema();
+
+    function sendCodeFileError(res, err, fallback) {
+        if (err instanceof codeFiles.CodeFileError) {
+            return res.status(err.status).json({ success: false, error: err.code, message: err.message, details: err.details });
+        }
+        console.error(`[CodesSystem] ${fallback}:`, err);
+        return res.status(500).json({ success: false, error: 'server_error', message: fallback });
+    }
+
+    // Vor dem Export: passt das noch in den Speicher, und was muss hochgeladen werden?
+    app.post('/api/modpack/files/check', ensureCloudUser, async (req, res) => {
+        try {
+            const files = Array.isArray(req.body && req.body.files) ? req.body.files : null;
+            if (!files) return res.status(400).json({ success: false, error: 'invalid_request', message: 'files must be an array' });
+            if (files.length > codeFiles.MAX_FILES_PER_CODE) {
+                return res.status(400).json({ success: false, error: 'too_many_files', message: `A code can carry at most ${codeFiles.MAX_FILES_PER_CODE} own files.` });
+            }
+            const result = await codeFiles.checkFiles(req.cloudUserId, files);
+            if (result.error) {
+                return res.status(400).json({ success: false, error: result.tooLarge ? 'file_too_large' : 'invalid_request', message: result.error });
+            }
+            return res.json({
+                success: true,
+                fits: result.fits,
+                neededBytes: result.neededBytes,
+                missing: result.missing,
+                maxFileBytes: codeFiles.MAX_CODE_FILE_BYTES,
+                quota: result.usage
+            });
+        } catch (err) {
+            return sendCodeFileError(res, err, 'Could not check the files');
+        }
+    });
+
+    app.put('/api/modpack/files/:sha256', ensureCloudUser, async (req, res) => {
+        try {
+            const result = await codeFiles.receiveUpload(req, req.cloudUserId, String(req.params.sha256 || '').toLowerCase());
+            return res.status(result.existing ? 200 : 201).json({ success: true, ...result });
+        } catch (err) {
+            return sendCodeFileError(res, err, 'Upload failed');
+        }
+    });
+
+    // Fuer das Dashboard (Launcher und Website): eigene Codes, ihre Dateien, Speicher.
+    app.get('/api/modpack/my-uploads', ensureCloudUser, async (req, res) => {
+        try {
+            await ensureCodeSchema();
+            const [rows] = await pool.query(
+                'SELECT code FROM modpack_codes WHERE owner_user_id = ? ORDER BY created_at DESC',
+                [req.cloudUserId]
+            );
+            const codes = [];
+            for (const row of rows) {
+                let data = null;
+                try {
+                    data = readCodeFile(row.code);
+                } catch (_) {
+                    data = null;
+                }
+                if (!data) continue;
+                const files = await codeFiles.filesOfCode(row.code);
+                codes.push({
+                    code: data.code,
+                    name: data.name,
+                    version: data.version || null,
+                    loader: data.loader || null,
+                    created: data.created || null,
+                    expires: data.expires || null,
+                    uses: data.uses || 0,
+                    ...liveInfo(data),
+                    files: files.map(({ fileName, kind, size }) => ({ fileName, kind, size })),
+                    filesBytes: files.reduce((sum, file) => sum + file.size, 0)
+                });
+            }
+            const usage = await codeFiles.storageUsage(req.cloudUserId);
+            return res.json({ success: true, codes, quota: usage });
+        } catch (err) {
+            return sendCodeFileError(res, err, 'Could not load your codes');
+        }
+    });
+
+    // Code des eigenen Lux-Kontos loeschen; die hochgeladenen Dateien gehen mit.
+    app.delete('/api/modpack/my-codes/:code', ensureCloudUser, async (req, res) => {
+        try {
+            const { code } = req.params;
+            const data = isValidCode(code) && fs.existsSync(codeFilePath(code))
+                ? JSON.parse(fs.readFileSync(codeFilePath(code), 'utf8'))
+                : null;
+            if (!data) return res.status(404).json({ success: false, error: 'not_found', message: 'Code not found' });
+            if (Number(data.owner_user_id) !== Number(req.cloudUserId) && req.cloudUser.role !== 'admin') {
+                return res.status(403).json({ success: false, error: 'forbidden', message: 'This code belongs to another account.' });
+            }
+            fs.unlinkSync(codeFilePath(code));
+            await pool.query('DELETE FROM modpack_codes WHERE code = ?', [code]);
+            await codeFiles.releaseCode(code, pool);
+            const usage = await codeFiles.storageUsage(req.cloudUserId);
+            console.log(`[CodesSystem] Deleted code ${code} by account ${req.cloudUserId}`);
+            return res.json({ success: true, quota: usage });
+        } catch (err) {
+            return sendCodeFileError(res, err, 'Could not delete the code');
+        }
+    });
+
+    // Download einer eigenen Datei fuer alle, die den Code haben.
+    app.get('/api/modpack/:code/files/:sha256', async (req, res) => {
+        try {
+            const { code } = req.params;
+            const hash = String(req.params.sha256 || '').toLowerCase();
+            if (!isValidCode(code) || !codeFiles.isHash(hash) || !readCodeFile(code)) {
+                return res.status(404).json({ success: false, error: 'Not found' });
+            }
+            const entry = await codeFiles.codeHasFile(code, hash);
+            if (!entry) return res.status(404).json({ success: false, error: 'Not found' });
+
+            const stored = await codeFiles.openStoredFile(hash);
+            res.setHeader('Content-Type', 'application/octet-stream');
+            res.setHeader('Content-Length', String(stored.size));
+            res.setHeader('X-Content-SHA256', hash);
+            res.setHeader('Content-Disposition', `attachment; filename="${String(entry.file_name).replace(/["\\]/g, '_')}"`);
+            res.setHeader('Cache-Control', 'no-store');
+            stored.stream.on('error', (err) => {
+                console.error('[CodesSystem] File stream failed:', err.message);
+                res.destroy(err);
+            });
+            stored.stream.pipe(res);
+        } catch (err) {
+            if (err && (err.code === 'ENOENT' || err.name === 'NoSuchKey')) {
+                return res.status(404).json({ success: false, error: 'File is no longer stored' });
+            }
+            return sendCodeFileError(res, err, 'Download failed');
+        }
+    });
 
     app.post('/api/codes/save', optionalCodeUser, handleSave);
     app.post('/api/modpack/save', optionalCodeUser, handleSave);
@@ -370,7 +572,17 @@ module.exports = function (app, ADMIN_PASSWORD, pool) {
             }
 
             const body = req.body || {};
+            let uploadFiles = null;
+            if (Object.prototype.hasOwnProperty.call(body, 'uploads')) {
+                await ensureCodeSchema();
+                const uploadCheck = await codeFiles.validateUploads(req.cloudUser.id, body.uploads);
+                if (uploadCheck.error) {
+                    return res.status(uploadCheck.status || 400).json({ success: false, error: uploadCheck.error });
+                }
+                uploadFiles = uploadCheck.files;
+            }
             Object.assign(data, contentFromBody(body));
+            if (uploadFiles) data.uploads = uploadFiles;
             if (typeof body.name === 'string' && body.name.trim()) data.name = body.name.trim().slice(0, 100);
             if (body.instanceVersion) data.version = body.instanceVersion;
             if (body.instanceLoader) data.loader = body.instanceLoader;
@@ -383,6 +595,9 @@ module.exports = function (app, ADMIN_PASSWORD, pool) {
             data.updated = Date.now();
 
             writeCodeFile(code, data);
+            if (uploadFiles && pool) {
+                await codeFiles.attachToCode(code, req.cloudUser.id, uploadFiles, pool);
+            }
             console.log(`[CodesSystem] Live code ${code} updated to revision ${data.revision} by ${req.cloudUser.username || req.cloudUser.id}`);
             res.json({ success: true, code, ...liveInfo(data), expires: data.expires });
         } catch (error) {
@@ -499,6 +714,9 @@ module.exports = function (app, ADMIN_PASSWORD, pool) {
     app.delete('/api/modpack/delete/:code', async (req, res) => {
         try {
             const { code } = req.params;
+            if (!isValidCode(code)) {
+                return res.status(404).json({ success: false, error: 'Code not found' });
+            }
             const { uuid } = req.query;
 
             const filePath = path.join(CODES_DIR, `${code}.json`);
@@ -520,6 +738,7 @@ module.exports = function (app, ADMIN_PASSWORD, pool) {
                 fs.unlinkSync(filePath);
                 if (pool) {
                     await pool.query('DELETE FROM modpack_codes WHERE code = ?', [code]);
+                    await codeFiles.releaseCode(code, pool);
                 }
                 console.log(`[CodesSystem] Deleted code ${code} by ${isOwner ? 'owner' : 'admin'}`);
                 return res.json({ success: true });
@@ -611,12 +830,16 @@ module.exports = function (app, ADMIN_PASSWORD, pool) {
     app.delete('/api/codes/:code', adminAuth.adminAuthLimiter, adminAuth.adminOrPassword, (req, res) => {
         try {
             const { code } = req.params;
+            if (!isValidCode(code)) {
+                return res.status(404).json({ success: false, error: 'Code not found' });
+            }
             const filePath = path.join(CODES_DIR, `${code}.json`);
 
             if (fs.existsSync(filePath)) {
                 fs.unlinkSync(filePath);
                 if (pool) {
                     pool.query('DELETE FROM modpack_codes WHERE code = ?', [code]).catch(e => console.error(e));
+                    codeFiles.releaseCode(code, pool).catch(e => console.error(e));
                 }
                 res.json({ success: true });
             } else {

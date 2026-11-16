@@ -98,6 +98,7 @@ const createTables = async () => {
                 created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
             )
         `);
+        await connection.query('ALTER TABLE modpack_codes ADD COLUMN IF NOT EXISTS owner_user_id INTEGER');
         console.log('[Database] Modpack codes table checked/created.');
 
         // Fixed-list marketplace metadata. No CHECK constraint here (columns were added via

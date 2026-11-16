@@ -7,6 +7,7 @@ import {
 } from 'lucide-react'
 import PageShell from '../components/PageShell'
 import CloudSection from '../components/CloudSection'
+import CodeUploadsSection from '../components/CodeUploadsSection'
 import useAuth, { fixPath } from '../hooks/useAuth'
 
 /* The account home. Everything that belongs to the person using Lux Client —
@@ -153,6 +154,7 @@ export default function Dashboard() {
             {/* ── Left: cloud ── */}
             <motion.div variants={fadeUp} className="flex flex-col gap-5">
               <CloudSection />
+              <CodeUploadsSection />
 
               {/* Developer entry point */}
               <Link

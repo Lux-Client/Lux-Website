@@ -137,10 +137,13 @@ async function readQuota(userId, executor = pool) {
         [userId]
     );
     const row = rows[0] || {};
+    // Eigene Dateien in Modpack-Codes teilen sich den Speicher mit den Instanzen.
+    const codeBytes = await require('./codeFiles').codeFileBytes(userId, executor);
     return {
         quotaBytes: Number(row.quota_bytes || 0),
         maxInstances: Number(row.max_instances || 0),
-        usedBytes: Number(row.used_bytes || 0)
+        usedBytes: Number(row.used_bytes || 0) + codeBytes,
+        codeFileBytes: codeBytes
     };
 }
 

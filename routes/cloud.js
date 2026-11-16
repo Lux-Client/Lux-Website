@@ -29,6 +29,7 @@ const {
     serializeInstance
 } = require('../cloudInstances');
 const { purgeCloudData } = require('../cloudAccount');
+const { codeFileBytes } = require('../codeFiles');
 const { accessibleInstance } = require('../cloudShare');
 const {
     MAX_BACKGROUND_BYTES,
@@ -128,6 +129,7 @@ router.get('/me', ensureDeviceAuth, async (req, res) => {
             [req.cloudUserId]
         );
         const instanceCount = await countActiveInstances(req.cloudUserId);
+        const codeBytes = await codeFileBytes(req.cloudUserId);
 
         return res.json({
             user: {
@@ -143,7 +145,9 @@ router.get('/me', ensureDeviceAuth, async (req, res) => {
             settings: serializeSettings(settings),
             background: serializeBackground(settings),
             quota: {
-                usedBytes: Number(settings.used_bytes || 0),
+                usedBytes: Number(settings.used_bytes || 0) + codeBytes,
+                instanceBytes: Number(settings.used_bytes || 0),
+                codeFileBytes: codeBytes,
                 quotaBytes: Number(settings.quota_bytes || 0),
                 instanceCount,
                 maxInstances: Number(settings.max_instances || 0)

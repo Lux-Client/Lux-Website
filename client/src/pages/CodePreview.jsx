@@ -134,6 +134,15 @@ function CodePreviewPage({ code }) {
       })
       .then((result) => {
         if (!active) return
+        // Own files (not on Modrinth or CurseForge) come from the creator's Lux cloud storage.
+        const uploadSection = { mod: 'mods', resourcepack: 'resourcePacks', shader: 'shaders' }
+        for (const upload of result.data?.uploads || []) {
+          const key = uploadSection[upload.kind]
+          if (!key) continue
+          result.data[key] = [...(result.data[key] || []), {
+            projectId: null, versionId: null, title: upload.title, fileName: upload.fileName, ownFile: true, size: upload.size,
+          }]
+        }
         setPack(result.data)
         const firstFilled = SECTIONS.find((section) => (result.data?.[section.key] || []).length > 0)
         if (firstFilled) setActiveSection(firstFilled.key)
@@ -357,7 +366,7 @@ function CodePreviewPage({ code }) {
             <ol className="mt-4 list-decimal space-y-2 pl-5 text-sm leading-6 text-gray-400">
               <li>Click <span className="font-bold text-white">Install in Lux</span> — Lux opens with this code filled in.</li>
               <li>Confirm the import. Lux creates a new instance with Minecraft {pack.version || ''} {capitalize(pack.loader)}.</li>
-              <li>All mods, packs and shaders are downloaded from Modrinth. The instance can be started once everything is there.</li>
+              <li>All mods, packs and shaders are downloaded from Modrinth or CurseForge, own files of the creator from Lux. The instance can be started once everything is there.</li>
             </ol>
           </aside>
         </section>
@@ -381,7 +390,9 @@ function ContentRow({ item, modrinthType }) {
       <div className="min-w-0 flex-1">
         <p className="truncate font-black text-white">{item.displayTitle}</p>
         <p className="mt-0.5 truncate text-xs text-gray-500">
-          {item.versionNumber ? `Version ${item.versionNumber}` : item.versionId ? 'Version pinned' : 'Latest compatible version'}
+          {item.ownFile
+            ? 'Own file, from the creator\'s Lux cloud'
+            : item.versionNumber ? `Version ${item.versionNumber}` : item.versionId ? 'Version pinned' : 'Latest compatible version'}
           {item.fileName ? ` · ${item.fileName}` : ''}
         </p>
       </div>

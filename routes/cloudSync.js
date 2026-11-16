@@ -34,6 +34,8 @@ const {
     serializeForViewer
 } = require('../cloudShare');
 
+const { codeFileBytes } = require('../codeFiles');
+
 const router = express.Router();
 
 const MAX_NEGOTIATE_ENTRIES = MAX_ENTRIES + 1000;
@@ -377,7 +379,9 @@ router.post('/instances/:uuid/commit', ensureDeviceAuth, async (req, res) => {
             [ownerId]
         );
         const quotaBytes = Number(quotaRows[0] ? quotaRows[0].quota_bytes : 0);
-        const usedBytes = Number(quotaRows[0] ? quotaRows[0].used_bytes : 0);
+        // Eigene Dateien in Modpack-Codes zaehlen mit (siehe codeFiles.js).
+        const usedBytes = Number(quotaRows[0] ? quotaRows[0].used_bytes : 0)
+            + await codeFileBytes(ownerId, connection);
         const logicalBytes = actualBytes + serialized.length;
         const nextUsed = usedBytes - Number(instance.logical_bytes || 0) + logicalBytes;
 

@@ -335,7 +335,7 @@ export default function Capes() {
                     : 'Sign in with your Lux account to upload and wear capes.'}
                 </p>
                 <a href={auth.loginUrl} className="mt-4 inline-flex rounded-lg bg-primary px-4 py-2 text-sm font-bold text-black hover:bg-primary-light">
-                  Sign in with Google
+                  Sign in
                 </a>
               </div>
             ) : (

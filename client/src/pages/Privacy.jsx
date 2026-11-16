@@ -39,7 +39,16 @@ Lux Client itself does not store Microsoft passwords; authentication uses the pr
 
 A Lux Account is **optional**. Lux Client is fully usable without one — you can install, manage and play instances with a Microsoft account alone. Everything in this section only applies if you choose to sign in with a Lux Account.
 
-Signing in uses Google as the identity provider. We receive and store your Google account id, display name, email address and profile picture URL. We never receive your Google password.
+You can create a Lux Account in two ways:
+
+- **With email and password.** We store your username, your email address and a salted hash of your password (scrypt). We never store the password itself.
+- **With Google.** Google acts as the identity provider. We receive and store your Google account id, display name, email address and profile picture URL. We never receive your Google password.
+
+If you turn on two-factor authentication, we store the authenticator secret in encrypted form and hashes of your recovery codes. For passkeys we store the public key, an identifier of the credential, a usage counter and the name you gave it; your fingerprint, face or device PIN never leave your device. To protect accounts against password guessing, we keep a counter of failed sign-in attempts per account and limit requests per IP address for a short time.
+
+### Account emails
+
+To confirm your email address, reset your password and inform you about security changes on your account, we send emails through **Resend** (Resend, Inc., USA), which processes your email address and the message on our behalf. The transfer to the USA is based on the EU Standard Contractual Clauses. We count how many emails we send per day and month, without storing who received them, so that we stay within the sending limit.
 
 Processing is based on the performance of a contract under Art. 6 para. 1 lit. b GDPR — without this data the account features cannot be provided.
 
@@ -116,7 +125,7 @@ export default function Privacy() {
         <header className="mb-12 text-center">
           <p className="text-sm font-black uppercase tracking-[0.3em] text-primary">Legal</p>
           <h1 className="mt-4 text-5xl font-black tracking-tight text-white">Privacy Policy</h1>
-          <p className="mt-4 text-gray-400">Last updated: August 31, 2026</p>
+          <p className="mt-4 text-gray-400">Last updated: November 16, 2026</p>
         </header>
 
         <article className="rounded-[2rem] border border-white/5 bg-surface/50 p-8 md:p-10">

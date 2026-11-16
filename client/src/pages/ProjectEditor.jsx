@@ -203,7 +203,7 @@ export default function ProjectEditor({ type: fixedType }) {
           <h1 className="text-3xl font-black text-white">Sign in to continue</h1>
           <p className="mt-3 max-w-md text-base text-white/40">You need an account to submit a project.</p>
           <a href={auth.loginUrl} className="mt-7 flex items-center gap-2 rounded-xl bg-primary px-7 py-3.5 text-sm font-bold text-black shadow-glow-sm transition hover:bg-primary-light">
-            Continue with Google
+            Sign in
           </a>
         </div>
       </PageShell>

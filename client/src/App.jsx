@@ -19,7 +19,9 @@ import Extensions from './pages/Extensions'
 import Imprint from './pages/Imprint'
 import LandingPage from './pages/LandingPage'
 import Maintenance from './pages/Maintenance'
-import ModpackEditor from './pages/ModpackEditor'
+import Login from './pages/Login'
+import Register from './pages/Register'
+import { ForgotPassword, ResetPassword, VerifyEmail } from './pages/AccountEmailPages'
 import Privacy from './pages/Privacy'
 import Profile from './pages/Profile'
 import ProjectEditor from './pages/ProjectEditor'
@@ -65,7 +67,14 @@ export default function App() {
         <Route path="/docs/launcher" element={<DocsLauncher />} />
         <Route path="/docs/extension" element={<DocsExtension />} />
         <Route path="/changelog" element={<Changelog />} />
-        <Route path="/modpack" element={<ModpackEditor />} />
+        {/* The website modpack builder was removed; codes are made in the launcher. */}
+        <Route path="/modpack" element={<Navigate to="/code" replace />} />
+        <Route path="/login" element={<Login />} />
+        <Route path="/register" element={<Register />} />
+        <Route path="/signup" element={<Navigate to="/register" replace />} />
+        <Route path="/verify-email" element={<VerifyEmail />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/code" element={<CodePreview />} />
         <Route path="/code/:code" element={<CodePreview />} />
         <Route path="/privacy" element={<Privacy />} />

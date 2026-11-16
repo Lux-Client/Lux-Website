@@ -7,11 +7,20 @@ passport.serializeUser((user, done) => {
     done(null, user.id);
 });
 
+// Fields that must never reach the browser (GET /api/user sends req.user as is).
+const PRIVATE_FIELDS = ['password_hash', 'totp_secret', 'totp_last_step', 'failed_logins', 'locked_until'];
+
+function publicUser(row) {
+    const user = { ...row, has_password: Boolean(row.password_hash) };
+    for (const field of PRIVATE_FIELDS) delete user[field];
+    return user;
+}
+
 passport.deserializeUser(async (id, done) => {
     try {
         const [rows] = await pool.query('SELECT * FROM users WHERE id = ?', [id]);
         if (rows.length > 0) {
-            done(null, rows[0]);
+            done(null, publicUser(rows[0]));
         } else {
             done(null, false);
         }
@@ -53,8 +62,40 @@ passport.use(new GoogleStrategy({
                 user.last_login = now;
 
                 return done(null, user);
-            } else {
+            }
 
+            // An email account with the same address: link Google to it instead of creating a
+            // second account. Google has verified the address. If the email account was never
+            // confirmed, whoever set its password did not prove they own the address, so that
+            // password is dropped.
+            const googleEmail = profile.emails && profile.emails.length > 0 ? String(profile.emails[0].value).toLowerCase() : null;
+            const emailVerifiedByGoogle = !profile.emails?.[0] || profile.emails[0].verified !== false;
+            if (googleEmail && emailVerifiedByGoogle) {
+                const [byEmail] = await pool.query(
+                    'SELECT * FROM users WHERE LOWER(email) = ? AND google_id IS NULL ORDER BY id ASC',
+                    [googleEmail]
+                );
+                if (byEmail.length > 0) {
+                    const user = byEmail[0];
+                    if (user.banned && !(user.ban_expires && new Date(user.ban_expires) < now)) {
+                        return done(null, false, { message: user.ban_reason || 'You are banned from this platform.' });
+                    }
+                    if (user.email_verified) {
+                        await pool.query('UPDATE users SET google_id = ?, last_login = ? WHERE id = ?', [profile.id, now, user.id]);
+                    } else {
+                        await pool.query(
+                            'UPDATE users SET google_id = ?, email_verified = TRUE, password_hash = NULL, last_login = ? WHERE id = ?',
+                            [profile.id, now, user.id]
+                        );
+                        user.password_hash = null;
+                    }
+                    user.google_id = profile.id;
+                    console.log(`[Google OAuth] Linked Google to existing email account ${user.id}`);
+                    return done(null, user);
+                }
+            }
+
+            {
                 let username = profile.displayName;
                 const [existing] = await pool.query('SELECT id FROM users WHERE username = ?', [username]);
                 if (existing.length > 0) {
@@ -72,7 +113,7 @@ passport.use(new GoogleStrategy({
                 };
 
                 const [result] = await pool.query(
-                    'INSERT INTO users (google_id, username, email, avatar, bio, role, last_login) VALUES (?, ?, ?, ?, ?, ?, ?)',
+                    'INSERT INTO users (google_id, username, email, avatar, bio, role, last_login, email_verified) VALUES (?, ?, ?, ?, ?, ?, ?, TRUE)',
                     [newUser.google_id, newUser.username, newUser.email, newUser.avatar, newUser.bio, newUser.role, newUser.last_login]
                 );
                 newUser.id = result.insertId;
@@ -94,3 +135,4 @@ passport.use(new GoogleStrategy({
     }));
 
 module.exports = passport;
+module.exports.publicUser = publicUser;

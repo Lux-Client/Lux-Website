@@ -98,6 +98,7 @@ class Harness {
         `);
         const { createCloudTables } = require(path.join(SITE, 'db_init_cloud.js'));
         await createCloudTables(connection);
+        await require(path.join(SITE, 'db_init_auth.js')).createAuthTables(connection);
         connection.release();
     }
 

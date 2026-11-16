@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import {
   Bell, BellOff, BookOpen, Check, ChevronRight, Cloud, Code2,
-  LogOut, Package, Puzzle, Settings, Shield, User,
+  LogOut, Puzzle, Settings, Shield, User,
 } from 'lucide-react'
 import PageShell from '../components/PageShell'
 import CloudSection from '../components/CloudSection'
@@ -100,7 +100,7 @@ export default function Dashboard() {
             href={auth.loginUrl}
             className="mt-8 flex items-center gap-2 rounded-xl bg-primary px-7 py-3.5 text-sm font-bold text-black shadow-glow-sm transition hover:bg-primary-light"
           >
-            Continue with Google <ChevronRight className="h-4 w-4" />
+            Sign in <ChevronRight className="h-4 w-4" />
           </a>
         </div>
       </PageShell>
@@ -189,7 +189,7 @@ export default function Dashboard() {
                 </div>
                 <div className="grid gap-2.5 p-4 sm:grid-cols-2">
                   <QuickLink to="/extensions" icon={Puzzle}   title="Browse extensions" hint="Mods, themes, shaders and packs" />
-                  <QuickLink to="/modpack"    icon={Package}  title="Modpack editor"    hint="Build and share a modpack code" />
+                  <QuickLink to="/profile#security" icon={Shield} title="Sign-in and security" hint="Password, 2FA and passkeys" />
                   <QuickLink to="/docs"       icon={BookOpen} title="Documentation"     hint="Guides for launcher and cloud" />
                   <QuickLink to="/profile"    icon={User}     title="Public profile"    hint="Avatar, bio and visibility" />
                 </div>

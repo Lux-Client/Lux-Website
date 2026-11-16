@@ -53,7 +53,7 @@ export default function UsersView({ users, onRefresh, onModerate }) {
         <EmptyState
           icon={UsersIcon}
           title={users.length === 0 ? 'No accounts yet' : 'No match'}
-          message={users.length === 0 ? 'Accounts appear here once people sign in with Google.' : 'Try a different search or filter.'}
+          message={users.length === 0 ? 'Accounts appear here once people sign up.' : 'Try a different search or filter.'}
         />
       ) : (
         <div className="flex flex-col gap-2.5">

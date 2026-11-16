@@ -52,7 +52,8 @@ export default function useAuth({ redirectOnMaintenance = true } = {}) {
 
   return {
     ...state,
-    loginUrl: `/auth/google?returnTo=${currentPath}`,
+    loginUrl: `/login?returnTo=${currentPath}`,
+    registerUrl: `/register?returnTo=${currentPath}`,
     logoutUrl: `/auth/logout?returnTo=${currentPath}`,
   }
 }

@@ -8,7 +8,6 @@ const COLUMNS = [
     links: [
       { label: 'Features', to: '/#features' },
       { label: 'Extensions', to: '/extensions' },
-      { label: 'Modpack Builder', to: '/modpack' },
       { label: 'Changelog', to: '/changelog' },
     ],
   },

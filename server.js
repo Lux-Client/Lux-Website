@@ -180,6 +180,7 @@ app.use(sessionMiddleware);
 app.use(passport.initialize());
 app.use(passport.session());
 
+
 // Share Express session with Socket.IO so socket.request.user is populated
 io.engine.use(sessionMiddleware);
 io.engine.use(passport.initialize());
@@ -221,6 +222,10 @@ app.use((req, res, next) => {
     }
     next();
 });
+
+// Email + password sign-up and login, 2FA, passkeys, password reset (see routes/accountAuth.js).
+const accountAuth = require('./routes/accountAuth')({ pool, email: emailService });
+app.use(accountAuth);
 
 app.post('/api/admin/maintenance/auth', adminAuth.adminAuthLimiter, (req, res) => {
     if (adminAuth.submitsPassword(req)) {
@@ -562,7 +567,7 @@ app.get('/auth/google/callback', (req, res, next) => {
         // user had to run the whole device authorization a second time.
         const returnTo = isSafeReturnPath(req.session.returnTo) ? req.session.returnTo : '/';
 
-        req.logIn(user, (loginErr) => {
+        const logInWithGoogle = () => req.logIn(user, (loginErr) => {
             if (loginErr) {
                 console.error('[Google OAuth] Login Error:', loginErr);
                 return res.status(500).send(`Login failed: ${loginErr.message}`);
@@ -577,6 +582,19 @@ app.get('/auth/google/callback', (req, res, next) => {
                 if (saveErr) console.error('[Auth] Session save error after login:', saveErr);
                 res.redirect(returnTo);
             });
+        });
+
+        // Accounts with two-factor authentication finish on the login page with a code or passkey.
+        accountAuth.secondFactors(user).then((methods) => {
+            if (methods.length) {
+                delete req.session.returnTo;
+                accountAuth.startSecondFactor(req, user, returnTo, methods);
+                return req.session.save(() => res.redirect('/login?step=2fa'));
+            }
+            logInWithGoogle();
+        }).catch((factorErr) => {
+            console.error('[Google OAuth] 2FA check failed:', factorErr);
+            res.redirect('/login?error=server');
         });
     })(req, res, next);
 });
@@ -1679,40 +1697,6 @@ app.get('/api/releases', async (req, res) => {
         console.error('[Releases Proxy] Error fetching releases:', err);
         if (releasesCache.data) return res.json(releasesCache.data);
         res.status(502).json({ error: 'Failed to fetch releases' });
-    }
-});
-
-// --- MODRINTH PROXY ROUTES ---
-app.get('/api/modrinth/versions', async (req, res) => {
-    try {
-        const response = await fetch('https://api.modrinth.com/v2/tag/game_version', {
-            headers: {
-                'User-Agent': 'MCLC/1.0.0 (mclc@pluginhub.de)'
-            }
-        });
-        if (!response.ok) throw new Error(`Modrinth returned ${response.status}`);
-        const data = await response.json();
-        res.json(data);
-    } catch (err) {
-        console.error('[Modrinth Proxy] Error fetching versions:', err);
-        res.status(500).json({ error: 'Failed to fetch versions' });
-    }
-});
-
-app.get('/api/modrinth/search', async (req, res) => {
-    try {
-        const params = new URLSearchParams(req.query);
-        const response = await fetch(`https://api.modrinth.com/v2/search?${params.toString()}`, {
-            headers: {
-                'User-Agent': 'MCLC/1.0.0 (mclc@pluginhub.de)'
-            }
-        });
-        if (!response.ok) throw new Error(`Modrinth returned ${response.status}`);
-        const data = await response.json();
-        res.json(data);
-    } catch (err) {
-        console.error('[Modrinth Proxy] Error fetching search:', err);
-        res.status(500).json({ error: 'Failed to fetch search' });
     }
 });
 

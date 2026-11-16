@@ -66,7 +66,7 @@ export default function LockScreen({ password, onPasswordChange, onSubmit, error
                 href={loginUrl}
                 className="flex w-full items-center justify-center gap-2 rounded-xl border border-white/[0.08] bg-white/[0.04] px-5 py-3 text-sm font-bold text-white/80 transition-all hover:border-white/[0.16] hover:bg-white/[0.08] hover:text-white active:scale-[0.97]"
               >
-                Sign in with Google
+                Sign in with an admin account
               </a>
             </>
           )}

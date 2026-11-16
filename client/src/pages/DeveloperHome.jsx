@@ -175,7 +175,7 @@ export default function DeveloperHome() {
             href={auth.loginUrl}
             className="mt-8 flex items-center gap-2 rounded-xl bg-primary px-7 py-3.5 text-sm font-bold text-black shadow-glow-sm transition hover:bg-primary-light"
           >
-            Continue with Google <ChevronRight className="h-4 w-4" />
+            Sign in <ChevronRight className="h-4 w-4" />
           </a>
         </div>
       </PageShell>

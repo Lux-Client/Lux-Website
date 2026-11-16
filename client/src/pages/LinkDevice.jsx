@@ -80,10 +80,10 @@ export default function LinkDevice() {
           <h1 className="text-4xl font-black text-white">Connect Lux Client</h1>
           <p className="mt-4 text-gray-400">Sign in first, then come back to enter the code from your launcher.</p>
           <a
-            href={`/auth/google?returnTo=${encodeURIComponent('/link')}`}
+            href={`/login?returnTo=${encodeURIComponent('/link')}`}
             className="mt-8 inline-block rounded-xl bg-primary px-6 py-3 font-bold text-black transition hover:opacity-90"
           >
-            Sign in with Google
+            Sign in
           </a>
         </main>
       </PageShell>

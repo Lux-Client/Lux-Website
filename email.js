@@ -1,120 +1,351 @@
-const nodemailer = require('nodemailer');
+// Outgoing mail goes through Resend's HTTPS API (api.resend.com, port 443). SMTP is not used
+// because hosters usually block the SMTP ports.
+//
+// Environment:
+//   RESEND_API_KEY         API key from resend.com -> API Keys (required to send anything)
+//   RESEND_FROM            Sender, e.g. "Lux Client <noreply@pluginhub.de>" (domain must be verified in Resend)
+//   EMAIL_DAILY_LIMIT      Emails per day before we stop sending (default 100, Resend free tier)
+//   EMAIL_MONTHLY_LIMIT    Emails per month before we stop sending (default 3000, Resend free tier)
+//   EMAIL_MONTH_RESET_DAY  Day of the month the monthly quota resets (default 1)
+//   EMAIL_NOTIFICATIONS    "true" to also send moderation notifications (extension approved, ...).
+//                          Off by default so the free quota is kept for sign-up and password mails.
+//
+// The quota is counted in the email_usage table (one row per day and per month, UTC). When a
+// limit is reached, or Resend itself answers with daily_quota_exceeded / monthly_quota_exceeded,
+// the period is marked blocked: registration closes and password reset mails are refused until
+// the day (00:00 UTC) or the month rolls over.
 
-// Off by default until SMTP credentials are actually configured, so this can ship without
-// silently trying (and failing) to send mail. Flip EMAIL_ENABLED=true in .env once SMTP_PASS/
-// SMTP_FROM are set (from Resend's API Keys page) — no code changes needed.
-// Host/port/user default to Resend's relay since that's the provider we're using; override
-// via SMTP_HOST/SMTP_PORT/SMTP_USER only if you ever switch providers.
-const EMAIL_ENABLED = process.env.EMAIL_ENABLED === 'true';
-const SMTP_HOST = process.env.SMTP_HOST || 'smtp.resend.com';
-const SMTP_PORT = Number(process.env.SMTP_PORT || 587);
-const SMTP_USER = process.env.SMTP_USER || 'resend';
-const SMTP_PASS = process.env.SMTP_PASS;
-const SMTP_FROM = process.env.SMTP_FROM;
-const SITE_URL = process.env.SITE_URL || 'https://lux.pluginhub.de';
+const pool = require('./database');
 
-let transporter = null;
-function getTransporter() {
-    if (transporter) return transporter;
-    if (!SMTP_HOST || !SMTP_USER || !SMTP_PASS) return null;
-    transporter = nodemailer.createTransport({
-        host: SMTP_HOST,
-        port: SMTP_PORT,
-        secure: SMTP_PORT === 465,
-        auth: { user: SMTP_USER, pass: SMTP_PASS },
-    });
-    return transporter;
+const SITE_URL = (process.env.SITE_URL || 'https://lux.pluginhub.de').replace(/\/+$/, '');
+// SMTP_PASS / SMTP_FROM are the old names from the SMTP setup (a Resend SMTP password is an API key).
+const RESEND_API_KEY = process.env.RESEND_API_KEY || process.env.SMTP_PASS || '';
+const RESEND_FROM = process.env.RESEND_FROM || process.env.SMTP_FROM || 'Lux Client <noreply@pluginhub.de>';
+const DAILY_LIMIT = Math.max(0, Number(process.env.EMAIL_DAILY_LIMIT || 100));
+const MONTHLY_LIMIT = Math.max(0, Number(process.env.EMAIL_MONTHLY_LIMIT || 3000));
+const MONTH_RESET_DAY = Math.min(28, Math.max(1, Number(process.env.EMAIL_MONTH_RESET_DAY || 1)));
+const NOTIFICATIONS_ENABLED = process.env.EMAIL_NOTIFICATIONS === 'true';
+// Without an API key outside production, mails are printed to the console so the flows can be tried locally.
+const DEV_CONSOLE = !RESEND_API_KEY
+    && (process.env.EMAIL_DEV_CONSOLE === 'true' || ['development', 'test'].includes(process.env.NODE_ENV));
+
+if (!RESEND_API_KEY) {
+    console.warn(DEV_CONSOLE
+        ? '[Email] RESEND_API_KEY not set: emails are printed to the console (development only).'
+        : '[Email] RESEND_API_KEY not set: no emails can be sent, email sign-up is closed.');
 }
 
-const layout = (title, bodyHtml) => `
+let transport = defaultTransport;
+let now = () => new Date();
+
+// ── quota periods ───────────────────────────────────────────────────────────
+
+function pad(n) { return String(n).padStart(2, '0'); }
+
+function periods(date = now()) {
+    const y = date.getUTCFullYear();
+    const m = date.getUTCMonth();
+    const d = date.getUTCDate();
+    const dayKey = `d:${y}-${pad(m + 1)}-${pad(d)}`;
+    const dayEnds = new Date(Date.UTC(y, m, d + 1));
+
+    // The monthly quota period starts on MONTH_RESET_DAY.
+    let startY = y;
+    let startM = m;
+    if (d < MONTH_RESET_DAY) {
+        startM -= 1;
+        if (startM < 0) { startM = 11; startY -= 1; }
+    }
+    const monthKey = `m:${startY}-${pad(startM + 1)}`;
+    const monthEnds = new Date(Date.UTC(startY, startM + 1, MONTH_RESET_DAY));
+    return { dayKey, dayEnds, monthKey, monthEnds };
+}
+
+async function ensureRow(period) {
+    await pool.query(
+        'INSERT INTO email_usage (period, sent, blocked) VALUES (?, 0, FALSE) ON CONFLICT (period) DO NOTHING RETURNING period',
+        [period]
+    );
+}
+
+async function readRow(period) {
+    const [rows] = await pool.query('SELECT period, sent, blocked FROM email_usage WHERE period = ?', [period]);
+    return rows[0] || { period, sent: 0, blocked: false };
+}
+
+// Whether emails can be sent right now, and if not, why and until when.
+async function getStatus() {
+    if (!RESEND_API_KEY && !DEV_CONSOLE) {
+        return { available: false, reason: 'not_configured', resumesAt: null };
+    }
+    const p = periods();
+    const [day, month] = await Promise.all([readRow(p.dayKey), readRow(p.monthKey)]);
+    const monthFull = month.blocked || Number(month.sent) >= MONTHLY_LIMIT;
+    const dayFull = day.blocked || Number(day.sent) >= DAILY_LIMIT;
+    // The monthly limit wins: it lasts longer.
+    if (monthFull) return { available: false, reason: 'monthly', resumesAt: p.monthEnds.toISOString() };
+    if (dayFull) return { available: false, reason: 'daily', resumesAt: p.dayEnds.toISOString() };
+    return {
+        available: true,
+        reason: null,
+        resumesAt: null,
+        remainingToday: DAILY_LIMIT - Number(day.sent),
+        remainingThisMonth: MONTHLY_LIMIT - Number(month.sent),
+    };
+}
+
+// Takes one email from both quotas, or none if either is used up.
+async function reserve(p) {
+    await ensureRow(p.dayKey);
+    await ensureRow(p.monthKey);
+    const [dayRes] = await pool.query(
+        'UPDATE email_usage SET sent = sent + 1, updated_at = NOW() WHERE period = ? AND blocked = FALSE AND sent < ?',
+        [p.dayKey, DAILY_LIMIT]
+    );
+    if (!dayRes.affectedRows) return false;
+    const [monthRes] = await pool.query(
+        'UPDATE email_usage SET sent = sent + 1, updated_at = NOW() WHERE period = ? AND blocked = FALSE AND sent < ?',
+        [p.monthKey, MONTHLY_LIMIT]
+    );
+    if (!monthRes.affectedRows) {
+        await refund(p, { month: false });
+        return false;
+    }
+    return true;
+}
+
+async function refund(p, { day = true, month = true } = {}) {
+    if (day) await pool.query('UPDATE email_usage SET sent = sent - 1 WHERE period = ? AND sent > 0', [p.dayKey]);
+    if (month) await pool.query('UPDATE email_usage SET sent = sent - 1 WHERE period = ? AND sent > 0', [p.monthKey]);
+}
+
+async function block(period) {
+    await ensureRow(period);
+    await pool.query('UPDATE email_usage SET blocked = TRUE, updated_at = NOW() WHERE period = ?', [period]);
+}
+
+// ── Resend HTTP API ─────────────────────────────────────────────────────────
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+async function defaultTransport(message) {
+    if (DEV_CONSOLE) {
+        console.log(`\n[Email] (console) To: ${message.to}\nSubject: ${message.subject}\n${message.text || ''}\n`);
+        return { ok: true, id: 'console' };
+    }
+    for (let attempt = 0; attempt < 3; attempt++) {
+        let res;
+        try {
+            res = await fetch('https://api.resend.com/emails', {
+                method: 'POST',
+                headers: {
+                    Authorization: `Bearer ${RESEND_API_KEY}`,
+                    'Content-Type': 'application/json',
+                    'User-Agent': 'lux-website',
+                },
+                body: JSON.stringify({
+                    from: RESEND_FROM,
+                    to: [message.to],
+                    subject: message.subject,
+                    html: message.html,
+                    text: message.text,
+                }),
+                signal: AbortSignal.timeout(15000),
+            });
+        } catch (err) {
+            return { ok: false, error: 'network', message: err.message };
+        }
+        if (res.ok) {
+            const body = await res.json().catch(() => ({}));
+            return { ok: true, id: body.id || null };
+        }
+        const body = await res.json().catch(() => ({}));
+        const name = String(body.name || '');
+        const text = `${name} ${body.message || ''}`.toLowerCase();
+        if (res.status === 429 && (name === 'daily_quota_exceeded' || /daily/.test(text))) {
+            return { ok: false, error: 'daily_quota', message: body.message };
+        }
+        if (res.status === 429 && (name === 'monthly_quota_exceeded' || /monthly/.test(text))) {
+            return { ok: false, error: 'monthly_quota', message: body.message };
+        }
+        if (res.status === 429 && attempt < 2) {
+            // Plain request rate limit (a few requests per second): wait and try again.
+            await sleep(1100 * (attempt + 1));
+            continue;
+        }
+        return { ok: false, error: 'http', status: res.status, message: body.message || name };
+    }
+    return { ok: false, error: 'http', status: 429, message: 'rate limited' };
+}
+
+// Sends one email. Returns { sent: true } or { sent: false, reason }, where reason is
+// 'daily' / 'monthly' (quota used up), 'not_configured', 'no_recipient' or 'send_failed'.
+async function sendEmail({ to, subject, html, text }) {
+    if (!to) return { sent: false, reason: 'no_recipient' };
+    if (!RESEND_API_KEY && !DEV_CONSOLE) return { sent: false, reason: 'not_configured' };
+
+    const p = periods();
+    let reserved;
+    try {
+        reserved = await reserve(p);
+    } catch (err) {
+        console.error('[Email] Quota check failed:', err.message);
+        return { sent: false, reason: 'send_failed' };
+    }
+    if (!reserved) {
+        const status = await getStatus().catch(() => ({ reason: 'daily' }));
+        console.warn(`[Email] Not sending "${subject}": ${status.reason} limit reached.`);
+        return { sent: false, reason: status.reason || 'daily' };
+    }
+
+    const result = await transport({ to, subject, html, text });
+    if (result.ok) return { sent: true, id: result.id };
+
+    if (result.error === 'daily_quota') {
+        await block(p.dayKey).catch(() => {});
+        console.warn('[Email] Resend reports the daily quota is used up, sending paused until tomorrow (UTC).');
+        return { sent: false, reason: 'daily' };
+    }
+    if (result.error === 'monthly_quota') {
+        await block(p.monthKey).catch(() => {});
+        console.warn('[Email] Resend reports the monthly quota is used up, sending paused until the month resets.');
+        return { sent: false, reason: 'monthly' };
+    }
+    await refund(p).catch(() => {});
+    console.error(`[Email] Failed to send "${subject}" to ${to}:`, result.message || result.error);
+    return { sent: false, reason: 'send_failed' };
+}
+
+// ── templates ───────────────────────────────────────────────────────────────
+
+function escapeHtml(value) {
+    return String(value ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+const layout = (title, bodyHtml, footer = "You're receiving this because of activity on your Lux Client account.") => `
     <div style="font-family: -apple-system, Segoe UI, Roboto, sans-serif; background: #0a0a0a; padding: 32px 16px;">
         <div style="max-width: 480px; margin: 0 auto; background: #0f0f0f; border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 32px;">
             <p style="color: #e27602; font-weight: 800; font-size: 12px; letter-spacing: 0.15em; text-transform: uppercase; margin: 0 0 16px;">Lux Client</p>
             <h1 style="color: #fff; font-size: 20px; margin: 0 0 16px;">${title}</h1>
             <div style="color: #ccc; font-size: 14px; line-height: 1.6;">${bodyHtml}</div>
-            <p style="color: #666; font-size: 11px; margin-top: 32px;">
-                You're receiving this because of activity on your Lux Client account.
-                <a href="${SITE_URL}/opt-out" style="color: #e27602;">Manage notification preferences</a>
-            </p>
+            <p style="color: #666; font-size: 11px; margin-top: 32px;">${footer}</p>
         </div>
     </div>
 `;
 
-async function sendEmail({ to, subject, html }) {
-    if (!EMAIL_ENABLED) {
-        console.log(`[Email] (disabled) Would send "${subject}" to ${to}`);
-        return { sent: false, reason: 'disabled' };
-    }
-    const client = getTransporter();
-    if (!client || !to || !SMTP_FROM) {
-        console.warn(`[Email] Skipped "${subject}" to ${to || '(no address)'} — SMTP not fully configured or no recipient.`);
-        return { sent: false, reason: 'not_configured' };
-    }
-    try {
-        await client.sendMail({ from: SMTP_FROM, to, subject, html });
-        return { sent: true };
-    } catch (err) {
-        console.error(`[Email] Failed to send "${subject}" to ${to}:`, err.message);
-        return { sent: false, reason: 'send_failed' };
-    }
+const button = (href, label) =>
+    `<p style="margin: 24px 0;"><a href="${href}" style="display: inline-block; background: #e27602; color: #000; font-weight: 700; text-decoration: none; padding: 12px 20px; border-radius: 10px;">${label}</a></p>
+     <p style="color: #888; font-size: 12px;">Or open this link: <br><a href="${href}" style="color: #e27602; word-break: break-all;">${href}</a></p>`;
+
+function sendVerificationEmail({ to, username, token }) {
+    const link = `${SITE_URL}/verify-email?token=${encodeURIComponent(token)}`;
+    return sendEmail({
+        to,
+        subject: 'Confirm your Lux account',
+        html: layout('Confirm your email', `
+            <p>Hi <strong>${escapeHtml(username)}</strong>, thanks for creating a Lux account. Confirm your email address to finish signing up.</p>
+            ${button(link, 'Confirm email')}
+            <p style="color: #888; font-size: 12px;">The link is valid for 24 hours. If you didn't sign up, you can ignore this email.</p>
+        `, 'You received this because someone signed up for Lux Client with this address.'),
+        text: `Hi ${username}, confirm your Lux account: ${link}\nThe link is valid for 24 hours. If you didn't sign up, ignore this email.`,
+    });
+}
+
+function sendPasswordResetEmail({ to, username, token }) {
+    const link = `${SITE_URL}/reset-password?token=${encodeURIComponent(token)}`;
+    return sendEmail({
+        to,
+        subject: 'Reset your Lux password',
+        html: layout('Reset your password', `
+            <p>Hi <strong>${escapeHtml(username)}</strong>, someone asked to reset the password of your Lux account.</p>
+            ${button(link, 'Choose a new password')}
+            <p style="color: #888; font-size: 12px;">The link is valid for 1 hour and works once. If this wasn't you, ignore this email: your password stays the same.</p>
+        `),
+        text: `Hi ${username}, reset your Lux password: ${link}\nThe link is valid for 1 hour. If this wasn't you, ignore this email.`,
+    });
+}
+
+function sendAlreadyRegisteredEmail({ to, username }) {
+    const login = `${SITE_URL}/login`;
+    const forgot = `${SITE_URL}/forgot-password`;
+    return sendEmail({
+        to,
+        subject: 'You already have a Lux account',
+        html: layout('You already have an account', `
+            <p>Hi <strong>${escapeHtml(username)}</strong>, someone tried to sign up with this email address, but it already belongs to your Lux account.</p>
+            <p><a href="${login}" style="color: #e27602;">Sign in</a> or <a href="${forgot}" style="color: #e27602;">reset your password</a>. If this wasn't you, you can ignore this email.</p>
+        `),
+        text: `Hi ${username}, this email already has a Lux account. Sign in: ${login} or reset your password: ${forgot}`,
+    });
+}
+
+function sendSecurityNotice({ to, username, what }) {
+    return sendEmail({
+        to,
+        subject: `Lux account: ${what}`,
+        html: layout('Security notice', `
+            <p>Hi <strong>${escapeHtml(username)}</strong>, this is a notice that on your Lux account: <strong>${escapeHtml(what)}</strong>.</p>
+            <p>If this wasn't you, <a href="${SITE_URL}/forgot-password" style="color: #e27602;">reset your password</a> right away.</p>
+        `),
+        text: `Hi ${username}, on your Lux account: ${what}. If this wasn't you, reset your password: ${SITE_URL}/forgot-password`,
+    });
+}
+
+// Moderation notifications are optional (EMAIL_NOTIFICATIONS=true) to spare the quota.
+function notify(user, subject, title, bodyHtml) {
+    if (!NOTIFICATIONS_ENABLED) return Promise.resolve({ sent: false, reason: 'disabled' });
+    return sendEmail({ to: user && user.email, subject, html: layout(title, bodyHtml) });
 }
 
 function notifyExtensionApproved(user, extensionName, identifier) {
-    return sendEmail({
-        to: user.email,
-        subject: `"${extensionName}" was approved`,
-        html: layout('Your project is live 🎉', `
-            <p>Good news, <strong>${user.username}</strong> — <strong>${extensionName}</strong> just got approved and is now visible on the marketplace.</p>
-            <p><a href="${SITE_URL}/extensions/${identifier}" style="color: #e27602;">View it live →</a></p>
-        `),
-    });
+    return notify(user, `"${extensionName}" was approved`, 'Your project is live 🎉', `
+        <p>Good news, <strong>${escapeHtml(user.username)}</strong> — <strong>${escapeHtml(extensionName)}</strong> just got approved and is now visible on the marketplace.</p>
+        <p><a href="${SITE_URL}/extensions/${encodeURIComponent(identifier)}" style="color: #e27602;">View it live →</a></p>
+    `);
 }
 
 function notifyExtensionRejected(user, extensionName, reason) {
-    return sendEmail({
-        to: user.email,
-        subject: `"${extensionName}" was rejected`,
-        html: layout('Submission rejected', `
-            <p>Hi <strong>${user.username}</strong>, unfortunately <strong>${extensionName}</strong> was not approved.</p>
-            <p><strong>Reason:</strong> ${reason || 'No reason specified'}</p>
-            <p>You're welcome to fix the issue and resubmit from your dashboard.</p>
-        `),
-    });
+    return notify(user, `"${extensionName}" was rejected`, 'Submission rejected', `
+        <p>Hi <strong>${escapeHtml(user.username)}</strong>, unfortunately <strong>${escapeHtml(extensionName)}</strong> was not approved.</p>
+        <p><strong>Reason:</strong> ${escapeHtml(reason || 'No reason specified')}</p>
+        <p>You're welcome to fix the issue and resubmit from your dashboard.</p>
+    `);
 }
 
 function notifyActionRequired(user, extensionName, reason) {
-    return sendEmail({
-        to: user.email,
-        subject: `Action required for "${extensionName}"`,
-        html: layout('Action required', `
-            <p>Hi <strong>${user.username}</strong>, <strong>${extensionName}</strong> needs a change before it can be approved.</p>
-            <p><strong>Feedback:</strong> ${reason || 'No reason specified'}</p>
-        `),
-    });
+    return notify(user, `Action required for "${extensionName}"`, 'Action required', `
+        <p>Hi <strong>${escapeHtml(user.username)}</strong>, <strong>${escapeHtml(extensionName)}</strong> needs a change before it can be approved.</p>
+        <p><strong>Feedback:</strong> ${escapeHtml(reason || 'No reason specified')}</p>
+    `);
 }
 
 function notifyUserWarned(user, reason) {
-    return sendEmail({
-        to: user.email,
-        subject: 'You have received a warning',
-        html: layout('Account warning', `<p>Hi <strong>${user.username}</strong>, you've received a warning.</p><p><strong>Reason:</strong> ${reason}</p>`),
-    });
+    return notify(user, 'You have received a warning', 'Account warning',
+        `<p>Hi <strong>${escapeHtml(user.username)}</strong>, you've received a warning.</p><p><strong>Reason:</strong> ${escapeHtml(reason)}</p>`);
 }
 
 function notifyUserBanned(user, reason) {
-    return sendEmail({
-        to: user.email,
-        subject: 'Your account has been banned',
-        html: layout('Account banned', `<p>Hi <strong>${user.username}</strong>, your account has been banned.</p><p><strong>Reason:</strong> ${reason}</p>`),
-    });
+    return notify(user, 'Your account has been banned', 'Account banned',
+        `<p>Hi <strong>${escapeHtml(user.username)}</strong>, your account has been banned.</p><p><strong>Reason:</strong> ${escapeHtml(reason)}</p>`);
 }
 
 module.exports = {
-    EMAIL_ENABLED,
+    EMAIL_ENABLED: Boolean(RESEND_API_KEY) || DEV_CONSOLE,
+    DAILY_LIMIT,
+    MONTHLY_LIMIT,
+    getStatus,
     sendEmail,
+    sendVerificationEmail,
+    sendPasswordResetEmail,
+    sendAlreadyRegisteredEmail,
+    sendSecurityNotice,
     notifyExtensionApproved,
     notifyExtensionRejected,
     notifyActionRequired,
     notifyUserWarned,
     notifyUserBanned,
+    // tests only
+    _setTransport(fn) { transport = fn || defaultTransport; },
+    _setClock(fn) { now = fn || (() => new Date()); },
+    _periods: periods,
 };

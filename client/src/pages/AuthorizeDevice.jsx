@@ -37,7 +37,7 @@ export default function AuthorizeDevice() {
       .then((data) => {
         if (cancelled) return
         if (!data.loggedIn) {
-          window.location.href = `/auth/google?returnTo=${encodeURIComponent(window.location.pathname + window.location.search)}`
+          window.location.href = `/login?returnTo=${encodeURIComponent(window.location.pathname + window.location.search)}`
           return
         }
         setUser(data.user)

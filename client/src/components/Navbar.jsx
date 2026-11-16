@@ -9,7 +9,6 @@ const NAV_LINKS = [
   { to: '/extensions', label: 'Extensions' },
   { to: '/capes', label: 'Capes' },
   { to: '/docs', label: 'Docs' },
-  { to: '/modpack', label: 'Modpack' },
   { href: 'https://pluginhub.de/discord.html', label: 'Support', external: true },
 ]
 
@@ -116,9 +115,14 @@ export default function Navbar({ onDownload }) {
                 </a>
               </div>
             ) : (
-              <a href={auth.loginUrl} className="rounded-lg px-3 py-1.5 text-sm font-medium text-white/40 transition-colors hover:bg-white/6 hover:text-white">
-                Sign in
-              </a>
+              <div className="flex items-center gap-1">
+                <a href={auth.loginUrl} className="rounded-lg px-3 py-1.5 text-sm font-medium text-white/40 transition-colors hover:bg-white/6 hover:text-white">
+                  Sign in
+                </a>
+                <a href={auth.registerUrl} className="rounded-lg border border-white/8 px-3 py-1.5 text-sm font-medium text-white/70 transition-colors hover:border-white/15 hover:bg-white/6 hover:text-white">
+                  Sign up
+                </a>
+              </div>
             )}
 
             <button
@@ -210,9 +214,14 @@ export default function Navbar({ onDownload }) {
                     <a href={auth.logoutUrl} className="rounded-xl px-3 py-2.5 text-sm font-medium text-red-400/60 hover:bg-white/5 hover:text-red-400">Logout</a>
                   </>
                 ) : (
-                  <a href={auth.loginUrl} className="rounded-xl border border-white/8 px-3 py-3 text-center text-sm font-semibold text-white/60 hover:bg-white/5 hover:text-white">
-                    Sign in
-                  </a>
+                  <div className="grid grid-cols-2 gap-2">
+                    <a href={auth.loginUrl} className="rounded-xl border border-white/8 px-3 py-3 text-center text-sm font-semibold text-white/60 hover:bg-white/5 hover:text-white">
+                      Sign in
+                    </a>
+                    <a href={auth.registerUrl} className="rounded-xl border border-white/8 bg-white/4 px-3 py-3 text-center text-sm font-semibold text-white/80 hover:bg-white/8 hover:text-white">
+                      Sign up
+                    </a>
+                  </div>
                 )}
                 <button
                   onClick={() => { setMobileOpen(false); onDownload() }}

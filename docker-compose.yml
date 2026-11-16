@@ -28,6 +28,14 @@ services:
       - CALLBACK_URL=${CALLBACK_URL}
       - ALLOWED_ORIGINS=${ALLOWED_ORIGINS}
       - LUX_DISCORD_APP_ID=${LUX_DISCORD_APP_ID}
+      - SITE_URL=${SITE_URL:-https://lux.pluginhub.de}
+      - RESEND_API_KEY=${RESEND_API_KEY}
+      - RESEND_FROM=${RESEND_FROM:-Lux Client <noreply@pluginhub.de>}
+      - EMAIL_DAILY_LIMIT=${EMAIL_DAILY_LIMIT:-100}
+      - EMAIL_MONTHLY_LIMIT=${EMAIL_MONTHLY_LIMIT:-3000}
+      - EMAIL_MONTH_RESET_DAY=${EMAIL_MONTH_RESET_DAY:-1}
+      - EMAIL_NOTIFICATIONS=${EMAIL_NOTIFICATIONS:-false}
+      - AUTH_SECRET=${AUTH_SECRET}
     volumes:
       - lux_data:/app/data
     healthcheck:

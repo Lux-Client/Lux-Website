@@ -7,6 +7,7 @@ import {
 } from 'lucide-react'
 import PageShell from '../components/PageShell'
 import useAuth, { fixPath } from '../hooks/useAuth'
+import AccountSecurity from '../components/auth/AccountSecurity'
 
 // ── helpers ─────────────────────────────────────────────────────────────────
 
@@ -114,7 +115,7 @@ export default function Profile() {
           <h1 className="text-3xl font-black text-white">Sign in to manage your profile</h1>
           <p className="mt-3 max-w-md text-base text-white/40">Upload addons, update your identity, and control the visibility of your creator profile.</p>
           <a href={auth.loginUrl} className="mt-7 flex items-center gap-2 rounded-xl bg-primary px-7 py-3.5 text-sm font-bold text-black shadow-glow-sm transition hover:bg-primary-light">
-            Continue with Google <ChevronRight className="h-4 w-4" />
+            Sign in <ChevronRight className="h-4 w-4" />
           </a>
         </div>
       </PageShell>
@@ -217,6 +218,9 @@ export default function Profile() {
               </form>
             </div>
           </div>
+
+          {/* ── Sign-in and security ── */}
+          <AccountSecurity />
 
           {/* ── Developer area pointer ── */}
           <Link

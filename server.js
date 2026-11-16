@@ -187,6 +187,17 @@ io.engine.use(passport.initialize());
 io.engine.use(passport.session());
 
 const activeSessions = new Map();
+// Live counts. A launcher that loses its connection for a moment (network hiccup, proxy
+// timeout, a redeploy) reconnects within seconds; it stays counted for RECONNECT_GRACE_MS so
+// the numbers don't jump. `reconnects` counts new connections per machine over 10 minutes,
+// and `server` names this process: two different names on one dashboard mean two containers
+// are running behind the proxy, each with its own launchers.
+const RECONNECT_GRACE_MS = 45 * 1000;
+const recentlyDisconnected = new Map(); // machineId -> { at, isPlaying, version }
+const reconnectLog = []; // timestamps of connects from machines seen before
+const seenMachinesThisBoot = new Set();
+const SERVER_INSTANCE = `${require('os').hostname()}-${Date.now().toString(36)}`;
+const SERVER_STARTED_AT = new Date().toISOString();
 
 let isMaintenanceMode = false;
 
@@ -335,6 +346,9 @@ io.on('connection', (socket) => {
         const machineId = String(data?.machineId || '').trim();
 
         if (machineId) {
+            recentlyDisconnected.delete(machineId);
+            if (seenMachinesThisBoot.has(machineId)) reconnectLog.push(Date.now());
+            seenMachinesThisBoot.add(machineId);
             for (const [existingSocketId, existingSession] of activeSessions.entries()) {
                 if (existingSocketId === socket.id) continue;
                 if (String(existingSession?.machineId || '').trim() === machineId) {
@@ -458,7 +472,17 @@ io.on('connection', (socket) => {
     });
 
     socket.on('disconnect', () => {
+        const session = activeSessions.get(socket.id);
         activeSessions.delete(socket.id);
+        const machineId = String(session?.machineId || '').trim();
+        if (machineId && session.version && session.version !== 'unknown') {
+            // Only if no other socket of this machine is still connected.
+            const stillConnected = [...activeSessions.values()].some((s) => String(s?.machineId || '').trim() === machineId);
+            if (!stillConnected) {
+                recentlyDisconnected.set(machineId, { at: Date.now(), isPlaying: !!session.isPlaying, version: session.version });
+                setTimeout(emitLiveStats, RECONNECT_GRACE_MS + 1000).unref?.();
+            }
+        }
         emitLiveStats();
     });
 });
@@ -495,11 +519,28 @@ function getLiveStats() {
         }
     });
 
+    const now = Date.now();
+    let reconnecting = 0;
+    for (const [machineId, info] of recentlyDisconnected) {
+        if (now - info.at > RECONNECT_GRACE_MS) { recentlyDisconnected.delete(machineId); continue; }
+        if (activeMachineKeys.has(machineId)) continue;
+        activeMachineKeys.add(machineId);
+        activeUsers++;
+        reconnecting++;
+        if (info.isPlaying && !playingMachineKeys.has(machineId)) { playingMachineKeys.add(machineId); playingUsers++; }
+    }
+    while (reconnectLog.length && now - reconnectLog[0] > 10 * 60 * 1000) reconnectLog.shift();
+
     return {
         activeUsers,
         playingUsers,
         versions,
-        playingInstances
+        playingInstances,
+        connections: activeSessions.size,
+        reconnecting,
+        reconnects10m: reconnectLog.length,
+        server: SERVER_INSTANCE,
+        serverStartedAt: SERVER_STARTED_AT
     };
 }
 

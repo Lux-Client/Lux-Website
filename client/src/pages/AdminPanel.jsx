@@ -204,7 +204,9 @@ function AdminPanelInner() {
 
   useEffect(() => {
     if (!canTools) return
-    const socket = io()
+    // WebSocket first: plain polling needs sticky sessions, and without them a second
+    // container makes the admin socket bounce between servers with different numbers.
+    const socket = io({ transports: ['websocket', 'polling'] })
     setSocketStatus('connecting')
     socket.on('connect', () => {
       setSocketStatus('connected')

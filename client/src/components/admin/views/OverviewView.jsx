@@ -65,6 +65,14 @@ export default function OverviewView({
                 {liveStats.activeUsers || 0}
               </p>
               <Sparkline data={activity.active} color="#10b981" />
+              {liveStats.server && (
+                <p className="text-[10px] leading-snug text-white/[0.28]" title={`Server ${liveStats.server}, started ${new Date(liveStats.serverStartedAt).toLocaleString()}`}>
+                  {liveStats.connections ?? 0} connections
+                  {liveStats.reconnecting ? ` · ${liveStats.reconnecting} reconnecting` : ''}
+                  {` · ${liveStats.reconnects10m ?? 0} reconnects (10 min)`}
+                  {` · server ${String(liveStats.server).slice(0, 12)}`}
+                </p>
+              )}
             </div>
 
             <div className="flex flex-col justify-between gap-3 overflow-hidden rounded-2xl border border-blue-500/20 bg-gradient-to-br from-blue-500/[0.09] to-transparent p-4">

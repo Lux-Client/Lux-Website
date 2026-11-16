@@ -108,7 +108,15 @@ async function main() {
     app.use(session({ secret: 'x', resave: false, saveUninitialized: false }));
     app.use(passport.initialize());
     app.use(passport.session());
+    const monitoring = require(path.join(SITE, 'monitoring.js'));
+    app.use(monitoring.middleware());
     app.use(require(path.join(SITE, 'routes', 'accountAuth.js'))({ pool, email, now: () => clock, limitScale: 10 }));
+    app.delete('/api/user/delete', (req, res) => {
+        try { throw new Error('cloud purge exploded'); } catch (err) {
+            monitoring.noteError(res, err);
+            res.status(500).json({ error: 'Failed to delete account' });
+        }
+    });
     app.get('/api/user', (req, res) => res.json(req.isAuthenticated() ? { loggedIn: true, user: req.user } : { loggedIn: false }));
     app.get('/auth/logout', (req, res) => req.logout(() => res.json({ ok: true })));
     const server = app.listen(0);
@@ -161,15 +169,19 @@ async function main() {
         assert.strictEqual(r.body.code, 'email_unverified');
     });
 
-    await test('register: taken username refused, existing email gets a notice instead of a second account', async () => {
+    await test('register: taken username refused, an email that already has an account is refused', async () => {
         const bob = client();
         let r = await bob.post('/api/auth/register', { username: 'ALICE', email: 'bob@example.com', password: PW });
         assert.strictEqual(r.status, 409);
         const before = outbox.length;
-        r = await bob.post('/api/auth/register', { username: 'googler2', email: 'googler@example.com', password: PW });
-        assert.strictEqual(r.status, 200);
-        assert.strictEqual(outbox.length, before + 1);
-        assert.match(outbox[outbox.length - 1].subject, /already have/);
+        r = await bob.post('/api/auth/register', { username: 'googler2', email: 'Googler@example.com', password: PW });
+        assert.strictEqual(r.status, 409);
+        assert.strictEqual(r.body.code, 'email_google');
+        assert.match(r.body.error, /Google/);
+        r = await bob.post('/api/auth/register', { username: 'alice2', email: 'alice@example.com', password: PW });
+        assert.strictEqual(r.status, 409);
+        assert.strictEqual(r.body.code, 'email_taken');
+        assert.strictEqual(outbox.length, before, 'no email sent');
         const [rows] = await pool.query('SELECT id FROM users WHERE LOWER(email) = ?', ['googler@example.com']);
         assert.strictEqual(rows.length, 1);
     });
@@ -362,6 +374,46 @@ async function main() {
         }
         s2.close();
         assert.deepStrictEqual(codes, [400, 400, 400, 400, 400, 429]);
+    });
+
+    await test('health: failures are counted per area with their message, ok requests too', async () => {
+        const x = client();
+        await x.request('DELETE', '/api/user/delete');
+        await x.request('DELETE', '/api/user/delete');
+        await x.get('/api/auth/config');
+        await new Promise((r) => setTimeout(r, 50));
+        const report = await monitoring.report();
+        const del = report.areas.find((a) => a.area === 'account_delete');
+        assert.ok(del, JSON.stringify(report.areas));
+        assert.strictEqual(del.fail24, 2);
+        assert.strictEqual(del.rate24, 1);
+        const err = report.errors.find((e) => e.area === 'account_delete');
+        assert.strictEqual(err.message, 'cloud purge exploded');
+        assert.match(err.detail, /accountAuth.test.js/);
+        assert.strictEqual(report.errors.filter((e) => e.area === 'account_delete').length, 1, 'same failure stored once');
+        assert.ok(report.areas.find((a) => a.area === 'login').ok24 > 0);
+        assert.ok(report.unseenErrors >= 1);
+        await monitoring.markSeen();
+        assert.strictEqual(await monitoring.unseenCount(), 0);
+    });
+
+    await test('email log: sent, failed with reason and skipped by the limit', async () => {
+        const p = email._periods(new Date(clock));
+        await pool.query('UPDATE email_usage SET sent = ? WHERE period = ?', [email.DAILY_LIMIT, p.dayKey]);
+        const skipped = await email.sendEmail({ to: 'q@example.com', subject: 's', html: 'h', kind: 'test' });
+        assert.strictEqual(skipped.reason, 'daily');
+        const rep = await email.report();
+        assert.strictEqual(rep.quota.daily.used, email.DAILY_LIMIT);
+        assert.ok(rep.counts.sent.last30 >= 3, JSON.stringify(rep.counts));
+        assert.ok(rep.counts.failed.last30 >= 1);
+        assert.ok(rep.counts.skipped.last30 >= 1);
+        assert.ok(rep.reasons.some((r) => r.reason === 'network'));
+        assert.ok(rep.reasons.some((r) => r.reason === 'resend_monthly_quota'));
+        assert.ok(rep.reasons.some((r) => r.reason === 'daily_limit'));
+        assert.ok(rep.recent.every((r) => !r.recipient || /^.\*\*\*@/.test(r.recipient)));
+        assert.ok(rep.kinds.some((k) => k.kind === 'verify'));
+        const m = await monitoring.report();
+        assert.ok(m.errors.some((e) => e.area === 'email' && /monthly quota/.test(e.message)));
     });
 
     server.close();

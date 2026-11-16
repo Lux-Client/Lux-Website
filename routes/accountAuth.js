@@ -15,6 +15,7 @@ const {
     verifyAuthenticationResponse,
 } = require('@simplewebauthn/server');
 const c = require('../auth/crypto');
+const monitoring = require('../monitoring');
 
 const VERIFY_TTL_MS = 24 * 60 * 60 * 1000;
 const RESET_TTL_MS = 60 * 60 * 1000;
@@ -281,6 +282,7 @@ module.exports = function createAccountAuth({ pool, email, now = () => Date.now(
 
     const ah = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch((err) => {
         console.error(`[Auth] ${req.method} ${req.originalUrl} failed:`, err);
+        monitoring.noteError(res, err);
         if (!res.headersSent) res.status(500).json({ error: 'Something went wrong. Please try again.' });
     });
 
@@ -332,6 +334,24 @@ module.exports = function createAccountAuth({ pool, email, now = () => Date.now(
         const pwProblem = passwordProblem(password, { email: address, username });
         if (pwProblem) return res.status(400).json({ error: pwProblem, field: 'password' });
 
+        // One address, one account. Tell the person how they already sign in.
+        const existing = await userByEmail(address);
+        if (existing) {
+            if (existing.google_id && !existing.password_hash) {
+                return res.status(409).json({
+                    error: 'This email address already belongs to a Lux account that signs in with Google. Please sign in with Google.',
+                    code: 'email_google', field: 'email',
+                });
+            }
+            return res.status(409).json({
+                error: 'An account with this email address already exists. Sign in, or reset your password if you forgot it.',
+                code: 'email_taken', field: 'email',
+            });
+        }
+
+        const [taken] = await pool.query('SELECT id FROM users WHERE LOWER(username) = ?', [username.toLowerCase()]);
+        if (taken.length) return res.status(409).json({ error: 'This username is already taken.', field: 'username' });
+
         // No emails, no new accounts: they could never be confirmed.
         const status = await email.getStatus();
         if (!status.available) {
@@ -340,18 +360,6 @@ module.exports = function createAccountAuth({ pool, email, now = () => Date.now(
                 code: 'email_unavailable', reason: status.reason, resumesAt: status.resumesAt,
             });
         }
-
-        const existing = await userByEmail(address);
-        if (existing) {
-            // Don't reveal that the address has an account; tell the owner instead.
-            if (emailCooldown.hit(`exists:${address}`)) {
-                await email.sendAlreadyRegisteredEmail({ to: existing.email, username: existing.username });
-            }
-            return res.json({ ok: true, verificationSent: true });
-        }
-
-        const [taken] = await pool.query('SELECT id FROM users WHERE LOWER(username) = ?', [username.toLowerCase()]);
-        if (taken.length) return res.status(409).json({ error: 'This username is already taken.', field: 'username' });
 
         const hash = await c.hashPassword(password);
         let userId;

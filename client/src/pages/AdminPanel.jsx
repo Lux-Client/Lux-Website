@@ -5,7 +5,7 @@ import {
 } from 'chart.js'
 import { io } from 'socket.io-client'
 import {
-  BarChart2, Cloud as CloudIcon, Code2, Coins, History, LayoutDashboard, ShoppingBag,
+  BarChart2, Cloud as CloudIcon, Code2, Coins, HeartPulse, History, LayoutDashboard, ShoppingBag,
   Newspaper, RefreshCw, ShieldCheck, Users as UsersIcon,
 } from 'lucide-react'
 
@@ -23,6 +23,7 @@ import UsersView from '../components/admin/views/UsersView'
 import LuxPlayersView from '../components/admin/views/LuxPlayersView'
 import LuxShopView from '../components/admin/views/LuxShopView'
 import AuditLogView from '../components/admin/views/AuditLogView'
+import HealthView from '../components/admin/views/HealthView'
 import useAuth from '../hooks/useAuth'
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, ArcElement, PointElement, LineElement, Filler, Tooltip, Legend)
@@ -48,6 +49,7 @@ const SECTIONS = [
   { id: 'luxplayers', group: 'Community', label: 'Lux Credits',   icon: Coins,           level: 'admin', title: 'Lux Credits',   description: 'Giveaways, balances and unlocks of Lux Client players.' },
   { id: 'luxshop',    group: 'Community', label: 'Lux Shop',      icon: ShoppingBag,     level: 'admin', title: 'Lux Shop',      description: 'Prices of cosmetics, emotes and name styles - changes reach every Lux Client within seconds.' },
   { id: 'cloud',      group: 'System',    label: 'Lux Cloud',     icon: CloudIcon,       level: 'admin', title: 'Lux Cloud',     description: 'Storage, deduplication, quotas and cleanup jobs.' },
+  { id: 'health',     group: 'System',    label: 'Health',        icon: HeartPulse,      level: 'admin', title: 'Health',        description: 'Error rate per area, recent failures and the email log.' },
   { id: 'auditlog',   group: 'System',    label: 'Audit log',     icon: History,         level: 'admin', title: 'Audit log',     description: 'A record of every moderation action.' },
 ]
 
@@ -83,6 +85,7 @@ function AdminPanelInner() {
   const [luxQueue,          setLuxQueue]          = useState({ capes: [], images: [] })
   const [liveCapes,         setLiveCapes]         = useState([])
   const [auditLog,          setAuditLog]          = useState([])
+  const [health,            setHealth]            = useState({ unseenErrors: 0, emailFailed24: 0, emailAvailable: true, emailReason: null })
   const [auditLogLoaded,    setAuditLogLoaded]    = useState(false)
 
   const isSessionAdmin = auth.user?.role === 'admin'
@@ -174,6 +177,12 @@ function AdminPanelInner() {
     setLiveCapes(Array.isArray(lc?.items) ? lc.items : [])
   }, [])
 
+  const loadHealthSummary = useCallback(async () => {
+    const res  = await fetch('/api/admin/health/summary', { credentials: 'same-origin' }).catch(() => null)
+    const data = res && res.ok ? await res.json().catch(() => null) : null
+    if (data) setHealth(data)
+  }, [])
+
   const loadAuditLog = useCallback(async () => {
     const res  = await fetch('/api/admin/audit-log')
     const data = res.ok ? await res.json().catch(() => []) : []
@@ -231,7 +240,10 @@ function AdminPanelInner() {
   useEffect(() => {
     if (!isSessionAdmin) return
     loadModerationData()
-  }, [isSessionAdmin, loadModerationData])
+    loadHealthSummary()
+    const id = setInterval(loadHealthSummary, 60000)
+    return () => clearInterval(id)
+  }, [isSessionAdmin, loadModerationData, loadHealthSummary])
 
   useEffect(() => {
     if (!isSessionAdmin || tab !== 'auditlog' || auditLogLoaded) return
@@ -293,14 +305,14 @@ function AdminPanelInner() {
     const allowed = SECTIONS.filter(s =>
       s.level === 'any' || (s.level === 'tools' ? canTools : isSessionAdmin))
     return allowed.reduce((groups, section) => {
-      const badge = section.id === 'moderation' ? pendingTotal : 0
+      const badge = section.id === 'moderation' ? pendingTotal : section.id === 'health' ? health.unseenErrors : 0
       const existing = groups.find(g => g.label === section.group)
       const item = { id: section.id, label: section.label, icon: section.icon, badge, badgeTone: 'danger' }
       if (existing) existing.items.push(item)
       else groups.push({ label: section.group, items: [item] })
       return groups
     }, [])
-  }, [canTools, isSessionAdmin, pendingTotal])
+  }, [canTools, isSessionAdmin, pendingTotal, health.unseenErrors])
 
   const section = SECTIONS.find(s => s.id === tab) || SECTIONS[0]
 
@@ -311,7 +323,8 @@ function AdminPanelInner() {
     else if (tab === 'codes')                       loadCodes()
     else if (tab === 'auditlog')                    loadAuditLog()
     else if (tab === 'moderation' || tab === 'users') loadModerationData()
-    else { loadMaintenanceStatus(); if (isSessionAdmin) loadModerationData() }
+    else if (tab === 'health')                      loadHealthSummary()
+    else { loadMaintenanceStatus(); if (isSessionAdmin) { loadModerationData(); loadHealthSummary() } }
     toast.info('Refreshed')
   }
 
@@ -592,6 +605,9 @@ function AdminPanelInner() {
             drafts:     pendingDrafts.length,
             reports:    reports.length,
             capes:      luxQueue.capes.length + luxQueue.images.length,
+            errors:     health.unseenErrors,
+            emailFailed: health.emailFailed24,
+            emailPaused: health.emailAvailable === false ? (health.emailReason || 'paused') : null,
             users:      users.length,
           }}
           socketStatus={socketStatus}
@@ -661,6 +677,8 @@ function AdminPanelInner() {
       {tab === 'luxshop' && isSessionAdmin && <LuxShopView />}
 
       {tab === 'cloud' && isSessionAdmin && <CloudPanel />}
+
+      {tab === 'health' && isSessionAdmin && <HealthView onSummaryChange={loadHealthSummary} />}
 
       {tab === 'auditlog' && isSessionAdmin && (
         <AuditLogView entries={auditLog} loaded={auditLogLoaded} onRefresh={loadAuditLog} />

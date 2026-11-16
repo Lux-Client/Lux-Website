@@ -178,11 +178,51 @@ async function defaultTransport(message) {
     return { ok: false, error: 'http', status: 429, message: 'rate limited' };
 }
 
+// a***@example.com: enough to recognise a support case, without keeping full addresses.
+function maskAddress(address) {
+    const [local, domain] = String(address || '').split('@');
+    if (!domain) return null;
+    return `${local.slice(0, 1)}***@${domain}`.slice(0, 120);
+}
+
+async function logStart(kind, to, subject) {
+    try {
+        const [res] = await pool.query(
+            'INSERT INTO email_log (kind, recipient, subject, status) VALUES (?, ?, ?, ?)',
+            [kind, maskAddress(to), String(subject || '').slice(0, 200), 'sending']
+        );
+        return res.insertId;
+    } catch (err) {
+        console.error('[Email] Could not write the email log:', err.message);
+        return null;
+    }
+}
+
+async function logEnd(id, status, { reason = null, error = null, providerId = null } = {}) {
+    if (!id) return;
+    await pool.query(
+        'UPDATE email_log SET status = ?, reason = ?, error = ?, provider_id = ?, updated_at = NOW() WHERE id = ?',
+        [status, reason, error ? String(error).slice(0, 1000) : null, providerId, id]
+    ).catch((err) => console.error('[Email] Could not update the email log:', err.message));
+}
+
+function monitor() {
+    // Loaded lazily: monitoring.js and email.js both use the database module.
+    try { return require('./monitoring'); } catch { return null; }
+}
+
 // Sends one email. Returns { sent: true } or { sent: false, reason }, where reason is
 // 'daily' / 'monthly' (quota used up), 'not_configured', 'no_recipient' or 'send_failed'.
-async function sendEmail({ to, subject, html, text }) {
+// kind names the email in the admin panel (verify, reset, security, ...).
+async function sendEmail({ to, subject, html, text, kind = 'other' }) {
     if (!to) return { sent: false, reason: 'no_recipient' };
-    if (!RESEND_API_KEY && !DEV_CONSOLE) return { sent: false, reason: 'not_configured' };
+    const logId = await logStart(kind, to, subject);
+    const m = monitor();
+
+    if (!RESEND_API_KEY && !DEV_CONSOLE) {
+        await logEnd(logId, 'skipped', { reason: 'not_configured', error: 'RESEND_API_KEY is not set' });
+        return { sent: false, reason: 'not_configured' };
+    }
 
     const p = periods();
     let reserved;
@@ -190,30 +230,93 @@ async function sendEmail({ to, subject, html, text }) {
         reserved = await reserve(p);
     } catch (err) {
         console.error('[Email] Quota check failed:', err.message);
+        await logEnd(logId, 'failed', { reason: 'quota_check', error: err.message });
+        if (m) { m.count('email', false); m.recordError({ area: 'email', message: `Quota check failed: ${err.message}` }); }
         return { sent: false, reason: 'send_failed' };
     }
     if (!reserved) {
         const status = await getStatus().catch(() => ({ reason: 'daily' }));
         console.warn(`[Email] Not sending "${subject}": ${status.reason} limit reached.`);
+        await logEnd(logId, 'skipped', { reason: `${status.reason || 'daily'}_limit`, error: `The ${status.reason || 'daily'} email limit is used up` });
         return { sent: false, reason: status.reason || 'daily' };
     }
 
-    const result = await transport({ to, subject, html, text });
-    if (result.ok) return { sent: true, id: result.id };
-
-    if (result.error === 'daily_quota') {
-        await block(p.dayKey).catch(() => {});
-        console.warn('[Email] Resend reports the daily quota is used up, sending paused until tomorrow (UTC).');
-        return { sent: false, reason: 'daily' };
+    let result;
+    try {
+        result = await transport({ to, subject, html, text });
+    } catch (err) {
+        result = { ok: false, error: 'exception', message: err.message };
     }
-    if (result.error === 'monthly_quota') {
-        await block(p.monthKey).catch(() => {});
-        console.warn('[Email] Resend reports the monthly quota is used up, sending paused until the month resets.');
-        return { sent: false, reason: 'monthly' };
+    if (result.ok) {
+        await logEnd(logId, 'sent', { providerId: result.id || null });
+        if (m) m.count('email', true);
+        return { sent: true, id: result.id };
+    }
+
+    if (result.error === 'daily_quota' || result.error === 'monthly_quota') {
+        const which = result.error === 'daily_quota' ? 'daily' : 'monthly';
+        await block(which === 'daily' ? p.dayKey : p.monthKey).catch(() => {});
+        console.warn(`[Email] Resend reports the ${which} quota is used up, sending paused until it resets.`);
+        await logEnd(logId, 'failed', { reason: `resend_${which}_quota`, error: result.message || `Resend: ${which} quota exceeded` });
+        if (m) {
+            m.count('email', false);
+            m.recordError({ area: 'email', status: 429, message: `Resend ${which} quota exceeded, email sending paused` });
+        }
+        return { sent: false, reason: which };
     }
     await refund(p).catch(() => {});
-    console.error(`[Email] Failed to send "${subject}" to ${to}:`, result.message || result.error);
+    const reason = result.error === 'http' ? `http_${result.status}` : (result.error || 'unknown');
+    const message = result.message || result.error || 'unknown error';
+    console.error(`[Email] Failed to send "${subject}":`, message);
+    await logEnd(logId, 'failed', { reason, error: message });
+    if (m) {
+        m.count('email', false);
+        m.recordError({ area: 'email', status: result.status || null, message: `Sending "${subject}" failed (${reason}): ${message}` });
+    }
     return { sent: false, reason: 'send_failed' };
+}
+
+// Numbers for the admin panel.
+async function report() {
+    const status = await getStatus().catch(() => ({ available: false, reason: 'error' }));
+    const p = periods();
+    const [day, month] = await Promise.all([readRow(p.dayKey), readRow(p.monthKey)]);
+    const since24 = new Date(now().getTime() - 24 * 60 * 60 * 1000);
+    const since30 = new Date(now().getTime() - 30 * 24 * 60 * 60 * 1000);
+    const [byStatus] = await pool.query(
+        `SELECT status, SUM(CASE WHEN created_at >= ? THEN 1 ELSE 0 END) AS last24, COUNT(*) AS last30
+         FROM email_log WHERE created_at >= ? GROUP BY status`,
+        [since24, since30]
+    );
+    const [byReason] = await pool.query(
+        `SELECT reason, status, COUNT(*) AS n, MAX(created_at) AS last_at FROM email_log
+         WHERE created_at >= ? AND status IN ('failed', 'skipped') GROUP BY reason, status ORDER BY n DESC`,
+        [since30]
+    );
+    const [byKind] = await pool.query(
+        'SELECT kind, COUNT(*) AS n FROM email_log WHERE created_at >= ? GROUP BY kind ORDER BY n DESC',
+        [since30]
+    );
+    const [recent] = await pool.query(
+        'SELECT id, kind, recipient, subject, status, reason, error, created_at, updated_at FROM email_log ORDER BY created_at DESC LIMIT 100'
+    );
+    const stuckBefore = now().getTime() - 5 * 60 * 1000;
+    const counts = { sending: { last24: 0, last30: 0 }, sent: { last24: 0, last30: 0 }, failed: { last24: 0, last30: 0 }, skipped: { last24: 0, last30: 0 } };
+    for (const r of byStatus) counts[r.status] = { last24: Number(r.last24 || 0), last30: Number(r.last30 || 0) };
+    return {
+        configured: Boolean(RESEND_API_KEY),
+        devConsole: DEV_CONSOLE,
+        status,
+        quota: {
+            daily: { used: Number(day.sent || 0), limit: DAILY_LIMIT, blocked: Boolean(day.blocked), resetsAt: p.dayEnds.toISOString() },
+            monthly: { used: Number(month.sent || 0), limit: MONTHLY_LIMIT, blocked: Boolean(month.blocked), resetsAt: p.monthEnds.toISOString() },
+        },
+        counts,
+        stuck: recent.filter((r) => r.status === 'sending' && new Date(r.created_at).getTime() < stuckBefore).length,
+        reasons: byReason.map((r) => ({ reason: r.reason || 'unknown', status: r.status, count: Number(r.n), lastAt: r.last_at })),
+        kinds: byKind.map((r) => ({ kind: r.kind, count: Number(r.n) })),
+        recent,
+    };
 }
 
 // ── templates ───────────────────────────────────────────────────────────────
@@ -241,6 +344,7 @@ function sendVerificationEmail({ to, username, token }) {
     const link = `${SITE_URL}/verify-email?token=${encodeURIComponent(token)}`;
     return sendEmail({
         to,
+        kind: 'verify',
         subject: 'Confirm your Lux account',
         html: layout('Confirm your email', `
             <p>Hi <strong>${escapeHtml(username)}</strong>, thanks for creating a Lux account. Confirm your email address to finish signing up.</p>
@@ -255,6 +359,7 @@ function sendPasswordResetEmail({ to, username, token }) {
     const link = `${SITE_URL}/reset-password?token=${encodeURIComponent(token)}`;
     return sendEmail({
         to,
+        kind: 'reset',
         subject: 'Reset your Lux password',
         html: layout('Reset your password', `
             <p>Hi <strong>${escapeHtml(username)}</strong>, someone asked to reset the password of your Lux account.</p>
@@ -270,6 +375,7 @@ function sendAlreadyRegisteredEmail({ to, username }) {
     const forgot = `${SITE_URL}/forgot-password`;
     return sendEmail({
         to,
+        kind: 'already_registered',
         subject: 'You already have a Lux account',
         html: layout('You already have an account', `
             <p>Hi <strong>${escapeHtml(username)}</strong>, someone tried to sign up with this email address, but it already belongs to your Lux account.</p>
@@ -282,6 +388,7 @@ function sendAlreadyRegisteredEmail({ to, username }) {
 function sendSecurityNotice({ to, username, what }) {
     return sendEmail({
         to,
+        kind: 'security',
         subject: `Lux account: ${what}`,
         html: layout('Security notice', `
             <p>Hi <strong>${escapeHtml(username)}</strong>, this is a notice that on your Lux account: <strong>${escapeHtml(what)}</strong>.</p>
@@ -294,7 +401,7 @@ function sendSecurityNotice({ to, username, what }) {
 // Moderation notifications are optional (EMAIL_NOTIFICATIONS=true) to spare the quota.
 function notify(user, subject, title, bodyHtml) {
     if (!NOTIFICATIONS_ENABLED) return Promise.resolve({ sent: false, reason: 'disabled' });
-    return sendEmail({ to: user && user.email, subject, html: layout(title, bodyHtml) });
+    return sendEmail({ to: user && user.email, subject, html: layout(title, bodyHtml), kind: 'moderation' });
 }
 
 function notifyExtensionApproved(user, extensionName, identifier) {
@@ -334,6 +441,8 @@ module.exports = {
     DAILY_LIMIT,
     MONTHLY_LIMIT,
     getStatus,
+    report,
+    maskAddress,
     sendEmail,
     sendVerificationEmail,
     sendPasswordResetEmail,

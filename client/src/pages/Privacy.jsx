@@ -46,9 +46,13 @@ You can create a Lux Account in two ways:
 
 If you turn on two-factor authentication, we store the authenticator secret in encrypted form and hashes of your recovery codes. For passkeys we store the public key, an identifier of the credential, a usage counter and the name you gave it; your fingerprint, face or device PIN never leave your device. To protect accounts against password guessing, we keep a counter of failed sign-in attempts per account and limit requests per IP address for a short time.
 
+### Error logs
+
+When a request fails because of a problem on our side, we store the time, the affected function (for example sign-in or account deletion), the technical error message and, if you were signed in, your account id. We use this only to find and fix errors and delete it after 30 days. Requests are otherwise only counted per hour and function, without any personal data.
+
 ### Account emails
 
-To confirm your email address, reset your password and inform you about security changes on your account, we send emails through **Resend** (Resend, Inc., USA), which processes your email address and the message on our behalf. The transfer to the USA is based on the EU Standard Contractual Clauses. We count how many emails we send per day and month, without storing who received them, so that we stay within the sending limit.
+To confirm your email address, reset your password and inform you about security changes on your account, we send emails through **Resend** (Resend, Inc., USA), which processes your email address and the message on our behalf. The transfer to the USA is based on the EU Standard Contractual Clauses. We count how many emails we send per day and month so that we stay within the sending limit, and keep a log of each email (type, subject, a shortened address such as a***@example.com, and whether it was delivered to Resend) for 30 days to find delivery problems.
 
 Processing is based on the performance of a contract under Art. 6 para. 1 lit. b GDPR — without this data the account features cannot be provided.
 

@@ -1,5 +1,5 @@
 import {
-  BarChart2, CheckCircle2, Cloud, Download, FileText, Flag, Lock,
+  AlertTriangle, BarChart2, CheckCircle2, Cloud, Download, FileText, Flag, Lock, MailX,
   RefreshCw, ShieldCheck, Shirt, Tag, TrendingUp, Users as UsersIcon, Wifi, Wrench,
 } from 'lucide-react'
 import { Badge, Button, EmptyState, GroupHeading, LiveDot, Panel, Sparkline, StatTile, Switch } from '../ui'
@@ -40,6 +40,8 @@ export default function OverviewView({
     { id: 'drafts',     icon: FileText,    label: 'Metadata drafts',       hint: 'Creator-submitted metadata changes',      count: counts.drafts,     color: '#8b5cf6', tab: 'moderation' },
     { id: 'reports',    icon: Flag,        label: 'User reports',          hint: 'Content flagged by the community',        count: counts.reports,    color: '#ef4444', tab: 'moderation' },
     { id: 'capes',      icon: Shirt,       label: 'Lux Client capes',      hint: 'Cape pictures waiting for approval',      count: counts.capes || 0, color: '#14b8a6', tab: 'moderation' },
+    { id: 'errors',     icon: AlertTriangle, label: 'Server errors',       hint: 'New failures (login, reset, account deletion, ...)', count: counts.errors || 0, color: '#ef4444', tab: 'health' },
+    { id: 'email',      icon: MailX,       label: 'Failed emails',         hint: counts.emailPaused ? `Sending is paused (${counts.emailPaused}), email sign-up is closed` : 'Emails that could not be sent in the last 24 hours', count: (counts.emailFailed || 0) + (counts.emailPaused ? 1 : 0), color: '#f59e0b', tab: 'health' },
   ].filter(item => item.count > 0)
 
   return (

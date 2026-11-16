@@ -42,7 +42,7 @@ export default function Register() {
   const [form, setForm] = useState({ username: '', email: '', password: '', confirm: '' })
   const [accepted, setAccepted] = useState(false)
   const [busy, setBusy] = useState(false)
-  const [error, setError] = useState({ text: '', field: null })
+  const [error, setError] = useState({ text: '', field: null, code: null })
   const [sentTo, setSentTo] = useState(null)
   const [resent, setResent] = useState('')
 
@@ -56,7 +56,10 @@ export default function Register() {
     const r = await postJSON('/api/auth/register', { username: form.username, email: form.email, password: form.password })
     setBusy(false)
     if (r.ok) return setSentTo(form.email.trim())
-    setError({ text: r.data.error || 'Registration failed.', field: r.data.field || null })
+    if (r.data.code === 'email_google' || r.data.code === 'email_taken') {
+      return setError({ text: r.data.error, field: null, code: r.data.code })
+    }
+    setError({ text: r.data.error || 'Registration failed.', field: r.data.field || null, code: r.data.code || null })
   }
 
   const resend = async () => {
@@ -131,7 +134,23 @@ export default function Register() {
             <span>I have read the <Link to="/privacy" className="text-primary hover:text-primary-light">privacy policy</Link>.</span>
           </label>
 
-          {error.text && !['username', 'email', 'password', 'confirm'].includes(error.field) && <Notice>{error.text}</Notice>}
+          {error.code === 'email_google' && (
+            <div className="flex flex-col gap-3 rounded-xl border border-primary/20 bg-primary/[0.05] p-4">
+              <p className="text-xs font-semibold leading-relaxed text-white/80">
+                You already have a Lux account with this email address, connected to Google. Please sign in with Google instead.
+              </p>
+              <GoogleButton returnTo={returnTo} label="Sign in with Google" />
+            </div>
+          )}
+          {error.code === 'email_taken' && (
+            <Notice>
+              {error.text}{' '}
+              <Link to={loginHref} className="font-semibold underline underline-offset-2">Sign in</Link>
+              {' · '}
+              <Link to="/forgot-password" className="font-semibold underline underline-offset-2">Reset password</Link>
+            </Notice>
+          )}
+          {error.text && !['email_google', 'email_taken'].includes(error.code) && !['username', 'email', 'password', 'confirm'].includes(error.field) && <Notice>{error.text}</Notice>}
 
           <PrimaryButton type="submit" busy={busy} disabled={!config}>Create account</PrimaryButton>
         </form>

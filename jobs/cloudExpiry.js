@@ -56,6 +56,7 @@ async function sendExpiryEmail(userId, row, remainingDays) {
 
         const days = Math.max(1, Math.round(remainingDays));
         await emailService.sendEmail({
+            kind: 'cloud_expiry',
             to: user.email,
             subject: `Lux Cloud: "${row.name}" expires in ${days} day${days === 1 ? '' : 's'}`,
             html: `<p>Hi ${user.username},</p>`

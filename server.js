@@ -223,6 +223,11 @@ app.use((req, res, next) => {
     next();
 });
 
+// Error rate per area for the admin panel (see monitoring.js).
+const monitoring = require('./monitoring');
+monitoring.start();
+app.use(monitoring.middleware());
+
 // Email + password sign-up and login, 2FA, passkeys, password reset (see routes/accountAuth.js).
 const accountAuth = require('./routes/accountAuth')({ pool, email: emailService });
 app.use(accountAuth);
@@ -554,6 +559,7 @@ app.get('/auth/google/callback', (req, res, next) => {
     passport.authenticate('google', (err, user, info) => {
         if (err) {
             console.error('[Google OAuth] Callback Error Handler:', err);
+            monitoring.noteError(res, err);
             return res.status(500).send(`Authentication failed: ${err.message}`);
         }
         if (!user) {
@@ -570,6 +576,7 @@ app.get('/auth/google/callback', (req, res, next) => {
         const logInWithGoogle = () => req.logIn(user, (loginErr) => {
             if (loginErr) {
                 console.error('[Google OAuth] Login Error:', loginErr);
+                monitoring.noteError(res, loginErr);
                 return res.status(500).send(`Login failed: ${loginErr.message}`);
             }
             delete req.session.returnTo;
@@ -594,6 +601,7 @@ app.get('/auth/google/callback', (req, res, next) => {
             logInWithGoogle();
         }).catch((factorErr) => {
             console.error('[Google OAuth] 2FA check failed:', factorErr);
+            monitoring.recordError({ area: 'google_login', method: 'GET', path: '/auth/google/callback', message: `2FA check failed: ${factorErr.message}`, detail: factorErr.stack });
             res.redirect('/login?error=server');
         });
     })(req, res, next);
@@ -1227,6 +1235,7 @@ app.delete('/api/user/delete', ensureAuthenticated, async (req, res) => {
             console.log(`[Lux] Cloud data purged before account deletion for user ${userId}:`, purged);
         } catch (cloudErr) {
             console.error('[Lux] Cloud purge failed, aborting account deletion:', cloudErr);
+            monitoring.noteError(res, cloudErr);
             return res.status(500).json({
                 error: 'Could not delete the cloud data, so the account was kept',
                 details: cloudErr.message
@@ -1246,6 +1255,7 @@ app.delete('/api/user/delete', ensureAuthenticated, async (req, res) => {
         console.log(`[Lux] Account deleted successfully: user ID ${userId}`);
     } catch (err) {
         console.error('[API Error] /api/user/delete failed:', err);
+        monitoring.noteError(res, err);
         res.status(500).json({ error: 'Failed to delete account', details: err.message });
     }
 });
@@ -1441,6 +1451,43 @@ app.post('/api/admin/reports/:id/:action', ensureAdmin, async (req, res) => {
         res.json({ success: true });
     } catch (err) {
         res.status(500).json({ error: 'Database error' });
+    }
+});
+
+// Health: error rate per area, recent failures and the email log.
+app.get('/api/admin/health', ensureAdmin, async (req, res) => {
+    try {
+        const [health, mail] = await Promise.all([monitoring.report(), emailService.report()]);
+        res.set('Cache-Control', 'no-store');
+        res.json({ ...health, email: mail });
+    } catch (err) {
+        console.error('[Health] Report failed:', err);
+        monitoring.noteError(res, err);
+        res.status(500).json({ error: 'Could not build the health report' });
+    }
+});
+
+app.get('/api/admin/health/summary', ensureAdmin, async (req, res) => {
+    try {
+        const [unseen] = await Promise.all([monitoring.unseenCount()]);
+        const [rows] = await pool.query(
+            "SELECT COUNT(*) AS n FROM email_log WHERE status = 'failed' AND created_at >= ?",
+            [new Date(Date.now() - 24 * 60 * 60 * 1000)]
+        );
+        const mail = await emailService.getStatus();
+        res.json({ unseenErrors: unseen, emailFailed24: Number(rows[0]?.n || 0), emailAvailable: mail.available, emailReason: mail.reason });
+    } catch (err) {
+        res.status(500).json({ error: 'Could not load the summary' });
+    }
+});
+
+app.post('/api/admin/health/seen', ensureAdmin, async (req, res) => {
+    try {
+        await monitoring.markSeen();
+        await logAdminAction(req, 'errors_seen', 'health', 'all', null);
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: 'Could not mark errors as seen' });
     }
 });
 
@@ -1744,6 +1791,7 @@ if (LUXCLOUD_ACTIVE) {
 
 app.use((err, req, res, next) => {
     console.error(`[Server Error] ${req.method} ${req.url}:`, err);
+    monitoring.noteError(res, err);
     res.status(500).json({
         error: 'Internal Server Error',
         message: process.env.NODE_ENV === 'production' ? 'Something went wrong' : err.message

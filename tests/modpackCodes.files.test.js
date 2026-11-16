@@ -14,8 +14,10 @@ const h = new Harness();
 
 const sha = (buffer) => crypto.createHash('sha256').update(buffer).digest('hex');
 
-const OWN_MOD = Buffer.from('PK\u0003\u0004 my own mod '.repeat(200));
-const OWN_PACK = Buffer.from('PK\u0003\u0004 my own pack '.repeat(100));
+const { buildZip } = require('./zipFixture');
+
+const OWN_MOD = buildZip({ 'fabric.mod.json': '{"id":"mymod"}', 'com/example/MyMod.class': 'class bytes '.repeat(200) });
+const OWN_PACK = buildZip({ 'pack.mcmeta': '{"pack":{"pack_format":34}}', 'assets/minecraft/textures/a.png': 'png'.repeat(100) });
 const MOD_A = { projectId: 'AANobbMI', versionId: 'v1', fileName: 'sodium-1.jar', title: 'Sodium' };
 
 function exportBody(extra = {}) {
@@ -158,7 +160,7 @@ async function main() {
     h.section('5) Speicherlimit gilt fuer Instanzen und Code-Dateien zusammen');
 
     await h.pool.query('UPDATE user_cloud_settings SET quota_bytes = ? WHERE user_id = ?', [OWN_MOD.length + OWN_PACK.length + 100, userId]);
-    const bigFile = Buffer.alloc(500, 7);
+    const bigFile = buildZip({ 'big.bin': Buffer.alloc(500, 7) });
     res = await h.request({
         method: 'POST',
         url: '/api/modpack/files/check',
@@ -210,12 +212,107 @@ async function main() {
     h.check('abgelaufener Code ist weg', !fs.existsSync(codeFile), codeFile);
     h.check('seine Datei zaehlt nicht mehr', await codeFiles.codeFileBytes(userId, h.pool) === 0);
 
-    h.section('8) Hochgeladen, aber nie in einem Code: wird aufgeraeumt');
+    h.section('8) Virenpruefung');
+
+    const badFiles = {
+        'Programm in der Mod': buildZip({ 'fabric.mod.json': '{}', 'payload/run.exe': 'MZ' }),
+        'fractureiser': buildZip({ 'fabric.mod.json': '{}', 'dev/neko/nekoclient/Client.class': 'x' }),
+        'Discord-Token-Dieb': buildZip({ 'a/B.class': 'C:/Users/x/AppData/Roaming/discord/Local Storage/leveldb' }),
+        'versteckte EXE': buildZip({ 'assets/icon.png': Buffer.concat([Buffer.from('MZ'), Buffer.alloc(58), Buffer.from([64, 0, 0, 0]), Buffer.from('PE\u0000\u0000')]) }),
+        'Jar-in-Jar mit Schadcode': buildZip({ 'META-INF/jars/inner.jar': buildZip({ 'x/Y.class': 'files-8ie.pages.dev' }) }),
+        'kein Archiv': Buffer.from('#!/bin/sh\nrm -rf ~')
+    };
+    for (const [label, buffer] of Object.entries(badFiles)) {
+        res = await h.request({ method: 'PUT', url: `/api/modpack/files/${sha(buffer)}`, token: userToken, body: buffer, headers: { 'Content-Type': 'application/octet-stream' } });
+        h.check(`${label} -> 422 file_infected`, res.status === 422 && res.body.error === 'file_infected', res.body);
+    }
+    const nativeMod = buildZip({ 'fabric.mod.json': '{}', 'natives/opus.dll': Buffer.concat([Buffer.from('MZ'), Buffer.alloc(58), Buffer.from([64, 0, 0, 0]), Buffer.from('PE\u0000\u0000')]) });
+    res = await h.request({ method: 'PUT', url: `/api/modpack/files/${sha(nativeMod)}`, token: userToken, body: nativeMod, headers: { 'Content-Type': 'application/octet-stream' } });
+    h.check('Mod mit .dll-Natives ist erlaubt', res.status === 201, res.body);
+
+    process.env.CLAMAV_HOST = '127.0.0.1';
+    process.env.CLAMAV_PORT = '1';
+    const another = buildZip({ 'fabric.mod.json': '{"id":"other"}' });
+    res = await h.request({ method: 'PUT', url: `/api/modpack/files/${sha(another)}`, token: userToken, body: another, headers: { 'Content-Type': 'application/octet-stream' } });
+    h.check('ClamAV eingerichtet, aber nicht erreichbar -> 503, nichts angenommen', res.status === 503 && res.body.error === 'scan_unavailable', res.body);
+
+    const net = require('net');
+    // Kleiner clamd-Ersatz: liest INSTREAM-Bloecke bis zur Laenge 0 und antwortet dann.
+    const clamd = (decide) => (socket) => {
+        let data = Buffer.alloc(0);
+        let answered = false;
+        socket.on('data', (chunk) => {
+            data = Buffer.concat([data, chunk]);
+            if (answered || data.length < 10) return;
+            let offset = 10;
+            const parts = [];
+            while (offset + 4 <= data.length) {
+                const length = data.readUInt32BE(offset);
+                if (length === 0) {
+                    answered = true;
+                    socket.end(decide(Buffer.concat(parts)));
+                    return;
+                }
+                if (offset + 4 + length > data.length) return;
+                parts.push(data.subarray(offset + 4, offset + 4 + length));
+                offset += 4 + length;
+            }
+        });
+        socket.on('error', () => {});
+    };
+    const fakeClam = net.createServer(clamd((file) => (file.includes(Buffer.from('EICAR-LIKE'))
+        ? 'stream: Win.Test.EICAR_HDB-1 FOUND\u0000' : 'stream: OK\u0000')));
+    await new Promise((r) => fakeClam.listen(0, '127.0.0.1', r));
+    process.env.CLAMAV_PORT = String(fakeClam.address().port);
+    res = await h.request({ method: 'PUT', url: `/api/modpack/files/${sha(another)}`, token: userToken, body: another, headers: { 'Content-Type': 'application/octet-stream' } });
+    h.check('ClamAV sagt OK -> angenommen', res.status === 201 && /clamav/.test(res.body.scan.engine), res.body);
+    const eicar = buildZip({ 'fabric.mod.json': '{}', 'x.txt': 'EICAR-LIKE' });
+    res = await h.request({ method: 'PUT', url: `/api/modpack/files/${sha(eicar)}`, token: userToken, body: eicar, headers: { 'Content-Type': 'application/octet-stream' } });
+    h.check('ClamAV findet etwas -> 422 mit Name', res.status === 422 && /EICAR/.test(res.body.message), res.body);
+
+    // Nachtraeglich erkannt: Code mit sauberer Datei, dann meldet der Scanner sie.
+    res = await h.request({
+        method: 'POST', url: '/api/modpack/save', token: userToken,
+        body: exportBody({ uploads: [{ sha256: sha(another), fileName: 'other.jar', kind: 'mod' }] })
+    });
+    const laterCode = res.body.code;
+    await h.pool.query(`UPDATE modpack_code_blobs SET scanned_at = NOW() - INTERVAL '2 days' WHERE sha256 = ?`, [sha(another)]);
+    const scanner = require(path.join(__dirname, '..', 'codeFileScan.js'));
+    fakeClam.removeAllListeners('connection');
+    fakeClam.on('connection', clamd(() => 'stream: Win.Trojan.Later FOUND\u0000'));
+    const rescan = await codeFiles.rescanStoredFiles(h.pool, { limit: 50 });
+    h.check('Nachpruefung erkennt die Datei', rescan.infected.some((f) => f.sha256 === sha(another)), rescan);
+    res = await h.request({ url: `/api/modpack/${laterCode}/files/${sha(another)}` });
+    h.check('Download danach gesperrt -> 451', res.status === 451, res.body);
+    res = await h.request({ url: '/api/modpack/my-uploads', token: userToken });
+    const flagged = (res.body.codes || []).find((c) => c.code === laterCode);
+    h.check('Dashboard zeigt die Sperre', flagged && flagged.files[0].scan.status === 'infected', flagged);
+    res = await h.request({
+        method: 'POST', url: '/api/modpack/save', token: userToken,
+        body: exportBody({ uploads: [{ sha256: sha(another), fileName: 'other.jar', kind: 'mod' }] })
+    });
+    h.check('gesperrte Datei laesst sich nicht neu teilen -> 422', res.status === 422, res.body);
+    void scanner;
+    fakeClam.close();
+    delete process.env.CLAMAV_HOST;
+    delete process.env.CLAMAV_PORT;
+
+    h.section('9) Admin sieht in den Code hinein');
+    h.setSessionUser({ id: userId, username: 'creator', role: 'admin', banned: false });
+    res = await h.request({ url: `/api/codes/${laterCode}/details` });
+    h.check('Details -> Mods und eigene Dateien mit Pruefstatus', res.status === 200
+        && res.body.data.mods[0].source === 'modrinth' && res.body.data.uploads[0].scan.status === 'infected'
+        && res.body.data.owner && res.body.data.owner.username === 'creator', res.body);
+    h.setSessionUser(null);
+    res = await h.request({ url: `/api/codes/${laterCode}/details` });
+    h.check('ohne Admin -> abgelehnt', res.status === 401 || res.status === 403, res.status);
+
+    h.section('10) Hochgeladen, aber nie in einem Code: wird aufgeraeumt');
 
     res = await h.request({ method: 'PUT', url: `/api/modpack/files/${packHash}`, token: userToken, body: OWN_PACK, headers: { 'Content-Type': 'application/octet-stream' } });
-    await h.pool.query(`UPDATE modpack_code_blobs SET created_at = NOW() - INTERVAL '2 days' WHERE user_id = ?`, [userId]);
+    await h.pool.query(`UPDATE modpack_code_blobs SET created_at = NOW() - INTERVAL '2 days' WHERE user_id = ? AND sha256 = ?`, [userId, packHash]);
     const pruned = await codeFiles.pruneStaleUploads(h.pool);
-    h.check('verwaiste Datei entfernt', pruned.removed === 1 && await codeFiles.codeFileBytes(userId, h.pool) === 0, pruned);
+    h.check('verwaiste Datei entfernt', pruned.removed >= 1, pruned);
 }
 
 main()

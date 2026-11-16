@@ -36,6 +36,9 @@ services:
       - EMAIL_MONTH_RESET_DAY=${EMAIL_MONTH_RESET_DAY:-1}
       - EMAIL_NOTIFICATIONS=${EMAIL_NOTIFICATIONS:-false}
       - AUTH_SECRET=${AUTH_SECRET}
+      - CLAMAV_HOST=${CLAMAV_HOST}
+      - CLAMAV_PORT=${CLAMAV_PORT:-3310}
+      - VIRUSTOTAL_API_KEY=${VIRUSTOTAL_API_KEY}
     volumes:
       - lux_data:/app/data
     healthcheck:

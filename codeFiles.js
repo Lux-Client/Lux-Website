@@ -17,6 +17,10 @@ const path = require('path');
 const pool = require('./database');
 const { getStorage } = require('./storage');
 const { SHA256_RE } = require('./cloudConfig');
+const { scanFile } = require('./codeFileScan');
+
+const RESCAN_AFTER_HOURS = Number(process.env.LUX_CODE_FILE_RESCAN_HOURS || 24);
+const RESCAN_BATCH = Number(process.env.LUX_CODE_FILE_RESCAN_BATCH || 25);
 
 const MAX_CODE_FILE_BYTES = Number(process.env.LUX_CODE_FILE_MAX_BYTES || 200 * 1024 * 1024);
 const MAX_FILES_PER_CODE = Number(process.env.LUX_CODE_FILE_MAX_PER_CODE || 100);
@@ -209,6 +213,18 @@ async function receiveUpload(req, userId, hash) {
             throw new CodeFileError(400, 'hash_mismatch', 'Uploaded data does not match the requested hash');
         }
 
+        // Erst pruefen, dann speichern: was andere spaeter starten, muss sauber sein.
+        const scan = await scanFile(file, { sha256: hash });
+        if (scan.status === 'infected') {
+            console.warn(`[CodeFiles] Rejected upload ${hash} of user ${userId}: ${scan.engine}: ${scan.reason}`);
+            throw new CodeFileError(422, 'file_infected',
+                `This file was blocked by the virus check (${scan.reason}). It was not uploaded.`, { engine: scan.engine, reason: scan.reason });
+        }
+        if (scan.status !== 'clean') {
+            throw new CodeFileError(503, 'scan_unavailable',
+                'The virus check is not available right now, so no files can be uploaded. Please try again later.', { reason: scan.reason });
+        }
+
         const connection = await pool.getConnection();
         try {
             await connection.beginTransaction();
@@ -233,9 +249,10 @@ async function receiveUpload(req, userId, hash) {
                 await storage.put(key, fs.createReadStream(file), { originalSize: received.size, storedSize: received.size });
             }
             await connection.query(
-                `INSERT INTO modpack_code_blobs (user_id, sha256, size) VALUES (?, ?, ?)
+                `INSERT INTO modpack_code_blobs (user_id, sha256, size, scan_status, scan_engine, scan_reason, scanned_at)
+                 VALUES (?, ?, ?, ?, ?, ?, NOW())
                  ON CONFLICT (user_id, sha256) DO NOTHING RETURNING id`,
-                [userId, hash, received.size]
+                [userId, hash, received.size, 'clean', scan.engine, null]
             );
             await connection.commit();
         } catch (err) {
@@ -245,7 +262,7 @@ async function receiveUpload(req, userId, hash) {
             connection.release();
         }
 
-        return { sha256: hash, size: received.size, existing: false };
+        return { sha256: hash, size: received.size, existing: false, scan: { status: 'clean', engine: scan.engine } };
     } finally {
         await fsp.rm(file, { force: true }).catch(() => {});
     }
@@ -272,6 +289,9 @@ async function validateUploads(userId, uploads, executor = pool) {
         }
         if (!owned.has(sha256)) {
             return { error: `${fileName} was not uploaded to your cloud storage.`, status: 409 };
+        }
+        if (await isBlocked(sha256, executor)) {
+            return { error: `${fileName} was blocked by the virus check and can't be shared.`, status: 422 };
         }
         const key = `${kind}:${fileName.toLowerCase()}`;
         if (seen.has(key)) continue;
@@ -302,7 +322,11 @@ async function attachToCode(code, userId, files, executor = pool) {
 
 async function filesOfCode(code, executor = pool) {
     const [rows] = await executor.query(
-        'SELECT sha256, kind, file_name, size, user_id FROM modpack_code_files WHERE code = ? ORDER BY id',
+        `SELECT f.sha256, f.kind, f.file_name, f.size, f.user_id,
+                b.scan_status, b.scan_engine, b.scan_reason, b.scanned_at
+           FROM modpack_code_files f
+           LEFT JOIN modpack_code_blobs b ON b.user_id = f.user_id AND b.sha256 = f.sha256
+          WHERE f.code = ? ORDER BY f.id`,
         [code]
     );
     return rows.map((row) => ({
@@ -310,13 +334,77 @@ async function filesOfCode(code, executor = pool) {
         kind: row.kind,
         fileName: row.file_name,
         size: Number(row.size),
-        userId: row.user_id
+        userId: row.user_id,
+        scan: {
+            status: row.scan_status || 'pending',
+            engine: row.scan_engine || null,
+            reason: row.scan_reason || null,
+            scannedAt: row.scanned_at || null
+        }
     }));
+}
+
+async function isBlocked(hash, executor = pool) {
+    const [rows] = await executor.query(
+        'SELECT 1 AS ok FROM modpack_code_blobs WHERE sha256 = ? AND scan_status = ? LIMIT 1',
+        [hash, 'infected']
+    );
+    return rows.length > 0;
+}
+
+async function recordScan(hash, scan, executor = pool) {
+    await executor.query(
+        `UPDATE modpack_code_blobs SET scan_status = ?, scan_engine = ?, scan_reason = ?, scanned_at = NOW()
+          WHERE sha256 = ?`,
+        [scan.status, scan.engine || null, scan.reason || null, hash]
+    );
+}
+
+// Gespeicherte Dateien regelmaessig neu pruefen: Virensignaturen werden laufend besser.
+// Wird eine Datei nachtraeglich erkannt, kann sie niemand mehr laden.
+async function rescanStoredFiles(executor = pool, { limit = RESCAN_BATCH } = {}) {
+    const [rows] = await executor.query(
+        `SELECT DISTINCT sha256 FROM modpack_code_blobs
+          WHERE (scan_status IS NULL OR scan_status <> 'infected')
+            AND (scanned_at IS NULL OR scanned_at < NOW() - INTERVAL '${RESCAN_AFTER_HOURS} hours')
+          LIMIT ${Math.max(1, Math.floor(limit))}`
+    );
+    const result = { scanned: 0, infected: [] };
+    for (const row of rows) {
+        const hash = String(row.sha256).trim();
+        const temp = path.join(os.tmpdir(), `lux-rescan-${hash}-${crypto.randomBytes(4).toString('hex')}`);
+        try {
+            const stored = await openStoredFile(hash);
+            await new Promise((resolve, reject) => {
+                const out = fs.createWriteStream(temp);
+                stored.stream.on('error', reject);
+                out.on('error', reject);
+                out.on('finish', resolve);
+                stored.stream.pipe(out);
+            });
+            const scan = await scanFile(temp, { sha256: hash });
+            if (scan.status === 'error') continue;
+            await recordScan(hash, scan, executor);
+            result.scanned += 1;
+            if (scan.status === 'infected') {
+                result.infected.push({ sha256: hash, reason: scan.reason, engine: scan.engine });
+                console.warn(`[CodeFiles] Stored file ${hash} is now flagged (${scan.engine}: ${scan.reason}); downloads blocked.`);
+            }
+        } catch (err) {
+            console.error(`[CodeFiles] Rescan of ${hash} failed:`, err.message);
+        } finally {
+            await fsp.rm(temp, { force: true }).catch(() => {});
+        }
+    }
+    return result;
 }
 
 async function codeHasFile(code, hash, executor = pool) {
     const [rows] = await executor.query(
-        'SELECT size, file_name FROM modpack_code_files WHERE code = ? AND sha256 = ? LIMIT 1',
+        `SELECT f.size, f.file_name, b.scan_status
+           FROM modpack_code_files f
+           LEFT JOIN modpack_code_blobs b ON b.user_id = f.user_id AND b.sha256 = f.sha256
+          WHERE f.code = ? AND f.sha256 = ? LIMIT 1`,
         [code, hash]
     );
     return rows[0] || null;
@@ -397,8 +485,11 @@ module.exports = {
     codeFileKey,
     codeHasFile,
     filesOfCode,
+    isBlocked,
     isHash,
     openStoredFile,
+    recordScan,
+    rescanStoredFiles,
     pruneStaleUploads,
     receiveUpload,
     releaseCode,

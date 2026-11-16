@@ -266,6 +266,10 @@ const createCloudTables = async (connection) => {
             created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         )
     `);
+    await connection.query('ALTER TABLE modpack_code_blobs ADD COLUMN IF NOT EXISTS scan_status VARCHAR(16)');
+    await connection.query('ALTER TABLE modpack_code_blobs ADD COLUMN IF NOT EXISTS scan_engine VARCHAR(64)');
+    await connection.query('ALTER TABLE modpack_code_blobs ADD COLUMN IF NOT EXISTS scan_reason VARCHAR(255)');
+    await connection.query('ALTER TABLE modpack_code_blobs ADD COLUMN IF NOT EXISTS scanned_at TIMESTAMPTZ');
     await connection.query('CREATE INDEX IF NOT EXISTS idx_modpack_code_files_code ON modpack_code_files(code)');
     await connection.query('CREATE INDEX IF NOT EXISTS idx_modpack_code_files_user ON modpack_code_files(user_id, sha256)');
     console.log('[Database] modpack code file tables checked/created.');

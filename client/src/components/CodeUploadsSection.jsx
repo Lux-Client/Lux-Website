@@ -133,6 +133,9 @@ export default function CodeUploadsSection() {
                           <FileArchive className="h-3 w-3 shrink-0" />
                           <span className="truncate">{file.fileName}</span>
                           <span className="shrink-0 text-white/20">{formatBytes(file.size)}</span>
+                          {file.scan?.status === 'infected' && (
+                            <span className="shrink-0 font-semibold text-red-400">blocked by the virus check</span>
+                          )}
                         </p>
                       ))}
                     </div>

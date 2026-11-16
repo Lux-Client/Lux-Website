@@ -58,6 +58,10 @@ function cleanupOldCodes(pool) {
         if (pool) {
             try {
                 await releaseOrphanedCodeFiles(pool);
+                const rescanned = await codeFiles.rescanStoredFiles(pool);
+                if (rescanned.infected.length > 0) {
+                    console.warn(`[CodesSystem] Virus check blocked ${rescanned.infected.length} stored file(s).`);
+                }
                 const pruned = await codeFiles.pruneStaleUploads(pool);
                 if (pruned.removed > 0) console.log(`[CodesSystem] Removed ${pruned.removed} unused uploaded file(s).`);
             } catch (e) {
@@ -487,7 +491,7 @@ module.exports = function (app, ADMIN_PASSWORD, pool) {
                     expires: data.expires || null,
                     uses: data.uses || 0,
                     ...liveInfo(data),
-                    files: files.map(({ fileName, kind, size }) => ({ fileName, kind, size })),
+                    files: files.map(({ fileName, kind, size, scan }) => ({ fileName, kind, size, scan: { status: scan.status, reason: scan.reason } })),
                     filesBytes: files.reduce((sum, file) => sum + file.size, 0)
                 });
             }
@@ -530,6 +534,9 @@ module.exports = function (app, ADMIN_PASSWORD, pool) {
             }
             const entry = await codeFiles.codeHasFile(code, hash);
             if (!entry) return res.status(404).json({ success: false, error: 'Not found' });
+            if (entry.scan_status === 'infected' || await codeFiles.isBlocked(hash)) {
+                return res.status(451).json({ success: false, error: 'blocked', message: 'This file was blocked by the virus check.' });
+            }
 
             const stored = await codeFiles.openStoredFile(hash);
             res.setHeader('Content-Type', 'application/octet-stream');
@@ -771,6 +778,8 @@ module.exports = function (app, ADMIN_PASSWORD, pool) {
                         owner_uuid: content.owner_uuid,
                         owner_ip: content.owner_ip,
                         hasIcon: !!content.icon,
+                        contentCount: ['mods', 'resourcePacks', 'shaders'].reduce((sum, key) => sum + (Array.isArray(content[key]) ? content[key].length : 0), 0),
+                        uploadCount: Array.isArray(content.uploads) ? content.uploads.length : 0,
                         ...liveInfo(content)
                     };
                 } catch (e) {
@@ -826,6 +835,60 @@ module.exports = function (app, ADMIN_PASSWORD, pool) {
     }
     app.get('/api/codes/:code', handleGetCode);
     app.get('/api/modpack/:code', handleGetCode);
+
+    // Admin: in einen Code hineinschauen -- Mods, Packs, Shader und eigene Dateien samt Virenpruefung.
+    app.get('/api/codes/:code/details', adminAuth.adminAuthLimiter, adminAuth.adminOrPassword, async (req, res) => {
+        try {
+            const { code } = req.params;
+            if (!isValidCode(code) || !fs.existsSync(codeFilePath(code))) {
+                return res.status(404).json({ success: false, error: 'Code not found' });
+            }
+            const data = JSON.parse(fs.readFileSync(codeFilePath(code), 'utf8'));
+            const files = pool ? await codeFiles.filesOfCode(code) : [];
+            let owner = null;
+            if (pool && data.owner_user_id) {
+                const [rows] = await pool.query('SELECT id, username, email FROM users WHERE id = ?', [data.owner_user_id]);
+                if (rows[0]) owner = { id: rows[0].id, username: rows[0].username, email: rows[0].email || null };
+            }
+            const item = (entry) => {
+                const value = previewContentItem(entry);
+                const source = value.projectId && value.projectId.startsWith('curseforge:') ? 'curseforge' : value.projectId ? 'modrinth' : 'unknown';
+                return { ...value, source };
+            };
+            res.setHeader('Cache-Control', 'no-store');
+            res.json({
+                success: true,
+                data: {
+                    code: data.code,
+                    name: data.name || 'Exported Modpack',
+                    version: data.version || null,
+                    loader: data.loader || null,
+                    created: data.created || null,
+                    expires: data.expires || null,
+                    uses: data.uses || 0,
+                    ...liveInfo(data),
+                    hasSettings: Boolean(data.keybinds),
+                    owner,
+                    ownerUuid: data.owner_uuid || null,
+                    ownerIp: data.owner_ip || null,
+                    mods: (Array.isArray(data.mods) ? data.mods : []).map(item),
+                    resourcePacks: (Array.isArray(data.resourcePacks) ? data.resourcePacks : []).map(item),
+                    shaders: (Array.isArray(data.shaders) ? data.shaders : []).map(item),
+                    uploads: files.map((file) => ({
+                        sha256: file.sha256,
+                        fileName: file.fileName,
+                        kind: file.kind,
+                        size: file.size,
+                        scan: file.scan,
+                        downloadUrl: `/api/modpack/${code}/files/${file.sha256}`
+                    }))
+                }
+            });
+        } catch (error) {
+            console.error('[CodesSystem] Admin details error:', error);
+            res.status(500).json({ success: false, error: 'Failed to load code' });
+        }
+    });
 
     app.delete('/api/codes/:code', adminAuth.adminAuthLimiter, adminAuth.adminOrPassword, (req, res) => {
         try {

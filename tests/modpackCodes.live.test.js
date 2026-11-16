@@ -5,6 +5,7 @@ const os = require('os');
 const path = require('path');
 
 process.env.DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'lux-codes-test-'));
+process.env.LUX_CODE_COOLDOWN_SECONDS = '0';
 
 const { Harness } = require('./luxcloudHarness');
 

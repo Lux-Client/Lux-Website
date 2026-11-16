@@ -14,6 +14,7 @@ function formatBytes(bytes) {
 export default function CodeUploadsSection() {
   const [codes, setCodes] = useState([])
   const [quota, setQuota] = useState(null)
+  const [scanPaused, setScanPaused] = useState(false)
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(null)
   const [confirmDelete, setConfirmDelete] = useState(null)
@@ -30,6 +31,7 @@ export default function CodeUploadsSection() {
       const body = await res.json()
       setCodes(body.codes || [])
       setQuota(body.quota || null)
+      setScanPaused(Boolean(body.scanPaused))
       setError('')
     } catch {
       setError('Could not load your modpack codes.')
@@ -122,6 +124,11 @@ export default function CodeUploadsSection() {
                     <span className="text-white/15">·</span>
                     <span>{entry.expires ? `expires ${new Date(entry.expires).toLocaleDateString()}` : 'never expires'}</span>
                   </p>
+                  {(entry.scanStatus === 'pending' || entry.scanStatus === 'error') && (
+                    <p className="mt-1 text-[11px] text-amber-400/90">
+                      This code works as soon as our server has checked its files for viruses.
+                    </p>
+                  )}
                   {entry.files && entry.files.length > 0 ? (
                     <div className="mt-1.5 space-y-0.5">
                       <p className="text-[11px] text-amber-400/80">
@@ -135,6 +142,11 @@ export default function CodeUploadsSection() {
                           <span className="shrink-0 text-white/20">{formatBytes(file.size)}</span>
                           {file.scan?.status === 'infected' && (
                             <span className="shrink-0 font-semibold text-red-400">blocked by the virus check</span>
+                          )}
+                          {(file.scan?.status === 'pending' || file.scan?.status === 'error') && (
+                            <span className="shrink-0 font-semibold text-amber-400">
+                              {scanPaused ? 'virus check paused for maintenance' : file.scan.status === 'error' ? 'virus check failed, retrying' : 'waiting for the virus check'}
+                            </span>
                           )}
                         </p>
                       ))}

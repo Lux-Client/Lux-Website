@@ -7,6 +7,10 @@ const os = require('os');
 const path = require('path');
 
 process.env.DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'lux-codefiles-test-'));
+// Ohne ClamAV starten (eigene Pruefung reicht); Abschnitt 8 schaltet einen clamd-Ersatz zu.
+process.env.CLAMAV_MODE = 'off';
+process.env.LUX_CODE_COOLDOWN_SECONDS = '0';
+process.env.LUX_SCAN_TICK_SECONDS = '1';
 
 const { Harness } = require('./luxcloudHarness');
 
@@ -15,6 +19,7 @@ const h = new Harness();
 const sha = (buffer) => crypto.createHash('sha256').update(buffer).digest('hex');
 
 const { buildZip } = require('./zipFixture');
+const scanQueue = require(path.join(__dirname, '..', 'scanQueue.js'));
 
 const OWN_MOD = buildZip({ 'fabric.mod.json': '{"id":"mymod"}', 'com/example/MyMod.class': 'class bytes '.repeat(200) });
 const OWN_PACK = buildZip({ 'pack.mcmeta': '{"pack":{"pack_format":34}}', 'assets/minecraft/textures/a.png': 'png'.repeat(100) });
@@ -100,7 +105,8 @@ async function main() {
     res = await h.request({ method: 'PUT', url: `/api/modpack/files/${modHash}`, token: userToken, body: OWN_MOD, headers: { 'Content-Type': 'application/octet-stream' } });
     h.check('nochmal hochladen -> 200, zaehlt nicht doppelt', res.status === 200 && res.body.existing === true, res.body);
     res = await h.request({ method: 'PUT', url: `/api/modpack/files/${packHash}`, token: userToken, body: OWN_PACK, headers: { 'Content-Type': 'application/octet-stream' } });
-    h.check('Pack hochgeladen -> 201', res.status === 201, res.body);
+    h.check('Pack hochgeladen -> 201, wartet auf die Pruefung', res.status === 201 && res.body.scan.status === 'pending', res.body);
+    await scanQueue.waitIdle();
 
     res = await h.request({ url: '/api/modpack/my-uploads', token: userToken });
     h.check('Speicher zeigt beide Dateien', res.status === 200 && res.body.quota.codeFileBytes === OWN_MOD.length + OWN_PACK.length, res.body.quota);
@@ -138,6 +144,7 @@ async function main() {
     });
     h.check('Export -> 200 mit 2 Dateien', res.status === 200 && res.body.success && res.body.uploads === 2, res.body);
     const code = res.body.code;
+    h.check('Export meldet: alles geprueft', res.body.scan && res.body.scan.status === 'clean', res.body.scan);
 
     res = await h.request({ url: `/api/modpack/${code}` });
     const uploads = res.body.data && res.body.data.uploads;
@@ -187,6 +194,7 @@ async function main() {
 
     await h.pool.query('UPDATE user_cloud_settings SET quota_bytes = ? WHERE user_id = ?', [5 * 1024 * 1024 * 1024, userId]);
     res = await h.request({ method: 'PUT', url: `/api/modpack/files/${modHash}`, token: userToken, body: OWN_MOD, headers: { 'Content-Type': 'application/octet-stream' } });
+    await scanQueue.waitIdle();
     res = await h.request({
         method: 'POST',
         url: '/api/modpack/save',
@@ -230,20 +238,22 @@ async function main() {
     res = await h.request({ method: 'PUT', url: `/api/modpack/files/${sha(nativeMod)}`, token: userToken, body: nativeMod, headers: { 'Content-Type': 'application/octet-stream' } });
     h.check('Mod mit .dll-Natives ist erlaubt', res.status === 201, res.body);
 
-    process.env.CLAMAV_HOST = '127.0.0.1';
-    process.env.CLAMAV_PORT = '1';
-    const another = buildZip({ 'fabric.mod.json': '{"id":"other"}' });
-    res = await h.request({ method: 'PUT', url: `/api/modpack/files/${sha(another)}`, token: userToken, body: another, headers: { 'Content-Type': 'application/octet-stream' } });
-    h.check('ClamAV eingerichtet, aber nicht erreichbar -> 503, nichts angenommen', res.status === 503 && res.body.error === 'scan_unavailable', res.body);
+    await scanQueue.waitIdle();
+
+    h.section('8b) Warteschlange mit ClamAV');
 
     const net = require('net');
-    // Kleiner clamd-Ersatz: liest INSTREAM-Bloecke bis zur Laenge 0 und antwortet dann.
+    // Kleiner clamd-Ersatz: PING/VERSION und INSTREAM-Bloecke bis zur Laenge 0.
     const clamd = (decide) => (socket) => {
         let data = Buffer.alloc(0);
         let answered = false;
         socket.on('data', (chunk) => {
             data = Buffer.concat([data, chunk]);
-            if (answered || data.length < 10) return;
+            if (answered) return;
+            const head = data.toString('latin1', 0, Math.min(10, data.length));
+            if (head.startsWith('zPING\u0000')) { answered = true; socket.end('PONG\u0000'); return; }
+            if (head.startsWith('zVERSION\u0000')) { answered = true; socket.end('ClamAV 1.4.0/test\u0000'); return; }
+            if (data.length < 10) return;
             let offset = 10;
             const parts = [];
             while (offset + 4 <= data.length) {
@@ -260,42 +270,135 @@ async function main() {
         });
         socket.on('error', () => {});
     };
+    const save = (uploads, token = userToken) => h.request({ method: 'POST', url: '/api/modpack/save', token, body: exportBody({ uploads }) });
+    const put = (buffer) => h.request({ method: 'PUT', url: `/api/modpack/files/${sha(buffer)}`, token: userToken, body: buffer, headers: { 'Content-Type': 'application/octet-stream' } });
+
+    process.env.CLAMAV_MODE = 'remote';
+    process.env.CLAMAV_HOST = '127.0.0.1';
+    process.env.CLAMAV_PORT = '1';
+    const another = buildZip({ 'fabric.mod.json': '{"id":"other"}' });
+    res = await put(another);
+    h.check('ClamAV nicht erreichbar: Datei angenommen, wartet', res.status === 201 && res.body.scan.status === 'pending' && res.body.scan.queuePosition === 1, res.body);
+    await scanQueue.waitIdle();
+    res = await save([{ sha256: sha(another), fileName: 'other.jar', kind: 'mod' }]);
+    const waitingCode = res.body.code;
+    h.check('Code laesst sich trotzdem erstellen, meldet ausstehende Pruefung', res.status === 200 && res.body.scan.status === 'pending', res.body);
+    res = await h.request({ url: `/api/modpack/${waitingCode}` });
+    h.check('Import solange -> 423 mit Erklaerung', res.status === 423 && res.body.reason === 'scan_pending' && /checked for viruses/.test(res.body.error), res.body);
+    res = await h.request({ url: `/api/modpack/${waitingCode}/files/${sha(another)}` });
+    h.check('Download solange -> 423', res.status === 423, res.body);
+
+    h.setSessionUser({ id: userId, username: 'creator', role: 'admin', banned: false });
+    res = await h.request({ url: '/api/admin/code-scans' });
+    const waitingJob = res.body.data && res.body.data.queue.find((job) => job.sha256 === sha(another));
+    h.check('Admin sieht den wartenden Auftrag und den Fehler', res.status === 200 && waitingJob && waitingJob.status === 'queued'
+        && /Waiting for ClamAV/.test(waitingJob.detail) && res.body.data.engine.mode === 'remote', res.body.data && res.body.data.queue);
+
     const fakeClam = net.createServer(clamd((file) => (file.includes(Buffer.from('EICAR-LIKE'))
         ? 'stream: Win.Test.EICAR_HDB-1 FOUND\u0000' : 'stream: OK\u0000')));
     await new Promise((r) => fakeClam.listen(0, '127.0.0.1', r));
     process.env.CLAMAV_PORT = String(fakeClam.address().port);
-    res = await h.request({ method: 'PUT', url: `/api/modpack/files/${sha(another)}`, token: userToken, body: another, headers: { 'Content-Type': 'application/octet-stream' } });
-    h.check('ClamAV sagt OK -> angenommen', res.status === 201 && /clamav/.test(res.body.scan.engine), res.body);
-    const eicar = buildZip({ 'fabric.mod.json': '{}', 'x.txt': 'EICAR-LIKE' });
-    res = await h.request({ method: 'PUT', url: `/api/modpack/files/${sha(eicar)}`, token: userToken, body: eicar, headers: { 'Content-Type': 'application/octet-stream' } });
-    h.check('ClamAV findet etwas -> 422 mit Name', res.status === 422 && /EICAR/.test(res.body.message), res.body);
+    res = await h.request({ method: 'POST', url: `/api/admin/code-scans/jobs/${waitingJob.id}/retry` });
+    h.check('Admin: sofort nochmal versuchen', res.status === 200, res.body);
+    await new Promise((r) => setTimeout(r, 50));
+    await scanQueue.waitIdle();
+    res = await h.request({ url: `/api/modpack/${waitingCode}` });
+    h.check('ClamAV wieder da -> Code funktioniert', res.status === 200 && res.body.data.uploads.length === 1, res.body);
+    res = await h.request({ url: '/api/modpack/my-uploads', token: userToken });
+    const nowClean = (res.body.codes || []).find((c) => c.code === waitingCode);
+    h.check('Dashboard: geprueft mit ClamAV', nowClean && nowClean.scanStatus === 'clean', nowClean);
 
-    // Nachtraeglich erkannt: Code mit sauberer Datei, dann meldet der Scanner sie.
-    res = await h.request({
-        method: 'POST', url: '/api/modpack/save', token: userToken,
-        body: exportBody({ uploads: [{ sha256: sha(another), fileName: 'other.jar', kind: 'mod' }] })
-    });
+    const eicar = buildZip({ 'fabric.mod.json': '{}', 'x.txt': 'EICAR-LIKE' });
+    res = await put(eicar);
+    h.check('Fund in ClamAV: erst angenommen (wartet)', res.status === 201, res.body);
+    await new Promise((r) => setTimeout(r, 50));
+    await scanQueue.waitIdle();
+    res = await save([{ sha256: sha(eicar), fileName: 'eicar.jar', kind: 'mod' }]);
+    h.check('danach gesperrt, kein Code damit -> 422', res.status === 422, res.body);
+    res = await put(eicar);
+    h.check('und nochmal hochladen nutzt nichts', res.status === 200 || res.status === 422, res.body);
+
+    h.section('8c) Wartung: Codes melden, dass nicht geprueft werden kann');
+
+    res = await h.request({ method: 'POST', url: '/api/admin/code-scans/pause', body: { paused: true, reason: 'Server update' } });
+    h.check('Pause an', res.status === 200 && res.body.state.paused === true, res.body);
+    const third = buildZip({ 'fabric.mod.json': '{"id":"third"}' });
+    res = await put(third);
+    h.check('Hochladen geht weiter, landet in der Warteschlange', res.status === 201 && res.body.scan.status === 'pending', res.body);
+    await new Promise((r) => setTimeout(r, 50));
+    await scanQueue.waitIdle();
+    res = await save([{ sha256: sha(third), fileName: 'third.jar', kind: 'mod' }]);
+    const pausedCode = res.body.code;
+    res = await h.request({ url: `/api/modpack/${pausedCode}` });
+    h.check('Import waehrend Wartung -> 423 scan_maintenance', res.status === 423 && res.body.reason === 'scan_maintenance' && /maintenance/.test(res.body.error), res.body);
+    res = await h.request({ method: 'POST', url: '/api/admin/code-scans/pause', body: { paused: false } });
+    await new Promise((r) => setTimeout(r, 50));
+    await scanQueue.waitIdle();
+    res = await h.request({ url: `/api/modpack/${pausedCode}` });
+    h.check('Wartung vorbei -> Code funktioniert', res.status === 200, res.body);
+
+    h.section('8d) Absturz mitten im Scan: Auftrag wird wiederholt');
+
+    const fourth = buildZip({ 'fabric.mod.json': '{"id":"fourth"}' });
+    await scanQueue.setPaused(true, { by: 'test' });
+    res = await put(fourth);
+    await scanQueue.waitIdle();
+    // So sieht es aus, wenn der Server waehrend eines Scans ausgeht.
+    await h.pool.query(`UPDATE code_scan_jobs SET status = 'running', started_at = NOW() WHERE sha256 = ? AND status = 'queued'`, [sha(fourth)]);
+    await h.pool.query('UPDATE code_scan_state SET paused = FALSE WHERE id = 1');
+    await scanQueue.start(h.pool);
+    await new Promise((r) => setTimeout(r, 50));
+    await scanQueue.waitIdle();
+    const [jobs] = await h.pool.query('SELECT status, result, restarts FROM code_scan_jobs WHERE sha256 = ? ORDER BY id DESC', [sha(fourth)]);
+    h.check('unterbrochener Auftrag lief nochmal und ist fertig', jobs[0] && jobs[0].status === 'done' && jobs[0].result === 'clean' && Number(jobs[0].restarts) === 1, jobs);
+
+    h.section('8e) Nachpruefung findet spaeter etwas');
+
+    res = await save([{ sha256: sha(another), fileName: 'other.jar', kind: 'mod' }]);
     const laterCode = res.body.code;
     await h.pool.query(`UPDATE modpack_code_blobs SET scanned_at = NOW() - INTERVAL '2 days' WHERE sha256 = ?`, [sha(another)]);
-    const scanner = require(path.join(__dirname, '..', 'codeFileScan.js'));
     fakeClam.removeAllListeners('connection');
     fakeClam.on('connection', clamd(() => 'stream: Win.Trojan.Later FOUND\u0000'));
-    const rescan = await codeFiles.rescanStoredFiles(h.pool, { limit: 50 });
-    h.check('Nachpruefung erkennt die Datei', rescan.infected.some((f) => f.sha256 === sha(another)), rescan);
+    const queued = await scanQueue.enqueueRescans();
+    h.check('Nachpruefung eingereiht', queued >= 1, queued);
+    res = await h.request({ url: `/api/modpack/${laterCode}` });
+    h.check('waehrend der Nachpruefung bleibt der Code nutzbar', res.status === 200, res.body);
+    await new Promise((r) => setTimeout(r, 50));
+    await scanQueue.waitIdle();
     res = await h.request({ url: `/api/modpack/${laterCode}/files/${sha(another)}` });
     h.check('Download danach gesperrt -> 451', res.status === 451, res.body);
+    res = await h.request({ url: `/api/modpack/${laterCode}` });
+    h.check('Import danach -> 451 mit Dateiname', res.status === 451 && res.body.reason === 'file_blocked' && /other\.jar/.test(res.body.error), res.body);
     res = await h.request({ url: '/api/modpack/my-uploads', token: userToken });
     const flagged = (res.body.codes || []).find((c) => c.code === laterCode);
     h.check('Dashboard zeigt die Sperre', flagged && flagged.files[0].scan.status === 'infected', flagged);
-    res = await h.request({
-        method: 'POST', url: '/api/modpack/save', token: userToken,
-        body: exportBody({ uploads: [{ sha256: sha(another), fileName: 'other.jar', kind: 'mod' }] })
-    });
+    res = await save([{ sha256: sha(another), fileName: 'other.jar', kind: 'mod' }]);
     h.check('gesperrte Datei laesst sich nicht neu teilen -> 422', res.status === 422, res.body);
-    void scanner;
+
+    res = await h.request({ url: '/api/admin/code-scans' });
+    h.check('Admin-Uebersicht: Verlauf, Zaehler, Ereignisse', res.status === 200 && res.body.data.recent.some((job) => job.result === 'infected')
+        && res.body.data.counts.done >= 3 && res.body.data.events.length > 0 && res.body.data.files.infected >= 1, res.body.data && res.body.data.counts);
+    res = await h.request({ method: 'POST', url: `/api/admin/code-scans/files/${sha(another)}/verdict`, body: { status: 'clean' } });
+    h.check('Admin gibt Fehlalarm frei', res.status === 200, res.body);
+    res = await h.request({ url: `/api/modpack/${laterCode}` });
+    h.check('danach funktioniert der Code wieder', res.status === 200, res.body);
+    await h.request({ method: 'POST', url: `/api/admin/code-scans/files/${sha(another)}/verdict`, body: { status: 'infected' } });
+    h.setSessionUser(null);
+    res = await h.request({ url: '/api/admin/code-scans' });
+    h.check('Warteschlange nur fuer Admins', res.status === 401 || res.status === 403, res.status);
+
     fakeClam.close();
+    process.env.CLAMAV_MODE = 'off';
     delete process.env.CLAMAV_HOST;
     delete process.env.CLAMAV_PORT;
+
+    h.section('8f) Cooldown beim Erstellen');
+    process.env.LUX_CODE_COOLDOWN_SECONDS = '30';
+    res = await h.request({ method: 'POST', url: '/api/modpack/save', token: otherToken, body: exportBody({ ownerUuid: 'mc-uuid-cool' }) });
+    h.check('erster Code -> 200', res.status === 200, res.body);
+    res = await h.request({ method: 'POST', url: '/api/modpack/save', token: otherToken, body: exportBody({ ownerUuid: 'mc-uuid-cool' }) });
+    h.check('gleich danach -> 429 cooldown mit Wartezeit', res.status === 429 && res.body.reason === 'cooldown' && res.body.retryAfter > 0, res.body);
+    process.env.LUX_CODE_COOLDOWN_SECONDS = '0';
 
     h.section('9) Admin sieht in den Code hinein');
     h.setSessionUser({ id: userId, username: 'creator', role: 'admin', banned: false });

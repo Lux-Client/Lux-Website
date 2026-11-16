@@ -6,7 +6,7 @@ import {
 import { io } from 'socket.io-client'
 import {
   BarChart2, Cloud as CloudIcon, Code2, Coins, HeartPulse, History, LayoutDashboard, ShoppingBag,
-  Newspaper, RefreshCw, ShieldCheck, Users as UsersIcon,
+  Newspaper, RefreshCw, ShieldAlert, ShieldCheck, Users as UsersIcon,
 } from 'lucide-react'
 
 import AdminShell from '../components/admin/AdminShell'
@@ -24,6 +24,7 @@ import LuxPlayersView from '../components/admin/views/LuxPlayersView'
 import LuxShopView from '../components/admin/views/LuxShopView'
 import AuditLogView from '../components/admin/views/AuditLogView'
 import HealthView from '../components/admin/views/HealthView'
+import VirusScanView from '../components/admin/views/VirusScanView'
 import useAuth from '../hooks/useAuth'
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, ArcElement, PointElement, LineElement, Filler, Tooltip, Legend)
@@ -49,6 +50,7 @@ const SECTIONS = [
   { id: 'luxplayers', group: 'Community', label: 'Lux Credits',   icon: Coins,           level: 'admin', title: 'Lux Credits',   description: 'Giveaways, balances and unlocks of Lux Client players.' },
   { id: 'luxshop',    group: 'Community', label: 'Lux Shop',      icon: ShoppingBag,     level: 'admin', title: 'Lux Shop',      description: 'Prices of cosmetics, emotes and name styles - changes reach every Lux Client within seconds.' },
   { id: 'cloud',      group: 'System',    label: 'Lux Cloud',     icon: CloudIcon,       level: 'admin', title: 'Lux Cloud',     description: 'Storage, deduplication, quotas and cleanup jobs.' },
+  { id: 'virusscan',  group: 'System',    label: 'Virus check',   icon: ShieldAlert,     level: 'admin', title: 'Virus check',   description: 'Queue of uploaded files in modpack codes, ClamAV status and maintenance.' },
   { id: 'health',     group: 'System',    label: 'Health',        icon: HeartPulse,      level: 'admin', title: 'Health',        description: 'Error rate per area, recent failures and the email log.' },
   { id: 'auditlog',   group: 'System',    label: 'Audit log',     icon: History,         level: 'admin', title: 'Audit log',     description: 'A record of every moderation action.' },
 ]
@@ -679,6 +681,8 @@ function AdminPanelInner() {
       {tab === 'luxshop' && isSessionAdmin && <LuxShopView />}
 
       {tab === 'cloud' && isSessionAdmin && <CloudPanel />}
+
+      {tab === 'virusscan' && isSessionAdmin && <VirusScanView />}
 
       {tab === 'health' && isSessionAdmin && <HealthView onSummaryChange={loadHealthSummary} />}
 

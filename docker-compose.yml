@@ -36,6 +36,11 @@ services:
       - EMAIL_MONTH_RESET_DAY=${EMAIL_MONTH_RESET_DAY:-1}
       - EMAIL_NOTIFICATIONS=${EMAIL_NOTIFICATIONS:-false}
       - AUTH_SECRET=${AUTH_SECRET}
+      # Virenpruefung: local = clamd nur bei Bedarf im Container starten (Standard),
+      # remote = eigener clamd unter CLAMAV_HOST, off = nur die eingebaute Pruefung.
+      - CLAMAV_MODE=${CLAMAV_MODE:-local}
+      - CLAMAV_IDLE_STOP_SECONDS=${CLAMAV_IDLE_STOP_SECONDS:-300}
+      - LUX_CODE_COOLDOWN_SECONDS=${LUX_CODE_COOLDOWN_SECONDS:-30}
       - CLAMAV_HOST=${CLAMAV_HOST}
       - CLAMAV_PORT=${CLAMAV_PORT:-3310}
       - VIRUSTOTAL_API_KEY=${VIRUSTOTAL_API_KEY}

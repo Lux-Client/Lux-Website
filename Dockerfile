@@ -14,6 +14,11 @@ FROM node:20-alpine
 
 WORKDIR /app
 
+# ClamAV fuer die Virenpruefung eigener Dateien in Modpack-Codes. clamd laeuft nicht
+# dauerhaft: der Server startet ihn nur, wenn etwas in der Warteschlange liegt, und stoppt
+# ihn im Leerlauf wieder (clamavEngine.js). Signaturen liegen im Volume unter /app/data.
+RUN apk add --no-cache clamav clamav-libunrar
+
 COPY package*.json ./
 RUN npm install --omit=dev
 

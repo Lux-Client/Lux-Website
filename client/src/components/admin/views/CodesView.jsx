@@ -16,7 +16,8 @@ function ScanBadge({ scan }) {
   const status = scan?.status || 'pending'
   if (status === 'clean') return <Badge tone="success"><ShieldCheck className="h-3 w-3" /> clean</Badge>
   if (status === 'infected') return <Badge tone="danger"><ShieldAlert className="h-3 w-3" /> blocked</Badge>
-  return <Badge tone="neutral">not scanned yet</Badge>
+  if (status === 'error') return <Badge tone="danger">check failed</Badge>
+  return <Badge tone="warning">in the virus queue</Badge>
 }
 
 function ContentList({ title, items }) {

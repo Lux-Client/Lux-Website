@@ -58,10 +58,9 @@ function cleanupOldCodes(pool) {
         if (pool) {
             try {
                 await releaseOrphanedCodeFiles(pool);
-                const rescanned = await codeFiles.rescanStoredFiles(pool);
-                if (rescanned.infected.length > 0) {
-                    console.warn(`[CodesSystem] Virus check blocked ${rescanned.infected.length} stored file(s).`);
-                }
+                const rescans = await scanQueue.enqueueRescans();
+                if (rescans > 0) console.log(`[CodesSystem] Queued ${rescans} stored file(s) for a new virus check.`);
+                await scanQueue.pruneHistory();
                 const pruned = await codeFiles.pruneStaleUploads(pool);
                 if (pruned.removed > 0) console.log(`[CodesSystem] Removed ${pruned.removed} unused uploaded file(s).`);
             } catch (e) {
@@ -274,6 +273,7 @@ function readCodePreview(code) {
 const createAdminAuth = require('./middleware/adminAuth');
 const { ensureDeviceAuth, ensureCloudUser } = require('./middleware/deviceAuth');
 const codeFiles = require('./codeFiles');
+const scanQueue = require('./scanQueue');
 
 // Who is calling: the launcher sends its Lux account token (Bearer), the website has its
 // session. Both are optional -- without them a code is created exactly as before.
@@ -313,6 +313,82 @@ module.exports = function (app, ADMIN_PASSWORD, pool) {
     setInterval(() => cleanupOldCodes(pool), 60 * 60 * 1000);
     cleanupOldCodes(pool);
 
+    // Virenpruefung: Warteschlange starten (holt auch Auftraege nach, die beim letzten
+    // Absturz liefen).
+    scanQueue.usePool(pool);
+    if (pool && process.env.LUX_SCAN_WORKER !== 'off') {
+        scanQueue.start(pool).catch((err) => console.error('[CodesSystem] Scan queue did not start:', err.message));
+    }
+
+    // Kleiner Cooldown, damit niemand im Sekundentakt Codes erzeugt. Gilt pro Konto,
+    // Minecraft-UUID (Gaeste: IP); Admins sind ausgenommen.
+    const cooldownMs = () => {
+        const value = Number(process.env.LUX_CODE_COOLDOWN_SECONDS);
+        return (Number.isFinite(value) && value >= 0 ? value : 30) * 1000;
+    };
+    const lastCreated = new Map();
+    function cooldownLeft(keys) {
+        const now = Date.now();
+        const COOLDOWN_MS = cooldownMs();
+        let left = 0;
+        for (const key of keys) {
+            const at = lastCreated.get(key);
+            if (at && now - at < COOLDOWN_MS) left = Math.max(left, COOLDOWN_MS - (now - at));
+        }
+        return left;
+    }
+    function rememberCreated(keys) {
+        const now = Date.now();
+        const COOLDOWN_MS = cooldownMs();
+        for (const key of keys) lastCreated.set(key, now);
+        if (lastCreated.size > 5000) {
+            for (const [key, at] of lastCreated) {
+                if (now - at >= COOLDOWN_MS) lastCreated.delete(key);
+            }
+        }
+    }
+
+    // Ob ein Code gerade benutzt werden darf: alle eigenen Dateien muessen auf dem Server
+    // auf Viren geprueft und sauber sein. Sonst gibt es eine verstaendliche Meldung.
+    async function codeGate(code) {
+        if (!pool) return null;
+        const state = await codeFiles.codeScanState(code);
+        if (state.status === 'clean') return null;
+        if (state.status === 'infected') {
+            const names = state.infected.map((file) => file.fileName).join(', ');
+            return {
+                status: 451,
+                body: {
+                    success: false,
+                    reason: 'file_blocked',
+                    error: `This code can't be used: our virus check blocked ${state.infected.length === 1 ? 'a file' : 'files'} in it (${names}).`,
+                    files: state.infected.map((file) => ({ fileName: file.fileName, reason: file.scan.reason }))
+                }
+            };
+        }
+        const waiting = [...state.pending, ...state.failed];
+        const scanState = await scanQueue.readState().catch(() => ({ paused: false }));
+        const info = await scanQueue.queueInfo(state.pending.map((file) => file.sha256)).catch(() => ({ position: null }));
+        let error;
+        if (scanState.paused) {
+            error = `Some files in this code could not be checked for viruses on our server yet, because the virus check is down for maintenance. The code will work again as soon as the check is back.`;
+        } else if (state.failed.length > 0) {
+            error = `Some files in this code could not be checked for viruses on our server. The code won't work until the check succeeds. Please try again later.`;
+        } else {
+            error = `Some files in this code are still being checked for viruses on our server${info.position ? ` (queue position ${info.position})` : ''}. The code will work as soon as the check is done, usually within a few minutes.`;
+        }
+        return {
+            status: 423,
+            body: {
+                success: false,
+                reason: scanState.paused ? 'scan_maintenance' : state.failed.length > 0 ? 'scan_failed' : 'scan_pending',
+                error,
+                queuePosition: info.position || null,
+                files: waiting.map((file) => ({ fileName: file.fileName, status: file.scan.status }))
+            }
+        };
+    }
+
     async function handleSave(req, res) {
         try {
             const { name, mods, resourcePacks, shaders, instanceVersion, instanceLoader, keybinds, ownerUuid, icon } = req.body;
@@ -333,6 +409,26 @@ module.exports = function (app, ADMIN_PASSWORD, pool) {
             if (ip) {
                 // x-forwarded-for can contain multiple comma-separated IPs. We only want the first one (the original client).
                 ip = ip.split(',')[0].trim();
+            }
+
+            // Mit Konto oder Minecraft-UUID zaehlt die Person, sonst die IP (Gaeste).
+            const cooldownKeys = [
+                req.cloudUser ? `user:${req.cloudUser.id}` : null,
+                ownerUuid ? `uuid:${ownerUuid}` : null
+            ].filter(Boolean);
+            if (cooldownKeys.length === 0 && ip) cooldownKeys.push(`ip:${ip}`);
+            if (!isCodeAdmin(req) && cooldownMs() > 0) {
+                const left = cooldownLeft(cooldownKeys);
+                if (left > 0) {
+                    const seconds = Math.ceil(left / 1000);
+                    res.setHeader('Retry-After', String(seconds));
+                    return res.status(429).json({
+                        success: false,
+                        reason: 'cooldown',
+                        retryAfter: seconds,
+                        error: `You just created a code. Please wait ${seconds} second${seconds === 1 ? '' : 's'} before creating the next one.`
+                    });
+                }
             }
 
             // Check Rate Limiting
@@ -398,8 +494,14 @@ module.exports = function (app, ADMIN_PASSWORD, pool) {
                 }
             }
 
+            rememberCreated(cooldownKeys);
+            let scan = null;
+            if (pool && uploadCheck.files.length > 0) {
+                const state = await codeFiles.codeScanState(code);
+                scan = { status: state.status, pending: state.pending.length + state.failed.length };
+            }
             console.log(`[CodesSystem] Saved modpack ${code} (${name}) for ${ownerUuid || ip}${wantsLive ? ' [live]' : ''}`);
-            res.json({ success: true, code, ...liveInfo(data), expires: data.expires, uploads: uploadCheck.files.length });
+            res.json({ success: true, code, ...liveInfo(data), expires: data.expires, uploads: uploadCheck.files.length, scan });
         } catch (error) {
             console.error('[CodesSystem] Save error:', error);
             res.status(500).json({ success: false, error: error.message });
@@ -492,11 +594,15 @@ module.exports = function (app, ADMIN_PASSWORD, pool) {
                     uses: data.uses || 0,
                     ...liveInfo(data),
                     files: files.map(({ fileName, kind, size, scan }) => ({ fileName, kind, size, scan: { status: scan.status, reason: scan.reason } })),
+                    scanStatus: files.some((f) => f.scan.status === 'infected') ? 'infected'
+                        : files.some((f) => f.scan.status === 'error') ? 'error'
+                            : files.some((f) => f.scan.status === 'pending') ? 'pending' : 'clean',
                     filesBytes: files.reduce((sum, file) => sum + file.size, 0)
                 });
             }
             const usage = await codeFiles.storageUsage(req.cloudUserId);
-            return res.json({ success: true, codes, quota: usage });
+            const scanState = await scanQueue.readState().catch(() => ({ paused: false }));
+            return res.json({ success: true, codes, quota: usage, scanPaused: Boolean(scanState.paused) });
         } catch (err) {
             return sendCodeFileError(res, err, 'Could not load your codes');
         }
@@ -536,6 +642,9 @@ module.exports = function (app, ADMIN_PASSWORD, pool) {
             if (!entry) return res.status(404).json({ success: false, error: 'Not found' });
             if (entry.scan_status === 'infected' || await codeFiles.isBlocked(hash)) {
                 return res.status(451).json({ success: false, error: 'blocked', message: 'This file was blocked by the virus check.' });
+            }
+            if (entry.scan_status !== 'clean') {
+                return res.status(423).json({ success: false, error: 'scan_pending', message: 'This file has not been checked for viruses yet.' });
             }
 
             const stored = await codeFiles.openStoredFile(hash);
@@ -813,13 +922,21 @@ module.exports = function (app, ADMIN_PASSWORD, pool) {
         }
     });
 
-    function handleGetCode(req, res) {
+    async function handleGetCode(req, res) {
         try {
             const { code } = req.params;
             if (!isValidCode(code)) {
                 return res.status(404).json({ success: false, error: 'Code not found' });
             }
             const data = readCodeFile(code);
+
+            if (data && Array.isArray(data.uploads) && data.uploads.length > 0) {
+                const gate = await codeGate(code);
+                if (gate) {
+                    res.setHeader('Cache-Control', 'no-store');
+                    return res.status(gate.status).json(gate.body);
+                }
+            }
 
             if (data) {
                 data.uses = (data.uses || 0) + 1;
@@ -835,6 +952,80 @@ module.exports = function (app, ADMIN_PASSWORD, pool) {
     }
     app.get('/api/codes/:code', handleGetCode);
     app.get('/api/modpack/:code', handleGetCode);
+
+    // ---- Admin: Virenpruefung (Warteschlange, ClamAV, Wartung) ----
+
+    const adminName = (req) => (req.user && (req.user.username || req.user.email)) || 'admin';
+    const scanAdmin = [adminAuth.adminAuthLimiter, adminAuth.adminOrPassword];
+    const scanRoute = (handler) => async (req, res) => {
+        try {
+            if (!pool) return res.status(503).json({ success: false, error: 'No database' });
+            await handler(req, res);
+        } catch (err) {
+            console.error('[CodesSystem] Scan admin error:', err);
+            res.status(500).json({ success: false, error: err.message });
+        }
+    };
+
+    app.get('/api/admin/code-scans', ...scanAdmin, scanRoute(async (req, res) => {
+        res.setHeader('Cache-Control', 'no-store');
+        res.json({ success: true, data: await scanQueue.overview() });
+    }));
+
+    app.post('/api/admin/code-scans/pause', ...scanAdmin, scanRoute(async (req, res) => {
+        const paused = Boolean(req.body && req.body.paused);
+        const reason = req.body && typeof req.body.reason === 'string' ? req.body.reason : null;
+        const state = await scanQueue.setPaused(paused, { reason, by: adminName(req) });
+        res.json({ success: true, state });
+    }));
+
+    app.post('/api/admin/code-scans/jobs/:id/retry', ...scanAdmin, scanRoute(async (req, res) => {
+        const id = Number(req.params.id);
+        if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ success: false, error: 'Invalid job' });
+        const jobId = await scanQueue.retryJob(id, adminName(req));
+        if (!jobId) return res.status(404).json({ success: false, error: 'Job not found' });
+        res.json({ success: true, jobId });
+    }));
+
+    app.post('/api/admin/code-scans/jobs/:id/cancel', ...scanAdmin, scanRoute(async (req, res) => {
+        const id = Number(req.params.id);
+        if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ success: false, error: 'Invalid job' });
+        const ok = await scanQueue.cancelJob(id);
+        if (!ok) return res.status(409).json({ success: false, error: 'Only waiting jobs can be cancelled.' });
+        res.json({ success: true });
+    }));
+
+    app.post('/api/admin/code-scans/files/:sha256/rescan', ...scanAdmin, scanRoute(async (req, res) => {
+        const hash = String(req.params.sha256 || '').toLowerCase();
+        if (!codeFiles.isHash(hash)) return res.status(400).json({ success: false, error: 'Invalid file hash' });
+        const jobId = await scanQueue.rescanFile(hash, adminName(req));
+        if (!jobId) return res.status(404).json({ success: false, error: 'File not found' });
+        res.json({ success: true, jobId });
+    }));
+
+    app.post('/api/admin/code-scans/files/:sha256/verdict', ...scanAdmin, scanRoute(async (req, res) => {
+        const hash = String(req.params.sha256 || '').toLowerCase();
+        const status = req.body && req.body.status;
+        if (!codeFiles.isHash(hash) || !['clean', 'infected'].includes(status)) {
+            return res.status(400).json({ success: false, error: 'Send status clean or infected' });
+        }
+        const ok = await scanQueue.setVerdict(hash, status, adminName(req));
+        if (!ok) return res.status(404).json({ success: false, error: 'File not found' });
+        res.json({ success: true });
+    }));
+
+    app.post('/api/admin/code-scans/engine', ...scanAdmin, scanRoute(async (req, res) => {
+        const action = req.body && req.body.action;
+        if (!['start', 'stop', 'update'].includes(action)) {
+            return res.status(400).json({ success: false, error: 'action must be start, stop or update' });
+        }
+        try {
+            const engine = await scanQueue.engineAction(action);
+            res.json({ success: true, engine });
+        } catch (err) {
+            res.status(502).json({ success: false, error: err.message });
+        }
+    }));
 
     // Admin: in einen Code hineinschauen -- Mods, Packs, Shader und eigene Dateien samt Virenpruefung.
     app.get('/api/codes/:code/details', adminAuth.adminAuthLimiter, adminAuth.adminOrPassword, async (req, res) => {

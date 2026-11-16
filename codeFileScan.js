@@ -1,14 +1,15 @@
 // Virenpruefung fuer eigene Dateien in Modpack-Codes (siehe codeFiles.js).
 //
 // Wer einen Code importiert, startet die Dateien danach im Spiel. Deshalb wird jede Datei
-// vor dem Speichern geprueft und regelmaessig erneut, solange ein Code sie braucht:
+// geprueft, bevor ein Code mit ihr funktioniert, und regelmaessig erneut:
 //
-//   1. Eigene Pruefung (immer): Mods und Packs muessen echte ZIP/JAR-Archive sein. Abgelehnt
-//      wird, was ausfuehrbare Programme oder Skripte (.exe, .bat, .ps1, ...) mitbringt, die
-//      Kennzeichen bekannter Minecraft-Malware (fractureiser/Skyrage, Neko-Stealer) oder
-//      Code, der Discord-Tokens bzw. Browser-Passwoerter ausliest. Dazu Schutz vor ZIP-Bomben.
-//   2. ClamAV (wenn CLAMAV_HOST gesetzt ist): Datei an clamd (INSTREAM) schicken. Ist ClamAV
-//      eingerichtet, aber nicht erreichbar, wird nichts angenommen ("fail closed").
+//   1. Eigene Pruefung (beim Hochladen sofort und in der Warteschlange): Mods und Packs
+//      muessen echte ZIP/JAR-Archive sein. Abgelehnt wird, was ausfuehrbare Programme oder
+//      Skripte (.exe, .bat, .ps1, ...) mitbringt, die Kennzeichen bekannter Minecraft-Malware
+//      (fractureiser/Skyrage, Neko-Stealer) oder Code, der Discord-Tokens bzw.
+//      Browser-Passwoerter ausliest. Dazu Schutz vor ZIP-Bomben.
+//   2. ClamAV ueber die Warteschlange (scanQueue.js, clamavEngine.js): Datei an clamd
+//      (INSTREAM). Bis das durch ist, funktioniert der Code nicht ("fail closed").
 //   3. VirusTotal (wenn VIRUSTOTAL_API_KEY gesetzt ist): nur der SHA-256 wird nachgeschlagen,
 //      die Datei selbst verlaesst den Server nicht.
 //
@@ -212,10 +213,10 @@ async function builtinScan(filePath) {
 }
 
 // clamd INSTREAM: "zINSTREAM\0", dann Bloecke <laenge uint32 BE><daten>, Ende mit 0.
-function clamavScan(filePath) {
-    const host = process.env.CLAMAV_HOST;
+function clamavScan(filePath, target = null) {
+    const host = target ? target.host : process.env.CLAMAV_HOST;
     if (!host) return Promise.resolve(null);
-    const port = Number(process.env.CLAMAV_PORT || 3310);
+    const port = Number(target ? target.port : (process.env.CLAMAV_PORT || 3310));
 
     return new Promise((resolve) => {
         let answer = '';
@@ -277,36 +278,21 @@ async function virusTotalLookup(sha256) {
     }
 }
 
-async function scanFile(filePath, { sha256 } = {}) {
-    const engines = [];
-
-    const own = await builtinScan(filePath);
-    if (own.status !== 'clean') return own;
-    engines.push('lux');
-
-    const clam = await clamavScan(filePath);
-    if (clam) {
-        if (clam.status !== 'clean') return clam;
-        engines.push('clamav');
-    }
-
-    if (sha256) {
-        const vt = await virusTotalLookup(sha256);
-        if (vt) {
-            if (vt.status !== 'clean') return vt;
-            engines.push('virustotal');
-        }
-    }
-
-    return { status: 'clean', engine: engines.join('+'), reason: null };
+// clamd-Befehl ohne Datei (PING, VERSION, ...). Liefert die Antwort oder wirft.
+function clamdCommand(target, command, timeoutMs = 5000) {
+    return new Promise((resolve, reject) => {
+        let answer = '';
+        const socket = net.createConnection({ host: target.host, port: Number(target.port) }, () => {
+            socket.write(`z${command}\u0000`);
+        });
+        socket.setTimeout(timeoutMs, () => {
+            socket.destroy();
+            reject(new Error('timeout'));
+        });
+        socket.on('data', (chunk) => { answer += chunk.toString('utf8'); });
+        socket.on('error', reject);
+        socket.on('close', () => resolve(answer.replace(/\u0000/g, '').trim()));
+    });
 }
 
-function scannerSetup() {
-    return {
-        builtin: true,
-        clamav: Boolean(process.env.CLAMAV_HOST),
-        virustotal: Boolean(process.env.VIRUSTOTAL_API_KEY)
-    };
-}
-
-module.exports = { scanFile, scannerSetup, builtinScan, findMarkers };
+module.exports = { builtinScan, clamavScan, clamdCommand, findMarkers, virusTotalLookup };

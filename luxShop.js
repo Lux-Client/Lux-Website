@@ -104,6 +104,16 @@ const PRICES = {
     'cosmetic:bat_wings': 2000, 'cosmetic:butterfly_wings': 2500, 'cosmetic:fairy_wings': 2500,
     'cosmetic:angel_wings': 3000, 'cosmetic:dragon_wings': 3500, 'cosmetic:demon_wings': 3500,
     'cosmetic:phoenix_wings': 4000,
+    // minimalistische Flügel (Lux Client 1.35)
+    'cosmetic:mini_feather_wings': 1500,
+    'cosmetic:mini_bat_wings': 1500,
+    'cosmetic:line_wings': 1800,
+    'cosmetic:cherub_wings': 1200,
+    'cosmetic:leaf_wings': 1200,
+    'cosmetic:paper_wings': 1500,
+    'cosmetic:pixel_wings': 1200,
+    'cosmetic:light_wings': 1800,
+    'cosmetic:flutter_wings': 1200,
     // HD cosmetics (Lux Client 1.27)
     'cosmetic:devil_wings_hd': 6000, 'cosmetic:aura_water_hd': 4000, 'cosmetic:aura_wind_hd': 4000,
     'cosmetic:big_fairy_wings': 5000, 'cosmetic:gothic_moth_wings': 6000, 'cosmetic:crystal_wings': 6000,

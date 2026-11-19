@@ -76,6 +76,42 @@ module.exports = {
         "name": "Dragon wings",
         "category": "Wings"
     },
+    "cosmetic:mini_feather_wings": {
+        "name": "Mini feather wings",
+        "category": "Wings"
+    },
+    "cosmetic:mini_bat_wings": {
+        "name": "Mini bat wings",
+        "category": "Wings"
+    },
+    "cosmetic:line_wings": {
+        "name": "Line wings",
+        "category": "Wings"
+    },
+    "cosmetic:cherub_wings": {
+        "name": "Cherub wings",
+        "category": "Wings"
+    },
+    "cosmetic:leaf_wings": {
+        "name": "Leaf wings",
+        "category": "Wings"
+    },
+    "cosmetic:paper_wings": {
+        "name": "Origami wings",
+        "category": "Wings"
+    },
+    "cosmetic:pixel_wings": {
+        "name": "Pixel wings",
+        "category": "Wings"
+    },
+    "cosmetic:light_wings": {
+        "name": "Light wings",
+        "category": "Wings"
+    },
+    "cosmetic:flutter_wings": {
+        "name": "Mini butterfly",
+        "category": "Wings"
+    },
     "cosmetic:bat_wings": {
         "name": "Bat wings",
         "category": "Wings"
